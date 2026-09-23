@@ -1,5 +1,5 @@
 import { ReportField, ReportInstance, ReportTemplate } from '../../shared/types.js';
-import { GeminiProvider, IModelProvider } from '../providers/modelProvider.js';
+import { IModelProvider, getProvider } from '../providers/modelProvider.js';
 import { repository } from '../store/repository.js';
 import { z } from 'zod';
 
@@ -39,7 +39,7 @@ export async function importLegacyReport(params: LegacyImportParams): Promise<Re
     .map((line, idx) => `${idx + 1}: ${line}`)
     .join('\n');
 
-  const provider = params.provider || new GeminiProvider();
+  const provider = params.provider || getProvider();
   const extractionMap = new Map<string, z.infer<typeof FieldExtractionSchema>>();
 
   const prompt = `You are a curriculum report data extractor. Extract values for the specified report fields from the document text below.
@@ -67,7 +67,7 @@ Instructions:
 
   try {
     const res = await provider.generateStructured(prompt, ExtractionResponseSchema, {
-      modelId: modelId || 'gemini-3.8-flash',
+      modelId,
       actionName: 'legacy_report_import',
       systemInstruction:
         'You are an uncompromising educational data extraction system. Do not fabricate, hallucinate, or extrapolate default values. If data is missing from the text, report value as null and confidence as 0.',

@@ -62,7 +62,7 @@ export const ArmenianEvalPage: React.FC<ArmenianEvalPageProps> = ({
       const res = await fetch('/api/armenian-eval/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerId: 'gemini', modelId: 'gemini-3.8-flash' }),
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (data.result) {

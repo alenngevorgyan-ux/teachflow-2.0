@@ -13,7 +13,6 @@ import {
   IJudgeProvider,
   getJudgeProvider,
   isTypeSafeJevConfigured,
-  GeminiJudgeProvider,
   TypeSafeJevJudgeProvider,
 } from '../providers/judgeProvider.js';
 import { repository } from '../store/repository.js';
@@ -321,7 +320,7 @@ export async function runSideBySideComparison(
     isUncoveredTopicPreset = false,
     selectedSourceIds,
     numberOfRuns = 3,
-    modelId = 'gemini-3.8-flash',
+    modelId,
     judgeProviderId = 'gemini',
     judgeConfidenceThreshold = 0.8,
   } = options;
@@ -414,7 +413,7 @@ export async function runSideBySideComparison(
   let judgeAgreementRate: number | undefined = undefined;
   if (isTypeSafeJevConfigured() && collectedItemsForAgreement.length > 0) {
     try {
-      const geminiJudge = new GeminiJudgeProvider();
+      const geminiJudge = getJudgeProvider('gemini');
       const jevJudge = new TypeSafeJevJudgeProvider();
       const sample = collectedItemsForAgreement.slice(0, 5);
       let matches = 0;
@@ -441,8 +440,9 @@ export async function runSideBySideComparison(
     isUncoveredTopicPreset,
     numberOfRuns,
     executedAt: new Date().toISOString(),
-    modelId,
-    judgeProviderId,
+    modelId: modelId || provider.defaultModelId || 'n/a',
+    judgeProviderId: selectedJudge.providerId,
+    judgeModelId: selectedJudge.modelId,
     judgeAgreementRate,
     baselineRuns,
     teachflowRuns,

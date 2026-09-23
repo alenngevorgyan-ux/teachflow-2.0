@@ -83,7 +83,7 @@ export const RegressionPage: React.FC<RegressionPageProps> = ({ lang }) => {
       const res = await fetch('/api/regression/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelId: 'gemini-3.8-flash' }),
+        body: JSON.stringify({}),
       });
       if (res.ok) {
         await fetchData();

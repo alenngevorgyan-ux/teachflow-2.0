@@ -220,6 +220,7 @@ export interface SideBySideReport {
   executedAt: string;
   modelId: string;
   judgeProviderId?: string;
+  judgeModelId?: string;
   judgeAgreementRate?: number; // e.g. 0.92 for 92% agreement between Gemini and Jev
   baselineRuns: ScorecardMetric[];
   teachflowRuns: ScorecardMetric[];

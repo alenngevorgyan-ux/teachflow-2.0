@@ -38,6 +38,7 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
   const [judgeProviderId, setJudgeProviderId] = useState<'gemini' | 'typesafe_jev'>('gemini');
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.8);
   const [typeSafeConfigured, setTypeSafeConfigured] = useState<boolean>(false);
+  const [defaultJudgeName, setDefaultJudgeName] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<SideBySideReport | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -47,6 +48,7 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
       .then((res) => res.json())
       .then((data) => {
         setTypeSafeConfigured(Boolean(data.typeSafeConfigured));
+        setDefaultJudgeName(data.availableJudges?.find((j: { id: string }) => j.id === 'gemini')?.name || '');
       })
       .catch((err) => console.warn('Could not fetch judge status:', err));
   }, []);
@@ -218,7 +220,7 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
               />
               <div className="space-y-0.5">
                 <div className="font-semibold text-gray-900 flex items-center gap-1.5">
-                  <span>Google Gemini 3.8 Flash (T=0)</span>
+                  <span>{defaultJudgeName || 'n/a'}</span>
                   <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-medium">
                     Լռելյայն (Default)
                   </span>
@@ -316,7 +318,7 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
             {loading ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Գործարկվում է {numberOfRuns} անգամյա զուգահեռ համեմատություն ({judgeProviderId === 'gemini' ? 'Gemini Judge' : 'TypeSafe Jev Judge'})...</span>
+                <span>Գործարկվում է {numberOfRuns} անգամյա զուգահեռ համեմատություն ({judgeProviderId === 'gemini' ? defaultJudgeName || 'n/a' : 'TypeSafe Jev Judge'})...</span>
               </>
             ) : (
               <>
@@ -354,9 +356,7 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                 <Scale className="w-3.5 h-3.5 text-indigo-600" />
                 Դատավոր՝{' '}
                 <strong className="text-gray-900">
-                  {report.judgeProviderId === 'typesafe_jev'
-                    ? 'TypeSafe Jev API'
-                    : 'Google Gemini 3.8 Flash (T=0)'}
+                  {report.judgeProviderId ?? 'n/a'} · {report.judgeModelId ?? 'n/a'}
                 </strong>
               </span>
               <span>&bull;</span>

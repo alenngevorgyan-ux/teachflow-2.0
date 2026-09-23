@@ -5,7 +5,7 @@ import { runFullGenerationPipeline } from './orchestrator.js';
 
 export async function runRegressionSuite(
   provider: IModelProvider,
-  modelId = 'gemini-3.8-flash'
+  modelId?: string
 ): Promise<RegressionRun> {
   const frozenTasks = repository.getFrozenTasks();
   const policyVersion = repository.computePolicyVersion();
@@ -82,7 +82,7 @@ export async function runRegressionSuite(
     id: `reg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     runDate: new Date().toISOString(),
     providerId: provider.providerId,
-    modelId,
+    modelId: modelId || provider.defaultModelId || 'n/a',
     policyVersion,
     results,
     summary: {

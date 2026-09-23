@@ -4,7 +4,7 @@ import { repository } from '../store/repository.js';
 
 export async function runArmenianEvaluation(
   provider: IModelProvider,
-  modelId: string,
+  modelId: string | undefined,
   tasks?: ArmenianEvalTask[]
 ): Promise<ArmenianEvalResult> {
   const evalTasks = tasks || repository.getArmenianEvalTasks();
@@ -92,7 +92,7 @@ export async function runArmenianEvaluation(
     runId: `arm-eval-${Date.now()}`,
     timestamp: new Date().toISOString(),
     providerId: provider.providerId,
-    modelId,
+    modelId: modelId || provider.defaultModelId || 'n/a',
     categoryScores,
     overallScore,
     taskResults,

@@ -459,7 +459,7 @@ export async function validateSingleItem(
     factSources: factSourcesRef,
     methodRulesApplied: activeRules.map((r) => r.id),
     providerId: provider.providerId,
-    modelId: options?.modelId || 'gemini-3.8-flash',
+    modelId: options?.modelId || provider.defaultModelId || 'n/a',
     judgeProviderId: judge.providerId,
     judgeModelId: judge.modelId,
     confidence: judgeVerificationConfidence,

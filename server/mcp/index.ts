@@ -113,7 +113,7 @@ export function createMcpServer(): McpServer {
       sourceIds: z.array(z.string()).optional(),
     },
     async ({ subject, grade, topic, sourceIds }) => {
-      const provider = getProvider('gemini');
+      const provider = getProvider();
       const assessment = await runFullGenerationPipeline({
         subject,
         grade,
@@ -144,7 +144,7 @@ export function createMcpServer(): McpServer {
       sourceIds: z.array(z.string()).optional(),
     },
     async ({ subject, grade, text, sourceIds }) => {
-      const provider = getProvider('gemini');
+      const provider = getProvider();
       const report = await validateExternalMaterial(provider, subject, grade, text, sourceIds);
 
       return {
@@ -383,11 +383,11 @@ export function createMcpServer(): McpServer {
     'armenian_eval_run',
     'Run frozen Armenian evaluation harness across orthography, grammar, terminology, OCR, citations, and refusals',
     {
-      providerId: z.string().default('gemini'),
-      modelId: z.string().default('gemini-3.8-flash'),
+      providerId: z.string().optional(),
+      modelId: z.string().optional(),
     },
     async ({ providerId, modelId }) => {
-      const provider = getProvider(providerId);
+      const provider = getProvider(providerId || undefined);
       const res = await runArmenianEvaluation(provider, modelId);
 
       return {

@@ -19,7 +19,7 @@ import { computeRegressionDiff, runRegressionSuite } from '../pipeline/regressio
 import { runFullGenerationPipeline } from '../pipeline/orchestrator.js';
 import { retrieveChunks } from '../pipeline/retrieval.js';
 import { validateSingleItem } from '../pipeline/validator.js';
-import { getProvider } from '../providers/modelProvider.js';
+import { getDefaultProviderId, getProvider, isProviderConfigured } from '../providers/modelProvider.js';
 import { getJudgeProvider, isTypeSafeJevConfigured } from '../providers/judgeProvider.js';
 import { repository } from '../store/repository.js';
 import {
@@ -194,7 +194,7 @@ export function createApiRouter(): Router {
   router.post('/sources/extract-outcomes', async (req: Request, res: Response) => {
     try {
       const { text, subject, grade, sourceId } = req.body;
-      const provider = getProvider('gemini');
+      const provider = getProvider();
 
       const prompt = `You are a curriculum specialist. Extract standard curriculum outcome codes and text descriptions in Armenian for Grade ${grade} Subject "${subject}":\n\n${text}`;
       const resAI = await provider.generateStructured(prompt, ExtractedOutcomesSchema, {
@@ -270,12 +270,15 @@ export function createApiRouter(): Router {
 
   // --- Judge Status ---
   router.get('/judge/status', (_req: Request, res: Response) => {
+    const defaultJudge = getJudgeProvider('gemini');
     res.json({
       availableJudges: [
         {
           id: 'gemini',
-          name: 'Google Gemini 3.8 Flash (T=0, Structured)',
-          configured: Boolean(process.env.GEMINI_API_KEY),
+          name: `${defaultJudge.providerId} · ${defaultJudge.modelId} (T=0, Structured)`,
+          providerId: defaultJudge.providerId,
+          modelId: defaultJudge.modelId,
+          configured: isProviderConfigured(getDefaultProviderId()),
           isDefault: true,
         },
         {
@@ -289,6 +292,19 @@ export function createApiRouter(): Router {
     });
   });
 
+  // --- Active model provider (explicit config, no fallback) ---
+  router.get('/model/status', (_req: Request, res: Response) => {
+    const providerId = getDefaultProviderId();
+    let modelId: string | null = null;
+    let error: string | null = null;
+    try {
+      modelId = getProvider(providerId).defaultModelId ?? null;
+    } catch (err: unknown) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+    res.json({ providerId, modelId, configured: isProviderConfigured(providerId), error });
+  });
+
   // --- Assessments ---
   router.post('/assessments/generate', async (req: Request, res: Response) => {
     try {
@@ -297,7 +313,7 @@ export function createApiRouter(): Router {
         grade,
         topic,
         selectedSourceIds,
-        providerId = 'gemini',
+        providerId = getDefaultProviderId(),
         modelId,
         generateOnlyCoveredPart,
         judgeProviderId = 'gemini',
@@ -361,7 +377,7 @@ export function createApiRouter(): Router {
       };
 
       // Re-run validation for edited item
-      const provider = getProvider('gemini');
+      const provider = getProvider();
       const { judgeProviderId = 'gemini', judgeConfidenceThreshold } = req.body;
       const judgeProvider = getJudgeProvider(judgeProviderId);
       const { trace } = await validateSingleItem(
@@ -405,7 +421,7 @@ export function createApiRouter(): Router {
         grade,
         text,
         selectedSourceIds,
-        providerId = 'gemini',
+        providerId = getDefaultProviderId(),
         judgeProviderId = 'gemini',
         judgeConfidenceThreshold,
       } = req.body;
@@ -454,7 +470,7 @@ export function createApiRouter(): Router {
         isUncoveredTopicPreset,
         selectedSourceIds,
         numberOfRuns = 3,
-        providerId = 'gemini',
+        providerId = getDefaultProviderId(),
         modelId,
         judgeProviderId = 'gemini',
         judgeConfidenceThreshold,
@@ -511,7 +527,7 @@ export function createApiRouter(): Router {
 
   router.post('/regression/run', async (req: Request, res: Response) => {
     try {
-      const { providerId = 'gemini', modelId = 'gemini-3.8-flash' } = req.body;
+      const { providerId = getDefaultProviderId(), modelId } = req.body;
       const provider = getProvider(providerId);
       const run = await runRegressionSuite(provider, modelId);
       res.json({ run });
@@ -932,7 +948,7 @@ export function createApiRouter(): Router {
 
   router.post('/armenian-eval/run', async (req: Request, res: Response) => {
     try {
-      const { providerId = 'gemini', modelId = 'gemini-3.8-flash' } = req.body;
+      const { providerId = getDefaultProviderId(), modelId } = req.body;
       const provider = getProvider(providerId);
       const result = await runArmenianEvaluation(provider, modelId);
       res.json({ result });

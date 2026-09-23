@@ -29,7 +29,8 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const [grade, setGrade] = useState(5);
   const [topic, setTopic] = useState('');
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
-  const [modelId, setModelId] = useState('gemini-3.8-flash');
+  const [activeModel, setActiveModel] = useState<string>('');
+  const [defaultJudgeName, setDefaultJudgeName] = useState<string>('');
   const [judgeProviderId, setJudgeProviderId] = useState<'gemini' | 'typesafe_jev'>('gemini');
   const [judgeConfidenceThreshold, setJudgeConfidenceThreshold] = useState<number>(0.8);
   const [typeSafeConfigured, setTypeSafeConfigured] = useState<boolean>(false);
@@ -51,8 +52,16 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
 
     fetch('/api/judge/status')
       .then((r) => r.json())
-      .then((d) => setTypeSafeConfigured(Boolean(d.typeSafeConfigured)))
+      .then((d) => {
+        setTypeSafeConfigured(Boolean(d.typeSafeConfigured));
+        setDefaultJudgeName(d.availableJudges?.find((j: { id: string }) => j.id === 'gemini')?.name || '');
+      })
       .catch((e) => console.warn('Judge status error:', e));
+
+    fetch('/api/model/status')
+      .then((r) => r.json())
+      .then((d) => setActiveModel(`${d.providerId} · ${d.modelId ?? 'n/a'}${d.configured ? '' : ' (not configured)'}`))
+      .catch((e) => console.warn('Model status error:', e));
   }, []);
 
   const eligibleSources = sources.filter(
@@ -91,7 +100,6 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
           grade: Number(grade),
           topic,
           selectedSourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : undefined,
-          modelId,
           generateOnlyCoveredPart,
           judgeProviderId,
           judgeConfidenceThreshold: Number(judgeConfidenceThreshold),
@@ -186,13 +194,9 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
             <label className="block font-medium text-gray-700 mb-1">
               AI Մոդել (Provider)
             </label>
-            <select
-              value={modelId}
-              onChange={(e) => setModelId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900 outline-hidden bg-white"
-            >
-              <option value="gemini-3.8-flash">Google Gemini 3.8 Flash (Ակտիվ)</option>
-            </select>
+            <div className="w-full border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900 bg-gray-50 font-mono">
+              {activeModel || 'n/a'}
+            </div>
           </div>
         </div>
 
@@ -294,7 +298,7 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
               />
               <div className="space-y-0.5">
                 <div className="font-semibold text-gray-900 flex items-center gap-1.5">
-                  <span>Google Gemini 3.8 Flash (T=0)</span>
+                  <span>{defaultJudgeName || 'n/a'}</span>
                   <span className="text-[10px] px-1 bg-emerald-100 text-emerald-800 rounded">
                     Default
                   </span>

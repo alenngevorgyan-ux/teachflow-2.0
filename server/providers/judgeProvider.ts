@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import { repository } from '../store/repository.js';
+import { IModelProvider, getDefaultProviderId, getProvider } from './modelProvider.js';
 
 export interface ClaimVerificationResult {
   verdict: 'supported' | 'partially_supported' | 'not_supported';
@@ -42,6 +43,46 @@ const GeminiJudgeClassifySchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
+function buildVerifyClaimPrompt(
+  claim: string,
+  evidenceText: string,
+  context?: { stem?: string; options?: string[]; answerKey?: string }
+): string {
+  return `You are a strict curriculum and factual verification judge.
+Compare the educational claim/question against the provided verified evidence chunk text.
+
+EVIDENCE CHUNK TEXT:
+"""
+${evidenceText}
+"""
+
+CLAIM / QUESTION BEING VERIFIED:
+"""
+${claim}
+"""
+${context?.stem ? `Stem: "${context.stem}"\n` : ''}${context?.answerKey ? `Answer key: "${context.answerKey}"\n` : ''}
+
+Output strictly valid JSON with:
+- "verdict": "supported" (if 100% corroborated by the evidence), "partially_supported" (if partially corroborated or missing nuance), or "not_supported" (if contradicted, unmentioned, or factually unsupported).
+- "probability": float between 0.0 and 1.0 representing probability of full truth under evidence.
+- "confidence": float between 0.0 and 1.0 representing your confidence in this judgment (0.9-1.0 if clear, <0.8 if ambiguous or text quality is poor).
+- "reason": concise explanation in Armenian.`;
+}
+
+function buildClassifyPrompt(text: string, labels: string[]): string {
+  return `Classify the following text into exactly one of these labels: ${labels.join(', ')}.
+
+TEXT:
+"""
+${text}
+"""
+
+Output strictly JSON with:
+- "label": the selected label from the allowed list
+- "probabilities": dictionary of label -> float probability
+- "confidence": float between 0.0 and 1.0`;
+}
+
 /**
  * Implementation 1: Gemini Judge Provider (Default)
  * Temperature 0, structured output.
@@ -75,25 +116,7 @@ export class GeminiJudgeProvider implements IJudgeProvider {
     const start = Date.now();
     const ai = this.getClient();
 
-    const prompt = `You are a strict curriculum and factual verification judge.
-Compare the educational claim/question against the provided verified evidence chunk text.
-
-EVIDENCE CHUNK TEXT:
-"""
-${evidenceText}
-"""
-
-CLAIM / QUESTION BEING VERIFIED:
-"""
-${claim}
-"""
-${context?.stem ? `Stem: "${context.stem}"\n` : ''}${context?.answerKey ? `Answer key: "${context.answerKey}"\n` : ''}
-
-Output strictly valid JSON with:
-- "verdict": "supported" (if 100% corroborated by the evidence), "partially_supported" (if partially corroborated or missing nuance), or "not_supported" (if contradicted, unmentioned, or factually unsupported).
-- "probability": float between 0.0 and 1.0 representing probability of full truth under evidence.
-- "confidence": float between 0.0 and 1.0 representing your confidence in this judgment (0.9-1.0 if clear, <0.8 if ambiguous or text quality is poor).
-- "reason": concise explanation in Armenian.`;
+    const prompt = buildVerifyClaimPrompt(claim, evidenceText, context);
 
     try {
       const response = await ai.models.generateContent({
@@ -146,17 +169,7 @@ Output strictly valid JSON with:
     const start = Date.now();
     const ai = this.getClient();
 
-    const prompt = `Classify the following text into exactly one of these labels: ${labels.join(', ')}.
-
-TEXT:
-"""
-${text}
-"""
-
-Output strictly JSON with:
-- "label": the selected label from the allowed list
-- "probabilities": dictionary of label -> float probability
-- "confidence": float between 0.0 and 1.0`;
+    const prompt = buildClassifyPrompt(text, labels);
 
     try {
       const response = await ai.models.generateContent({
@@ -316,14 +329,72 @@ export class TypeSafeJevJudgeProvider implements IJudgeProvider {
 }
 
 /**
- * Factory for Judge Provider
+ * Judge running on any IModelProvider (e.g. OpenRouter), with the same prompts
+ * and schemas as the Gemini judge. providerId/modelId are those of the
+ * underlying provider; modelId is updated to the id the provider reports.
+ */
+export class ModelJudgeProvider implements IJudgeProvider {
+  public providerId: string;
+  public modelId: string;
+
+  constructor(private provider: IModelProvider, modelId?: string) {
+    this.providerId = provider.providerId;
+    this.modelId = modelId || provider.defaultModelId || 'n/a';
+  }
+
+  private opts(actionName: string) {
+    return {
+      modelId: this.modelId === 'n/a' ? undefined : this.modelId,
+      temperature: 0.0,
+      actionName,
+      systemInstruction: 'You are a rigorous factual verification judge. Respond strictly in valid JSON matching schema.',
+    };
+  }
+
+  async verifyClaim(
+    claim: string,
+    evidenceText: string,
+    context?: { stem?: string; options?: string[]; answerKey?: string }
+  ): Promise<ClaimVerificationResult> {
+    const prompt = buildVerifyClaimPrompt(claim, evidenceText, context);
+    try {
+      const res = await this.provider.generateStructured(prompt, GeminiJudgeVerifySchema, this.opts('judge:verifyClaim'));
+      this.modelId = res.modelId;
+      return res.output;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`${this.providerId} judge error: ${msg}`);
+    }
+  }
+
+  async classify(text: string, labels: string[]): Promise<ClassificationResult> {
+    const prompt = buildClassifyPrompt(text, labels);
+    try {
+      const res = await this.provider.generateStructured(prompt, GeminiJudgeClassifySchema, this.opts('judge:classify'));
+      this.modelId = res.modelId;
+      return res.output;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`${this.providerId} judge classify error: ${msg}`);
+    }
+  }
+}
+
+/**
+ * Factory for Judge Provider.
+ * 'gemini' is the default model judge (UI id kept for compatibility): it runs on
+ * the default model provider (MODEL_PROVIDER). With MODEL_PROVIDER=openrouter it
+ * is recorded as providerId 'openrouter' with the OpenRouter model id.
  */
 export function getJudgeProvider(providerId = 'gemini'): IJudgeProvider {
   if (providerId === 'typesafe_jev') {
     return new TypeSafeJevJudgeProvider();
   }
-  if (providerId === 'gemini') {
-    return new GeminiJudgeProvider();
+  if (providerId === 'gemini' || providerId === 'default') {
+    const defaultProvider = getDefaultProviderId();
+    if (defaultProvider === 'gemini') return new GeminiJudgeProvider();
+    const judgeModel = process.env.OPENROUTER_JUDGE_MODEL_ID?.trim() || undefined;
+    return new ModelJudgeProvider(getProvider(defaultProvider), defaultProvider === 'openrouter' ? judgeModel : undefined);
   }
   throw new Error(`Unsupported judge provider requested: "${providerId}"`);
 }

@@ -106,7 +106,7 @@ export const ItemTraceModal: React.FC<ItemTraceModalProps> = ({
             <div className="p-3 border border-gray-200 rounded-lg bg-white">
               <span className="text-xs text-gray-700 block">Դատավոր (Judge)</span>
               <span className="text-xs font-semibold text-indigo-900 capitalize mt-0.5 block truncate">
-                {trace.judgeProviderId === 'typesafe_jev' ? 'TypeSafe Jev' : 'Gemini Judge'}
+                {trace.judgeProviderId ?? 'n/a'} · {trace.judgeModelId ?? 'n/a'}
               </span>
             </div>
             <div className="p-3 border border-gray-200 rounded-lg bg-white">
