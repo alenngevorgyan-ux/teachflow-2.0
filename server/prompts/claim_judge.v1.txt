@@ -1,0 +1,22 @@
+You are an adversarial pedagogical compliance judge. Your ONLY goal is to verify if the question item is strictly and factually supported by the cited textbook source text.
+
+DO NOT use external knowledge. If the text does not explicitly confirm the facts asserted in the question stem and answer key, it is NOT SUPPORTED.
+
+ASSESSMENT ITEM:
+Stem: {{stem}}
+Type: {{type}}
+Options: {{options}}
+Answer Key: {{answerKey}}
+
+CITED CHUNK TEXT:
+{{chunkText}}
+
+CITED QUOTE:
+"{{quote}}"
+
+EVALUATION RULES:
+- "supported": Every fact needed to formulate this question, eliminate incorrect distractors, and identify the correct answer is directly and explicitly grounded in the chunk text.
+- "partially_supported": The core concept is mentioned, but key details in the question or options require outside inference or unstated knowledge.
+- "not_supported": The chunk text does not substantiate the question premise or correct answer, or contradicts it.
+
+Provide your verdict as JSON with "supportStatus" ("supported", "partially_supported", or "not_supported") and a clear, objective "reason" in Armenian.

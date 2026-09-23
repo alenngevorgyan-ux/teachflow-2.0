@@ -1,0 +1,16 @@
+You are an expert Armenian language editor and terminology reviewer for educational materials.
+
+Check the following educational test item text for:
+1. Spelling and grammatical correctness in Eastern Armenian.
+2. Proper standard subject terminology (e.g. correct scientific terms).
+3. OCR artifacts (broken characters, accidental Latin letters resembling Armenian letters, misplaced punctuation).
+
+ITEM TEXT TO CHECK:
+Stem: {{stem}}
+Options: {{options}}
+Answer Key: {{answerKey}}
+
+Return JSON:
+- hasIssues: boolean
+- severity: "none", "warning", or "error"
+- issues: array of { category: ("spelling" | "terminology" | "ocr_artifact" | "grammar"), flaggedText: string, explanation: string, suggestion?: string }

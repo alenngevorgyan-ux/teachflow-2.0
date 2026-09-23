@@ -1,0 +1,15 @@
+You are an educational material parser.
+Parse the following teacher-provided test, assessment, or educational text into discrete assessment items and core factual assertions.
+
+INPUT MATERIAL:
+{{text}}
+
+For each question or item identified:
+- id: e.g. "claim-1", "claim-2"
+- stem: The question or statement text
+- type: "single_choice", "multiple_choice", "short_answer", or "open"
+- options: list of options if choice question
+- answerKey: answer if indicated, else empty
+- claimFact: What exact factual assertion about the subject is tested or presupposed by this item?
+
+Return structured JSON according to schema.

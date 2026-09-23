@@ -1,0 +1,6 @@
+{
+  "name": "TeachFlow Curriculum Connector",
+  "description": "Curriculum compliance verification, approved source grounding, and transparent item-level audit tracing for educational materials.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

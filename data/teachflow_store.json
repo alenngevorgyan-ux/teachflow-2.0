@@ -1,0 +1,224 @@
+{
+  "sources": [
+    {
+      "id": "demo-source-fact-01",
+      "title": "Բնագիտություն 5-րդ դասարան (Ցուցադրական նմուշ / Demo)",
+      "authority": "Ուսումնական նյութերի նմուշային բազա (Demo Repository)",
+      "docType": "textbook",
+      "subject": "Բնագիտություն",
+      "grades": [
+        5
+      ],
+      "role": "FACT",
+      "version": "1.0-demo",
+      "effectiveFrom": "2025-01-01",
+      "status": "active",
+      "sha256": "2309ec4954d10f34875adf107a7813b83d9b0310e343efe410802ec8de893cd1",
+      "isDemo": true,
+      "uploadedAt": "2026-09-23T08:40:18.058Z",
+      "chunks": [
+        {
+          "id": "demo-source-fact-01#p1#c1",
+          "sourceId": "demo-source-fact-01",
+          "page": 1,
+          "text": "Լուսասինթեզը գործընթաց է, որի ընթացքում կանաչ բույսերը արևի լույսի էներգիայի հաշվին ջրից և ածխաթթու գազից սինթեզում են օրգանական նյութեր (գլյուկոզ) և անջատում են թթվածին: Լուսասինթեզը կատարվում է բույսի կանաչ մասերում՝ քլորոպլաստներում, որոնք պարունակում են քլորոֆիլ պիգմենտը:"
+        },
+        {
+          "id": "demo-source-fact-01#p1#c2",
+          "sourceId": "demo-source-fact-01",
+          "page": 1,
+          "text": "Բույսերի արմատները հողից կլանում են ջուր և հանքային աղեր: Տերևները մթնոլորտից կլանում են ածխաթթու գազ հերձանցքերի միջոցով: Լույսի առկայությամբ քլորոֆիլը կլանում է լուսային էներգիան, որը փոխակերպվում է քիմիական էներգիայի:"
+        },
+        {
+          "id": "demo-source-fact-01#p2#c1",
+          "sourceId": "demo-source-fact-01",
+          "page": 2,
+          "text": "Լուսասինթեզի արդյունքում առաջացած թթվածինը անջատվում է մթնոլորտ և օգտագործվում է կենդանի օրգանիզմների շնչառության համար: Առաջացած օրգանական նյութերը ծառայում են որպես սնունդ ինչպես բույսի, այնպես էլ այլ օրգանիզմների համար:"
+        },
+        {
+          "id": "demo-source-fact-01#p2#c2",
+          "sourceId": "demo-source-fact-01",
+          "page": 2,
+          "text": "Լուսասինթեզի ինտենսիվությունը կախված է լուսավորվածության աստիճանից, շրջակա միջավայրի ջերմաստիճանից, ջրի քանակից և ածխաթթու գազի կոնցենտրացիայից: Օպտիմալ պայմաններում գործընթացը կատարվում է առավել արդյունավետ:"
+        }
+      ]
+    },
+    {
+      "id": "demo-source-method-01",
+      "title": "Բնագիտական առարկաների թեստավորման մեթոդական ուղեցույց (Demo Method Guide)",
+      "authority": "Մեթոդական նմուշների բազա (Demo Methodology Base)",
+      "docType": "methodological_guide",
+      "subject": "Բնագիտություն",
+      "grades": [
+        5
+      ],
+      "role": "METHOD",
+      "version": "1.0-demo",
+      "effectiveFrom": "2025-01-01",
+      "status": "active",
+      "sha256": "0b8ee6d6de201f4b3eadb4ac0e8771b262c9806cb53ab36b307a90df827c550c",
+      "isDemo": true,
+      "uploadedAt": "2026-09-23T08:40:18.059Z",
+      "chunks": [
+        {
+          "id": "demo-source-method-01#p1#c1",
+          "sourceId": "demo-source-method-01",
+          "page": 1,
+          "text": "Բնագիտական առարկաների թեստերի կազմման մեթոդական կանոններ. Յուրաքանչյուր հարց պետք է ունենա հստակ, միանշանակ ձևակերպում: Ընտրովի պատասխանով առաջադրանքներում տարբերակների քանակը պետք է լինի առնվազն 3 կամ 4: Բոլոր տարբերակները պետք է լինեն տրամաբանորեն հավանական և համասեռ:"
+        },
+        {
+          "id": "demo-source-method-01#p1#c2",
+          "sourceId": "demo-source-method-01",
+          "page": 1,
+          "text": "Արգելվում է օգտագործել երկակի ժխտումներով հարցեր (օրինակ՝ «Ստորև նշվածներից ո՞րը չի հանդիսանում ոչ կենդանի...»): Մեկ ընտրությամբ հարցերում ճիշտ պատասխանը պետք է լինի միակը և անվիճելին: Բարդության մակարդակները (հիմնական, միջին, առաջադեմ) պետք է հավասարաչափ բաշխված լինեն տարբերակների միջև:"
+        }
+      ]
+    }
+  ],
+  "outcomes": [
+    {
+      "code": "ԲՆ-5-1",
+      "text": "Բացատրել լուսասինթեզի գործընթացը և դրա անհրաժեշտ պայմանները (արևի լույս, ջուր, ածխաթթու գազ, քլորոֆիլ):",
+      "subject": "Բնագիտություն",
+      "grade": 5,
+      "standardVersion": "2025-v1",
+      "sourceId": "demo-source-fact-01",
+      "confirmed": true
+    },
+    {
+      "code": "ԲՆ-5-2",
+      "text": "Նկարագրել լուսասինթեզի արդյունքում թթվածնի անջատման կարևորությունը կենդանի օրգանիզմների շնչառության համար:",
+      "subject": "Բնագիտություն",
+      "grade": 5,
+      "standardVersion": "2025-v1",
+      "sourceId": "demo-source-fact-01",
+      "confirmed": true
+    },
+    {
+      "code": "ԲՆ-5-3",
+      "text": "Տարբերակել բույսերի օրգանների դերը սննդառության գործընթացում (արմատներ, տերևներ, հերձանցքեր):",
+      "subject": "Բնագիտություն",
+      "grade": 5,
+      "standardVersion": "2025-v1",
+      "sourceId": "demo-source-fact-01",
+      "confirmed": true
+    }
+  ],
+  "rules": [
+    {
+      "id": "rule-require-answer-key",
+      "title": "Ճիշտ պատասխանի առկայության պահանջ",
+      "description": "Յուրաքանչյուր առաջադրանք պարտադիր պետք է ունենա լրացված և վավեր ճիշտ պատասխան (Answer Key):",
+      "kind": "deterministic",
+      "params": {},
+      "severity": "error",
+      "active": true
+    },
+    {
+      "id": "rule-single-choice-one-answer",
+      "title": "Մեկ ընտրությամբ հարցում միակ ճիշտ պատասխան",
+      "description": "Մեկ ընտրությամբ առաջադրանքի ճիշտ պատասխանը պետք է լինի հստակ և համապատասխանի տրված տարբերակներից միայն մեկին:",
+      "kind": "deterministic",
+      "params": {},
+      "severity": "error",
+      "active": true
+    },
+    {
+      "id": "rule-min-options",
+      "title": "Ընտրովի առաջադրանքների տարբերակների նվազագույն քանակ",
+      "description": "Ընտրովի առաջադրանքը պետք է ունենա առնվազն 3 տարբերակ:",
+      "kind": "deterministic",
+      "params": {
+        "min_options": 3
+      },
+      "severity": "error",
+      "active": true
+    },
+    {
+      "id": "rule-max-items",
+      "title": "Տարբերակում առաջադրանքների առավելագույն քանակ",
+      "description": "Տարբերակը չպետք է գերազանցի սահմանված առաջադրանքների քանակը (կանխադրված 10):",
+      "kind": "deterministic",
+      "params": {
+        "max_items": 10
+      },
+      "severity": "warning",
+      "active": true
+    },
+    {
+      "id": "rule-allowed-item-types",
+      "title": "Թույլատրելի առաջադրանքների տեսակներ",
+      "description": "Առաջադրանքների տեսակները պետք է լինեն հաստատված ցանկից (մեկ ընտրություն, բազմակի ընտրություն, կարճ պատասխան, բաց):",
+      "kind": "deterministic",
+      "params": {
+        "allowed_types": [
+          "single_choice",
+          "multiple_choice",
+          "short_answer",
+          "open"
+        ]
+      },
+      "severity": "error",
+      "active": true
+    },
+    {
+      "id": "rule-llm-no-double-negatives",
+      "title": "Երկակի ժխտումների և շփոթեցնող ձևակերպումների արգելք",
+      "description": "Հարցի ձևակերպման մեջ արգելվում են երկակի ժխտումներ և աշակերտին շփոթեցնող արհեստական թակարդներ:",
+      "kind": "llm_judged",
+      "params": {},
+      "severity": "warning",
+      "sourceId": "demo-source-method-01",
+      "active": true
+    },
+    {
+      "id": "rule-llm-age-appropriate",
+      "title": "Տարիքային խմբին համապատասխան բառապաշար",
+      "description": "Հարցի լեզուն և տերմինաբանությունը պետք է համապատասխանեն տվյալ դասարանի տարիքային զարգացմանը:",
+      "kind": "llm_judged",
+      "params": {},
+      "severity": "warning",
+      "active": true
+    }
+  ],
+  "assessments": [],
+  "validationReports": [],
+  "frozenTasks": [
+    {
+      "id": "task-photo-01",
+      "subject": "Բնագիտություն",
+      "grade": 5,
+      "topic": "Լուսասինթեզի ընթացքը և քլորոպլաստների դերը",
+      "sourceIds": [
+        "demo-source-fact-01"
+      ],
+      "expectedOutcome": "generate",
+      "description": "Թեմա առկա է աղբյուրներում. պետք է հաջողությամբ գեներացվի և անցնի վալիդացիան:"
+    },
+    {
+      "id": "task-quantum-refusal-02",
+      "subject": "Բնագիտություն",
+      "grade": 5,
+      "topic": "Քվանտային համակարգիչներ և կիսահաղորդիչներ",
+      "sourceIds": [
+        "demo-source-fact-01"
+      ],
+      "expectedOutcome": "refuse",
+      "description": "Թեմա, որը լիովին բացակայում է 5-րդ դասարանի աղբյուրներում. համակարգը ՊԵՏՔ Է մերժի:"
+    },
+    {
+      "id": "task-roots-03",
+      "subject": "Բնագիտություն",
+      "grade": 5,
+      "topic": "Բույսերի արմատային սննդառություն և ջրի կլանում",
+      "sourceIds": [
+        "demo-source-fact-01"
+      ],
+      "expectedOutcome": "generate",
+      "description": "Թեմա առկա է աղբյուրներում. պետք է գեներացվեն ստուգված առաջադրանքներ:"
+    }
+  ],
+  "regressionRuns": [],
+  "sideBySideReports": [],
+  "auditLogs": []
+}
