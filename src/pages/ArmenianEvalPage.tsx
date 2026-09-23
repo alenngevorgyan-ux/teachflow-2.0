@@ -11,6 +11,14 @@ import {
 import { Language, PinnedContext, Role, ArmenianEvalTask, ArmenianEvalResult } from '../../shared/types';
 import { translations } from '../i18n/translations';
 
+interface CategoryModelRecommendation {
+  category: string;
+  providerId: string;
+  modelId: string;
+  avgScore: number;
+  runCount: number;
+}
+
 interface ArmenianEvalPageProps {
   lang: Language;
   role: Role;
@@ -27,11 +35,50 @@ export const ArmenianEvalPage: React.FC<ArmenianEvalPageProps> = ({
   const [results, setResults] = useState<ArmenianEvalResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [latestResult, setLatestResult] = useState<ArmenianEvalResult | null>(null);
+  const [recommendations, setRecommendations] = useState<CategoryModelRecommendation[]>([]);
+  const [preferences, setPreferences] = useState<Record<string, string>>({});
+  const [modelIdOverride, setModelIdOverride] = useState('');
 
   useEffect(() => {
     fetchTasks();
     fetchResults();
+    fetchRecommendations();
+    fetchPreferences();
   }, []);
+
+  const fetchRecommendations = async () => {
+    try {
+      const res = await fetch('/api/armenian-eval/recommendations');
+      const data = await res.json();
+      if (data.recommendations) setRecommendations(data.recommendations);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchPreferences = async () => {
+    try {
+      const res = await fetch('/api/armenian-eval/preferences');
+      const data = await res.json();
+      if (data.preferences) setPreferences(data.preferences);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSetPreference = async (rec: CategoryModelRecommendation) => {
+    try {
+      const res = await fetch('/api/armenian-eval/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: rec.category, providerId: rec.providerId, modelId: rec.modelId }),
+      });
+      const data = await res.json();
+      if (data.preferences) setPreferences(data.preferences);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchTasks = async () => {
     try {
@@ -62,12 +109,13 @@ export const ArmenianEvalPage: React.FC<ArmenianEvalPageProps> = ({
       const res = await fetch('/api/armenian-eval/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify(modelIdOverride.trim() ? { modelId: modelIdOverride.trim() } : {}),
       });
       const data = await res.json();
       if (data.result) {
         setLatestResult(data.result);
         setResults((prev) => [data.result, ...prev]);
+        fetchRecommendations();
       }
     } catch (err) {
       console.error(err);
@@ -90,14 +138,23 @@ export const ArmenianEvalPage: React.FC<ArmenianEvalPageProps> = ({
           <p className="text-xs text-gray-700 mt-1">{t.armenianEval.subtitle}</p>
         </div>
 
-        <button
-          onClick={handleRunEval}
-          disabled={isRunning}
-          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
-        >
-          <Play className="w-4 h-4" />
-          {isRunning ? 'Գործարկվում է...' : t.armenianEval.runEvalBtn}
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={modelIdOverride}
+            onChange={(e) => setModelIdOverride(e.target.value)}
+            placeholder="model id (կամայական, կանխադրվածի փոխարեն)"
+            className="px-3 py-2 text-xs bg-gray-50 border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 w-64"
+          />
+          <button
+            onClick={handleRunEval}
+            disabled={isRunning}
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
+          >
+            <Play className="w-4 h-4" />
+            {isRunning ? 'Գործարկվում է...' : t.armenianEval.runEvalBtn}
+          </button>
+        </div>
       </div>
 
       {latestResult && (
@@ -107,7 +164,7 @@ export const ArmenianEvalPage: React.FC<ArmenianEvalPageProps> = ({
             <div className="p-5 bg-white rounded-2xl border border-gray-200 shadow-xs space-y-1">
               <span className="text-gray-700 block font-medium">Ընդհանուր որակի ինդեքս</span>
               <span className="text-2xl font-extrabold text-emerald-700">
-                {(latestResult.overallScore * 100).toFixed(1)}%
+                {latestResult.overallScore.toFixed(1)}%
               </span>
               <span className="text-[11px] text-gray-700 block">Մոդել՝ {latestResult.modelId}</span>
             </div>
@@ -162,6 +219,89 @@ export const ArmenianEvalPage: React.FC<ArmenianEvalPageProps> = ({
               })}
             </div>
           </div>
+
+          {/* Raw Task Outputs — never hide what the model actually said */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs space-y-4 text-xs">
+            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
+              Առաջադրանք առ առաջադրանք արդյունքներ (հումք պատասխաններով)
+            </h2>
+            <div className="space-y-2">
+              {latestResult.taskResults.map((tr) => (
+                <div
+                  key={tr.taskId}
+                  className={`p-3.5 rounded-xl border space-y-1.5 ${
+                    tr.score === 0
+                      ? 'bg-rose-50/60 border-rose-200'
+                      : tr.score < 100
+                      ? 'bg-amber-50/60 border-amber-200'
+                      : 'bg-emerald-50/60 border-emerald-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                      {tr.category}
+                    </span>
+                    <span className="font-bold text-gray-900">{tr.score}%</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-gray-700">Մոդելի հումք պատասխանը՝</span>
+                    <p className="text-gray-900 whitespace-pre-wrap font-mono text-[11px] mt-0.5">
+                      {tr.modelOutput || '(դատարկ)'}
+                    </p>
+                  </div>
+                  <p className="text-gray-700 italic">{tr.notes}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Per-category model recommendation, computed from eval score history */}
+          {recommendations.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs space-y-4 text-xs">
+              <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
+                Առաջարկվող մոդել ըստ կատեգորիայի (հիմնված գնահատականների պատմության վրա)
+              </h2>
+              <table className="w-full text-left border-collapse">
+                <thead className="text-gray-700 border-b border-gray-200 font-semibold">
+                  <tr>
+                    <th className="p-2">Կատեգորիա</th>
+                    <th className="p-2">Լավագույն մոդել</th>
+                    <th className="p-2">Միջին միավոր</th>
+                    <th className="p-2">Գործարկումներ</th>
+                    <th className="p-2">Ընթացիկ կանխադրված</th>
+                    <th className="p-2 text-right">Գործողություն</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {recommendations.map((rec) => {
+                    const current = preferences[rec.category];
+                    const recKey = `${rec.providerId}/${rec.modelId}`;
+                    const isCurrent = current === recKey;
+                    return (
+                      <tr key={rec.category}>
+                        <td className="p-2 font-mono text-[11px]">{rec.category}</td>
+                        <td className="p-2 font-semibold text-gray-900">
+                          {rec.providerId}/{rec.modelId}
+                        </td>
+                        <td className="p-2 text-indigo-700 font-bold">{rec.avgScore}%</td>
+                        <td className="p-2 text-gray-700">{rec.runCount}</td>
+                        <td className="p-2 text-gray-700 font-mono text-[11px]">{current || '—'}</td>
+                        <td className="p-2 text-right">
+                          <button
+                            onClick={() => handleSetPreference(rec)}
+                            disabled={isCurrent}
+                            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 text-indigo-700 font-semibold rounded text-[11px] transition-colors"
+                          >
+                            {isCurrent ? 'Կանխադրված է' : 'Սահմանել իբրև կանխադրված'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

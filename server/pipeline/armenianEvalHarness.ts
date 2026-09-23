@@ -40,9 +40,12 @@ export async function runArmenianEvaluation(
         output.toLowerCase().includes(kw.toLowerCase())
       );
 
+      // SPEC (T13): a forbidden form or a wrong answer scores 0 — never a
+      // consolation score. Partial credit only applies when at least one
+      // ground-truth keyword genuinely matched and nothing forbidden appeared.
       if (hasForbidden) {
         passed = false;
-        score = 20;
+        score = 0;
         notes = `Հայտնաբերվել է արգելված արտահայտություն կամ սխալ ուղղագրական/կառուցվածքային ձև:`;
       } else if (matchedKeywords.length === task.groundTruthKeywords.length) {
         passed = true;
@@ -54,8 +57,8 @@ export async function runArmenianEvaluation(
         notes = `Մասնակի ճշգրտություն (${matchedKeywords.length}/${task.groundTruthKeywords.length} հիմնաբառ):`;
       } else {
         passed = false;
-        score = 30;
-        notes = `Պատասխանը բավարար չափով չի համապատասխանում ակնկալվող վերջնարդյունքին:`;
+        score = 0;
+        notes = `Սխալ պատասխան. ակնկալվող հիմնաբառերից ոչ մեկը չի հայտնաբերվել:`;
       }
     } catch (err: any) {
       output = `Սխալ գեներացիայի ժամանակ: ${err?.message || err}`;
@@ -99,4 +102,58 @@ export async function runArmenianEvaluation(
   };
 
   return repository.saveArmenianEvalResult(result);
+}
+
+export interface CategoryModelRecommendation {
+  category: string;
+  providerId: string;
+  modelId: string;
+  avgScore: number;
+  runCount: number;
+}
+
+// Aggregates every stored eval run by (category, provider, model) and
+// returns, per category, whichever (provider, model) pair scored the
+// highest average — this is what "per-task-type default model selection by
+// score" is computed from. Never picks a model that was never actually run
+// for that category; a category with no runs at all is simply absent from
+// the result, not defaulted to anything.
+export function computeCategoryModelRecommendations(
+  results: ArmenianEvalResult[]
+): CategoryModelRecommendation[] {
+  // key: `${category}::${providerId}::${modelId}`
+  const agg = new Map<string, { category: string; providerId: string; modelId: string; total: number; count: number }>();
+
+  for (const result of results) {
+    for (const taskResult of result.taskResults) {
+      const key = `${taskResult.category}::${result.providerId}::${result.modelId}`;
+      const entry = agg.get(key) || {
+        category: taskResult.category,
+        providerId: result.providerId,
+        modelId: result.modelId,
+        total: 0,
+        count: 0,
+      };
+      entry.total += taskResult.score;
+      entry.count += 1;
+      agg.set(key, entry);
+    }
+  }
+
+  const byCategory = new Map<string, CategoryModelRecommendation>();
+  for (const entry of agg.values()) {
+    const avgScore = entry.count > 0 ? entry.total / entry.count : 0;
+    const current = byCategory.get(entry.category);
+    if (!current || avgScore > current.avgScore) {
+      byCategory.set(entry.category, {
+        category: entry.category,
+        providerId: entry.providerId,
+        modelId: entry.modelId,
+        avgScore: Math.round(avgScore * 10) / 10,
+        runCount: entry.count,
+      });
+    }
+  }
+
+  return Array.from(byCategory.values()).sort((a, b) => a.category.localeCompare(b.category));
 }

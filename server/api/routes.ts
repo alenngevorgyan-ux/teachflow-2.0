@@ -35,7 +35,7 @@ import { runReportReview } from '../pipeline/reportReviewer.js';
 import { importLegacyReport } from '../pipeline/legacyReportImporter.js';
 import { checkPrivacy } from '../pipeline/privacyGuard.js';
 import { emisAdapter } from '../pipeline/emisAdapter.js';
-import { runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
+import { computeCategoryModelRecommendations, runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
 import { ingestSourceFile } from '../pipeline/sourceIngestion.js';
 import { parseWorkspaceIntent } from '../pipeline/workspaceIntent.js';
 import { scanAnswerSheet } from '../pipeline/answerSheetScanner.js';
@@ -1124,6 +1124,27 @@ export function createApiRouter(): Router {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: msg });
     }
+  });
+
+  // Per-task-type ("category") model recommendation, computed purely from
+  // stored eval run history — never invented, absent for a category with no
+  // runs yet.
+  router.get('/armenian-eval/recommendations', (_req: Request, res: Response) => {
+    const recommendations = computeCategoryModelRecommendations(repository.getArmenianEvalResults());
+    res.json({ recommendations });
+  });
+
+  router.get('/armenian-eval/preferences', (_req: Request, res: Response) => {
+    res.json({ preferences: repository.getEvalModelPreferences() });
+  });
+
+  router.post('/armenian-eval/preferences', (req: Request, res: Response) => {
+    const { category, providerId, modelId } = req.body;
+    if (!category || !providerId || !modelId) {
+      return res.status(400).json({ error: 'Missing category, providerId, or modelId' });
+    }
+    repository.setEvalModelPreference(category, `${providerId}/${modelId}`);
+    res.json({ preferences: repository.getEvalModelPreferences() });
   });
 
   return router;

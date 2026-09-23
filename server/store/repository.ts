@@ -152,6 +152,10 @@ export interface IRepository {
   saveArmenianEvalTask(task: ArmenianEvalTask): ArmenianEvalTask;
   getArmenianEvalResults(): ArmenianEvalResult[];
   saveArmenianEvalResult(res: ArmenianEvalResult): ArmenianEvalResult;
+  // category -> "providerId/modelId" the methodologist has chosen as default
+  // for that task type, informed by (not automatically overwritten by) eval scores.
+  getEvalModelPreferences(): Record<string, string>;
+  setEvalModelPreference(category: string, providerModelKey: string): void;
 
   // Schools & Teachers
   getSchools(): SchoolInfo[];
@@ -199,6 +203,7 @@ export class JsonFileRepository implements IRepository {
   private glossary: TerminologyGlossaryItem[] = [];
   private armenianEvalTasks: ArmenianEvalTask[] = [];
   private armenianEvalResults: ArmenianEvalResult[] = [];
+  private evalModelPreferences: Record<string, string> = {};
 
   constructor() {
     this.loadFromDisk();
@@ -235,6 +240,7 @@ export class JsonFileRepository implements IRepository {
         this.glossary = data.glossary || [];
         this.armenianEvalTasks = data.armenianEvalTasks || [];
         this.armenianEvalResults = data.armenianEvalResults || [];
+        this.evalModelPreferences = data.evalModelPreferences || {};
       }
     } catch (err) {
       console.error('Failed to load store from disk, starting with seeded data:', err);
@@ -264,6 +270,7 @@ export class JsonFileRepository implements IRepository {
         glossary: this.glossary,
         armenianEvalTasks: this.armenianEvalTasks,
         armenianEvalResults: this.armenianEvalResults,
+        evalModelPreferences: this.evalModelPreferences,
       };
       fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2), 'utf-8');
     } catch (err) {
@@ -1003,6 +1010,15 @@ export class JsonFileRepository implements IRepository {
     }
     this.saveToDisk();
     return res;
+  }
+
+  getEvalModelPreferences(): Record<string, string> {
+    return { ...this.evalModelPreferences };
+  }
+
+  setEvalModelPreference(category: string, providerModelKey: string): void {
+    this.evalModelPreferences[category] = providerModelKey;
+    this.saveToDisk();
   }
 
   // --- Schools & Teachers ---
