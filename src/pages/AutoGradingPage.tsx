@@ -330,15 +330,21 @@ export const AutoGradingPage: React.FC<AutoGradingPageProps> = ({
                           <td className="p-3 font-bold text-gray-700">№{ans.itemIndex}</td>
                           <td className="p-3 font-medium text-gray-900">{ans.studentAnswer}</td>
                           <td className="p-3">
-                            <span
-                              className={`px-2 py-0.5 rounded font-mono text-[10px] ${
-                                ans.confidence > 0.9
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : 'bg-amber-50 text-amber-700 font-bold'
-                              }`}
-                            >
-                              {Math.round(ans.confidence * 100)}%
-                            </span>
+                            {ans.confidence !== undefined && ans.confidence !== null ? (
+                              <span
+                                className={`px-2 py-0.5 rounded font-mono text-[10px] ${
+                                  ans.confidence > 0.9
+                                    ? 'bg-emerald-50 text-emerald-700'
+                                    : 'bg-amber-50 text-amber-700 font-bold'
+                                }`}
+                              >
+                                {Math.round(ans.confidence * 100)}%
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded font-mono text-[10px] bg-gray-100 text-gray-500">
+                                n/a
+                              </span>
+                            )}
                           </td>
                           <td className="p-3 font-bold text-indigo-700">
                             {ans.teacherOverrideScore !== undefined

@@ -310,12 +310,12 @@ export interface AnswerSheetSubmission {
   timestamp: string;
   imageUrl?: string;
   status: 'scanned' | 'scanned_pending_review' | 'confirmed';
-  confidenceOverall: number;
+  confidenceOverall?: number;
   answers: {
     itemIndex: number;
     itemId: string;
     studentAnswer: string;
-    confidence: number;
+    confidence?: number;
     isLowConfidence: boolean;
     pointsAwarded?: number;
     maxPoints?: number;
@@ -355,6 +355,7 @@ export interface ReportField {
   source: 'registry' | 'thematic_plan' | 'progress' | 'assessment_aggregate' | 'child_reports' | 'manual';
   binding?: string;
   required: boolean;
+  description?: string;
 }
 
 export interface ReportRule {

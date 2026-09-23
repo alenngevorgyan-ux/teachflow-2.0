@@ -726,7 +726,7 @@ export function createApiRouter(): Router {
         studentCode: studentCode || `7B-${Math.floor(10 + Math.random() * 89)}`,
         timestamp: new Date().toISOString(),
         status: 'scanned_pending_review',
-        confidenceOverall: 0.95,
+        confidenceOverall: undefined,
         imageUrl,
         answers,
       });

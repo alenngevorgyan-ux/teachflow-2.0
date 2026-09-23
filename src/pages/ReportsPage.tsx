@@ -314,26 +314,76 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                 <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
                   <span className="text-gray-700 block">Պլանավորված ժամեր</span>
                   <span className="text-base font-bold text-gray-900">
-                    {selectedReport.data.plannedHours ?? 32} ժամ
+                    {selectedReport.data.plannedHours != null ? `${selectedReport.data.plannedHours} ժամ` : 'n/a'}
                   </span>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
                   <span className="text-gray-700 block">Փաստացի անցած</span>
                   <span className="text-base font-bold text-gray-900">
-                    {selectedReport.data.actualHours ?? 32} ժամ
+                    {selectedReport.data.actualHours != null ? `${selectedReport.data.actualHours} ժամ` : 'n/a'}
                   </span>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
                   <span className="text-gray-700 block">Կատարողական (%)</span>
                   <span className="text-base font-bold text-emerald-700">
-                    {selectedReport.data.completionPercentage ?? 100}%
+                    {selectedReport.data.completionPercentage != null ? `${selectedReport.data.completionPercentage}%` : 'n/a'}
                   </span>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
                   <span className="text-gray-700 block">Ծածկված չափորոշիչներ</span>
-                  <span className="text-base font-bold text-indigo-700">4 / 4</span>
+                  <span className="text-base font-bold text-indigo-700">
+                    {Array.isArray(selectedReport.data.coveredOutcomes)
+                      ? `${selectedReport.data.coveredOutcomes.length}`
+                      : 'n/a'}
+                  </span>
                 </div>
               </div>
+
+              {/* Field Provenance & Confidences Section */}
+              {selectedReport.fieldConfidences && Object.keys(selectedReport.fieldConfidences).length > 0 && (
+                <div className="p-6 border-b border-gray-100 space-y-3 bg-indigo-50/20 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-900">Դաշտերի վստահություն և սկզբնաղբյուր (Provenance)</span>
+                    <span className="text-[10px] text-gray-700 font-mono">Չճանաչված կամ 0% դաշտերը պահանջում են հաստատում</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {Object.entries(selectedReport.data).map(([key, val]) => {
+                      const conf = selectedReport.fieldConfidences?.[key];
+                      const prov = selectedReport.fieldProvenance?.[key];
+                      const isUnconfirmed = conf === 0 || conf === undefined || val === null;
+                      return (
+                        <div
+                          key={key}
+                          className={`p-2.5 rounded-lg border text-xs space-y-1 ${
+                            isUnconfirmed ? 'bg-amber-50/80 border-amber-300' : 'bg-white border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-gray-800 font-semibold">{key}:</span>
+                            <span
+                              className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                                conf !== undefined && conf !== null
+                                  ? conf > 0.8
+                                    ? 'bg-emerald-100 text-emerald-800 font-bold'
+                                    : conf === 0
+                                    ? 'bg-rose-100 text-rose-800 font-bold'
+                                    : 'bg-amber-100 text-amber-800 font-bold'
+                                  : 'bg-gray-100 text-gray-500'
+                              }`}
+                            >
+                              Conf: {conf !== undefined && conf !== null ? `${Math.round(conf * 100)}%` : 'n/a'}
+                            </span>
+                          </div>
+                          <div className="text-gray-900 font-medium">
+                            {val !== null && val !== undefined ? String(val) : <span className="text-rose-600 italic">լրացված չէ (null)</span>}
+                          </div>
+                          {prov && <div className="text-[11px] text-gray-700 italic truncate">{prov}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Report Body Content */}
               <div className="p-6 space-y-4 text-xs">

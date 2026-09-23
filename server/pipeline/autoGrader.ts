@@ -47,7 +47,7 @@ export function gradeSubmissionDeterministically(
     const item = variantItems.find((it) => it.id === ans.itemId) || variantItems[ans.itemIndex - 1];
     const itemMax = item?.type === 'open' ? 2 : 1;
     maxScore += itemMax;
-    const confidence = ans.confidence ?? 0.95;
+    const confidence = ans.confidence;
     const isLowConfidence = ans.isLowConfidence ?? false;
 
     if (!item) {
@@ -100,7 +100,7 @@ export function gradeSubmissionDeterministically(
     totalScore += points;
     return {
       ...ans,
-      confidence: ans.confidence ?? 0.95,
+      confidence: ans.confidence,
       isLowConfidence: ans.isLowConfidence ?? false,
       pointsAwarded: points,
       maxPoints: itemMax,
@@ -116,7 +116,7 @@ export function gradeSubmissionDeterministically(
     id: `sheet-${submission.studentCode}-${Date.now().toString(36)}`,
     timestamp: submission.timestamp || new Date().toISOString(),
     status: submission.status || 'scanned',
-    confidenceOverall: submission.confidenceOverall ?? 0.95,
+    confidenceOverall: submission.confidenceOverall,
     answers: evaluatedAnswers,
     totalScore,
     maxScore,

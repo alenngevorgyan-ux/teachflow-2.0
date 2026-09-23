@@ -271,8 +271,8 @@ export function createMcpServer(): McpServer {
         studentCode,
         timestamp: new Date().toISOString(),
         status: 'scanned_pending_review',
-        confidenceOverall: 0.96,
-        answers: answers.map((a) => ({ ...a, confidence: 0.95, isLowConfidence: false })),
+        confidenceOverall: undefined,
+        answers: answers.map((a: any) => ({ ...a, confidence: a.confidence, isLowConfidence: false })),
       });
 
       repository.saveAnswerSheet(graded);

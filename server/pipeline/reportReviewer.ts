@@ -100,7 +100,7 @@ export function runReportReview(
         passed: false,
         severity: 'warning',
         detail: `«${code}» կոդը հաստատված չէ պաշտոնական առարկայական չափորոշչում:`,
-        confidence: 0.95,
+        confidence: 1.0,
       });
     }
   }
@@ -132,7 +132,7 @@ export function runReportReview(
       detail: match
         ? `Հաշվետվության փաստացի ժամերը (${repActualHours} ժամ) համընկնում են թեմատիկ պլանում նշված անցած դասաժամերի հետ (${planTaughtHours} ժամ):`
         : `Անհամապատասխանություն. Հաշվետվության ժամերը (${repActualHours}) չեն համընկնում թեմատիկ պլանում նշված անցած ժամերի հետ (${planTaughtHours}):`,
-      confidence: 0.98,
+      confidence: 1.0,
     });
   }
 
@@ -166,7 +166,7 @@ export function runReportReview(
       passed: false,
       severity: 'warning',
       detail: `Տվյալների համաձայն՝ առկա է ${lagWeeks} շաբաթ ծրագրային հետ ընկնելու ցուցանիշ: Անհրաժեշտ է դիտարկել լրացուցիչ պարապմունքների ժամանակացույց:`,
-      confidence: 0.92,
+      confidence: 1.0,
     });
   }
 
@@ -176,10 +176,30 @@ export function runReportReview(
   const status = hasErrors ? 'has_errors' : hasWarnings ? 'has_warnings' : 'ready';
   const recommendation = hasErrors ? 'return_for_correction' : 'accept';
 
-  // Armenian summary
-  let summaryArmenian = `Հաշվետվության ավտոմատ ստուգումն ավարտվել է: `;
+  // Verify whether every field has real provenance
+  const tplFields = tpl ? tpl.fields : [];
+  const allFieldsHaveProvenance =
+    tplFields.length > 0 &&
+    tplFields.every((f) => {
+      const prov = report.fieldProvenance?.[f.key];
+      return Boolean(prov && prov.trim().length > 0 && !prov.includes('Չի հայտնաբերվել') && !prov.includes('պահանջվում է'));
+    });
+
+  const checkedAspects: string[] = [];
+  if (tpl) checkedAspects.push('պարտադիր դաշտերի լրացվածություն');
+  if (tpl?.validationRules?.length) checkedAspects.push('ժամաքանակների կանոններ');
+  if (validCodesForGrade.size > 0) checkedAspects.push('չափորոշչային կոդերի առկայություն');
+  if (relatedPlans.length > 0) checkedAspects.push('համադրում թեմատիկ պլանի հետ');
+  if (report.childReportIds?.length) checkedAspects.push('ենթակա հաշվետվությունների թվաբանություն');
+  if (report.data.lagWeeks !== undefined) checkedAspects.push('ժամանակացույցի շեղումներ');
+
+  let summaryArmenian = `Հաշվետվության ավտոմատ ստուգումն ավարտվել է: Ստուգվել են՝ ${checkedAspects.join(', ')}: `;
   if (status === 'ready') {
-    summaryArmenian += `Բոլոր պարտադիր դաշտերը, չափորոշչային կոդերը և ժամաքանակները համապատասխանում են սահմանված պահանջներին: Տվյալները հաստատված են սկզբնաղբյուրներով: Խորհուրդ է տրվում հաստատել:`;
+    summaryArmenian += `Ստուգված բոլոր կանոններն ու պարտադիր դաշտերը համապատասխանում են սահմանված պահանջներին: `;
+    if (allFieldsHaveProvenance) {
+      summaryArmenian += `Բոլոր դաշտերի տվյալները հաստատված են սկզբնաղբյուրներով: `;
+    }
+    summaryArmenian += `Խորհուրդ է տրվում հաստատել:`;
   } else if (status === 'has_warnings') {
     summaryArmenian += `Հայտնաբերվել են նախազգուշացումներ (օր.՝ փոքր շեղումներ կամ բացատրություն պահանջող կետեր): Դիտարկեք դրանք նախքան հաստատելը:`;
   } else {

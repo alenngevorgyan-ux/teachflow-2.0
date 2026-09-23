@@ -462,7 +462,7 @@ export async function validateSingleItem(
     modelId: options?.modelId || 'gemini-3.8-flash',
     judgeProviderId: judge.providerId,
     judgeModelId: judge.modelId,
-    confidence: judgeVerificationConfidence ?? 0.95,
+    confidence: judgeVerificationConfidence,
     policyVersion,
     generatedAt: new Date().toISOString(),
     checks,

@@ -96,11 +96,9 @@ export const ReviewQueuePage: React.FC<ReviewQueuePageProps> = ({
                         Judge: {trace.judgeProviderId}
                       </span>
                     )}
-                    {trace.confidence !== undefined && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-mono font-medium">
-                        Conf: {(trace.confidence * 100).toFixed(0)}%
-                      </span>
-                    )}
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-mono font-medium">
+                      Conf: {trace.confidence !== undefined && trace.confidence !== null ? `${(trace.confidence * 100).toFixed(0)}%` : 'n/a'}
+                    </span>
                     <span className="text-xs text-gray-700 font-medium">
                       Թեստ՝ «{topic}»
                     </span>

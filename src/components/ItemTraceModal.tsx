@@ -112,7 +112,7 @@ export const ItemTraceModal: React.FC<ItemTraceModalProps> = ({
             <div className="p-3 border border-gray-200 rounded-lg bg-white">
               <span className="text-xs text-gray-700 block">Դատավորի վստահություն</span>
               <span className="font-mono text-xs font-bold text-gray-900 mt-0.5 block">
-                {trace.confidence !== undefined ? `${(trace.confidence * 100).toFixed(0)}%` : '—'}
+                {trace.confidence !== undefined && trace.confidence !== null ? `${(trace.confidence * 100).toFixed(0)}%` : 'n/a'}
               </span>
             </div>
             <div className="p-3 border border-gray-200 rounded-lg bg-white col-span-2">
@@ -187,11 +187,9 @@ export const ItemTraceModal: React.FC<ItemTraceModalProps> = ({
                           Judge: {chk.judgeProviderId}
                         </span>
                       )}
-                      {chk.confidence !== undefined && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-mono font-medium">
-                          Conf: {(chk.confidence * 100).toFixed(0)}%
-                        </span>
-                      )}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-mono font-medium">
+                        Conf: {chk.confidence !== undefined && chk.confidence !== null ? `${(chk.confidence * 100).toFixed(0)}%` : 'n/a'}
+                      </span>
                       <Badge
                         size="sm"
                         variant={

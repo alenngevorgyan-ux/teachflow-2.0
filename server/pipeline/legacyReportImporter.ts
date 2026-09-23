@@ -1,6 +1,7 @@
 import { ReportField, ReportInstance, ReportTemplate } from '../../shared/types.js';
-import { IModelProvider } from '../providers/modelProvider.js';
+import { GeminiProvider, IModelProvider } from '../providers/modelProvider.js';
 import { repository } from '../store/repository.js';
+import { z } from 'zod';
 
 export interface LegacyImportParams {
   rawText: string;
@@ -13,77 +14,113 @@ export interface LegacyImportParams {
   modelId?: string;
 }
 
+const FieldExtractionSchema = z.object({
+  key: z.string(),
+  value: z.union([z.string(), z.number(), z.array(z.any()), z.null()]).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  sourceQuote: z.string().optional(),
+  lineNumber: z.number().int().optional(),
+});
+
+const ExtractionResponseSchema = z.object({
+  fields: z.array(FieldExtractionSchema),
+});
+
 export async function importLegacyReport(params: LegacyImportParams): Promise<ReportInstance> {
-  const { rawText, fileName, templateId, schoolId, schoolName, authorName } = params;
+  const { rawText, fileName, templateId, schoolId, schoolName, authorName, modelId } = params;
   const template = repository.getReportTemplate(templateId) || repository.getReportTemplates()[0];
 
   const extractedData: Record<string, any> = {};
   const fieldConfidences: Record<string, number> = {};
   const fieldProvenance: Record<string, string> = {};
 
-  const lines = rawText.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+  const lines = rawText.split('\n');
+  const linesWithNumbers = lines
+    .map((line, idx) => `${idx + 1}: ${line}`)
+    .join('\n');
 
-  // Extract fields matching the template using pattern heuristics and semantic matches
+  const provider = params.provider || new GeminiProvider();
+  const extractionMap = new Map<string, z.infer<typeof FieldExtractionSchema>>();
+
+  const prompt = `You are a curriculum report data extractor. Extract values for the specified report fields from the document text below.
+DO NOT fabricate or guess any values. If a field is not explicitly mentioned or clearly derivable from the text, set value to null and confidence to 0.
+
+Template fields to extract:
+${template.fields
+  .map(
+    (f) =>
+      `- Key: "${f.key}", Label: "${f.label.hy}", Type: "${f.type}", Required: ${f.required ? 'true' : 'false'}, Description: "${f.description || ''}"`
+  )
+  .join('\n')}
+
+Document Text (with 1-indexed line numbers):
+${linesWithNumbers}
+
+Instructions:
+1. For each field in the template, return:
+   - "key": exact field key
+   - "value": the extracted value (string, number, array of strings, or null). NEVER fabricate default numbers or subjects!
+   - "confidence": confidence score from 0.0 to 1.0 (0.0 if not found or uncertain)
+   - "sourceQuote": exact verbatim excerpt from the document text that contains this value (must match the document text exactly). If not found, use empty string.
+   - "lineNumber": the 1-indexed line number in the document where the excerpt begins.
+2. Return JSON format: {"fields": [...]}`;
+
+  try {
+    const res = await provider.generateStructured(prompt, ExtractionResponseSchema, {
+      modelId: modelId || 'gemini-3.8-flash',
+      actionName: 'legacy_report_import',
+      systemInstruction:
+        'You are an uncompromising educational data extraction system. Do not fabricate, hallucinate, or extrapolate default values. If data is missing from the text, report value as null and confidence as 0.',
+    });
+
+    for (const f of res.output.fields) {
+      extractionMap.set(f.key, f);
+    }
+  } catch (err) {
+    // If model call fails, extractionMap remains empty -> all fields fall to null and 0 confidence
+    console.warn('Gemini structured extraction failed or was unavailable, flagging fields for manual review:', err);
+  }
+
+  // Deterministic validation of extracted fields
   for (const field of template.fields) {
-    let foundValue: any = null;
-    let confidence = 0.5;
-    let location = 'Անհայտ տող';
+    const extracted = extractionMap.get(field.key);
+    let value: any = null;
+    let confidence = 0;
+    let provenance = 'Չի հայտնաբերվել բնօրինակում (պահանջվում է ձեռքով հաստատում)';
 
-    // Heuristics for common report fields
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lower = line.toLowerCase();
+    if (extracted && extracted.value !== undefined && extracted.value !== null && extracted.value !== '') {
+      const rawQuote = (extracted.sourceQuote || '').trim();
+      // Deterministic check: verify sourceQuote exists in rawText
+      const quoteExists = rawQuote.length > 0 && rawText.includes(rawQuote);
 
-      if (field.key === 'subject' && (lower.includes('առարկա') || lower.includes('դասավանդվող'))) {
-        foundValue = line.split(/[:–—]/)[1]?.trim() || 'Հայոց պատմություն';
-        confidence = 0.95;
-        location = `Տող ${i + 1}: ${line.substring(0, 40)}`;
-        break;
-      } else if (field.key === 'grade' && (lower.includes('դասարան') || lower.includes('դաս.'))) {
-        const match = line.match(/\b([1-9]|1[0-2])\b/);
-        foundValue = match ? Number(match[1]) : 7;
-        confidence = 0.92;
-        location = `Տող ${i + 1}`;
-        break;
-      } else if (field.key === 'plannedHours' && (lower.includes('պլան') || lower.includes('նախատեսված'))) {
-        const match = line.match(/\b(\d+)\s*(ժամ|ժ)?/i);
-        foundValue = match ? Number(match[1]) : 34;
-        confidence = 0.88;
-        location = `Տող ${i + 1}: ${line.substring(0, 40)}`;
-        break;
-      } else if (field.key === 'actualHours' && (lower.includes('փաստացի') || lower.includes('անցած') || lower.includes('կատարված'))) {
-        const match = line.match(/\b(\d+)\s*(ժամ|ժ)?/i);
-        foundValue = match ? Number(match[1]) : 32;
-        confidence = 0.85;
-        location = `Տող ${i + 1}: ${line.substring(0, 40)}`;
-        break;
-      } else if (field.key === 'completionPercentage' && (lower.includes('%') || lower.includes('տոկոս'))) {
-        const match = line.match(/(\d+(?:\.\d+)?)\s*%/);
-        foundValue = match ? Number(match[1]) : 94;
-        confidence = 0.9;
-        location = `Տող ${i + 1}`;
-        break;
-      } else if (field.key === 'teacherReflection' && (lower.includes('նշում') || lower.includes('մեկնաբանություն') || lower.includes('եզրակացություն'))) {
-        foundValue = line.split(/[:–—]/)[1]?.trim() || line;
-        confidence = 0.75;
-        location = `Տող ${i + 1}`;
-        break;
+      if (!quoteExists) {
+        // Deterministic failure: quote does not exist in rawText -> confidence 0, manual confirmation
+        confidence = 0;
+        value = null;
+        provenance = `Մեջբերումը չգտնվեց բնօրինակում («${rawQuote}»): վստահություն՝ 0, պահանջվում է ձեռքով հաստատում`;
+      } else {
+        confidence = extracted.confidence ?? 0;
+        value = extracted.value;
+
+        if (field.type === 'number') {
+          const num = Number(value);
+          if (isNaN(num)) {
+            value = null;
+            confidence = 0;
+            provenance = `Թվային արժեքը չճանաչվեց: վստահություն՝ 0, պահանջվում է ձեռքով հաստատում`;
+          } else {
+            value = num;
+          }
+        }
+
+        const lineStr = extracted.lineNumber ? ` (տող ${extracted.lineNumber})` : '';
+        provenance = `Քաղված «${fileName}» ֆայլից${lineStr}: «${rawQuote}»`;
       }
     }
 
-    // Default fallback values if not found in raw text
-    if (foundValue === null) {
-      if (field.type === 'number') foundValue = field.key === 'hoursDifference' ? -2 : 0;
-      else if (field.type === 'list') foundValue = [];
-      else if (field.type === 'table') foundValue = [];
-      else foundValue = field.key === 'subject' ? 'Հայոց պատմություն' : '';
-      confidence = 0.45; // low confidence -> triggers manual review highlight
-      location = 'Չի հայտնաբերվել բնօրինակում (ավտոմատ լրացում)';
-    }
-
-    extractedData[field.key] = foundValue;
+    extractedData[field.key] = value;
     fieldConfidences[field.key] = confidence;
-    fieldProvenance[field.key] = `Ներմուծված «${fileName}» ֆայլից (${location})`;
+    fieldProvenance[field.key] = provenance;
   }
 
   const reportId = `rep-imported-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -96,10 +133,10 @@ export async function importLegacyReport(params: LegacyImportParams): Promise<Re
     schoolName,
     authorRole: template.authorRole,
     authorName,
-    subject: extractedData.subject || 'Հայոց պատմություն',
-    grade: Number(extractedData.grade || 7),
+    subject: extractedData.subject || '',
+    grade: extractedData.grade !== null && extractedData.grade !== undefined ? Number(extractedData.grade) : 0,
     period: template.period,
-    academicYear: '2025-2026',
+    academicYear: '2026-2027',
     status: 'draft',
     data: extractedData,
     fieldConfidences,
@@ -110,10 +147,11 @@ export async function importLegacyReport(params: LegacyImportParams): Promise<Re
         action: 'legacy_imported',
         actor: authorName,
         timestamp: new Date().toISOString(),
-        note: `Ֆայլ «${fileName}» ճանաչվել է AI Legacy Importer-ի կողմից`,
+        note: `Ֆայլ «${fileName}» ներմուծվել է (պահանջվում է ձեռքով հաստատում չճանաչված դաշտերի համար)`,
       },
     ],
     isLegacyImported: true,
+    importedFromLegacy: true,
     legacySourceFile: fileName,
     dataSnapshotHash: `hash-${Date.now()}`,
     createdAt: new Date().toISOString(),
