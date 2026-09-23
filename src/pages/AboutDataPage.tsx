@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Shield, Trash2, Download, CheckCircle2, Terminal, Info } from 'lucide-react';
 import { Language } from '../../shared/types';
 import { translations } from '../i18n/translations';
+import { Badge } from '../components/Badge';
 
 interface AboutDataPageProps {
   lang: Language;
@@ -92,9 +93,12 @@ export const AboutDataPage: React.FC<AboutDataPageProps> = ({ lang }) => {
         <div className="flex items-center gap-2 text-indigo-950 font-bold text-sm">
           <Terminal className="w-5 h-5 text-indigo-600" />
           <span>Model Context Protocol (MCP) ինտեգրում</span>
+          <Badge variant="simulated" size="sm" title={t.common.simulatedNotice}>
+            SSE (ոչ պաշտոնական Streamable HTTP)
+          </Badge>
         </div>
         <p className="leading-relaxed text-gray-800">
-          TeachFlow-ը հանդիսանում է նաև MCP սերվեր (Streamable HTTP at <code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-indigo-700">/mcp</code>): Կազմակերպության կամ դպրոցի ադմինիստրատորը կարող է միացնել այն ChatGPT Edu կամ ցանկացած այլ MCP-համատեղելի միջավայրին:
+          TeachFlow-ը հանդիսանում է նաև MCP սերվեր, ներկայումս՝ SSE փոխադրման միջոցով (<code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-indigo-700">/mcp/sse</code> + <code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-indigo-700">/mcp/messages</code>), ոչ թե պաշտոնական Streamable HTTP-ով: Կազմակերպության կամ դպրոցի ադմինիստրատորը կարող է միացնել այն ChatGPT Edu կամ ցանկացած այլ MCP-համատեղելի միջավայրին, բայց հին SSE տրանսպորտով:
         </p>
 
         <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 font-mono text-[11px] space-y-1">

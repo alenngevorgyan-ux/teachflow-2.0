@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Language, PinnedContext, Role, ThematicPlan, LessonPlan, ReportInstance } from '../../shared/types';
 import { translations } from '../i18n/translations';
+import { Badge } from '../components/Badge';
 
 interface WorkspacePageProps {
   lang: Language;
@@ -294,9 +295,9 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
               <Sparkles className="w-4 h-4 text-indigo-600" />
               TeachFlow Chat
             </div>
-            <span className="text-[11px] px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 font-semibold">
-              Live Pipeline
-            </span>
+            <Badge variant="simulated" size="sm" title={t.common.simulatedNotice}>
+              {t.common.simulatedBadge}
+            </Badge>
           </div>
 
           {/* Chat Messages */}

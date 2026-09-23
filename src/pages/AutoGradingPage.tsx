@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Language, PinnedContext, Role, Assessment, AnswerSheetSubmission } from '../../shared/types';
 import { translations } from '../i18n/translations';
+import { Badge } from '../components/Badge';
 
 interface AutoGradingPageProps {
   lang: Language;
@@ -228,6 +229,9 @@ export const AutoGradingPage: React.FC<AutoGradingPageProps> = ({
                 + Նոր սկան
               </button>
             </div>
+            <Badge variant="simulated" size="sm" title={t.common.simulatedNotice} className="w-fit">
+              {t.common.simulatedBadge}: պատկերի ընթերցում (OCR/Vision) դեռ իրականացված չէ, պատասխանները մուտքագրվում են ձեռքով
+            </Badge>
 
             <div className="space-y-2 overflow-y-auto max-h-[600px]">
               {submissions.map((sub) => (

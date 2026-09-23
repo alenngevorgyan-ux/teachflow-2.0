@@ -2,9 +2,10 @@ import React from 'react';
 
 export interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'pass' | 'warn' | 'fail' | 'demo' | 'info' | 'neutral' | 'superseded';
+  variant?: 'pass' | 'warn' | 'fail' | 'demo' | 'info' | 'neutral' | 'superseded' | 'simulated';
   size?: 'sm' | 'md';
   className?: string;
+  title?: string;
 }
 
 export const Badge: React.FC<BadgeProps> = ({
@@ -12,6 +13,7 @@ export const Badge: React.FC<BadgeProps> = ({
   variant = 'neutral',
   size = 'md',
   className = '',
+  title,
 }) => {
   const sizeClasses = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs';
 
@@ -33,6 +35,9 @@ export const Badge: React.FC<BadgeProps> = ({
     case 'superseded':
       variantClasses = 'bg-amber-100 text-amber-900 border-amber-300 italic';
       break;
+    case 'simulated':
+      variantClasses = 'bg-orange-50 text-orange-800 border-orange-300 font-semibold tracking-wide';
+      break;
     case 'info':
       variantClasses = 'bg-blue-50 text-blue-800 border-blue-200';
       break;
@@ -44,6 +49,7 @@ export const Badge: React.FC<BadgeProps> = ({
 
   return (
     <span
+      title={title}
       className={`inline-flex items-center gap-1 rounded border ${sizeClasses} ${variantClasses} ${className}`}
     >
       {children}

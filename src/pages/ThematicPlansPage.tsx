@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Language, PinnedContext, Role, ThematicPlan } from '../../shared/types';
 import { translations } from '../i18n/translations';
+import { Badge } from '../components/Badge';
 
 interface ThematicPlansPageProps {
   lang: Language;
@@ -118,6 +119,9 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
               <Calendar className="w-5 h-5" />
             </span>
             <h1 className="text-xl font-bold text-gray-900">{t.thematicPlan.title}</h1>
+            <Badge variant="simulated" title={t.common.simulatedNotice}>
+              {t.common.simulatedBadge}
+            </Badge>
           </div>
           <p className="text-xs text-gray-700 mt-1">{t.thematicPlan.subtitle}</p>
         </div>
@@ -305,25 +309,30 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
                           </button>
                         </td>
                         <td className="p-3.5 text-right">
-                          <button
-                            onClick={async () => {
-                              const res = await fetch('/api/lesson-plans/generate', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  thematicPlanId: selectedPlan.id,
-                                  rowId: row.id,
-                                }),
-                              });
-                              const data = await res.json();
-                              if (data.lessonPlan) {
-                                alert(`Դասի պլանը ստեղծված է «${row.topic}» թեմայով:`);
-                              }
-                            }}
-                            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded text-[11px] transition-colors"
-                          >
-                            {t.thematicPlan.createLessonPlanBtn}
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Badge variant="simulated" size="sm" title={t.common.simulatedNotice}>
+                              {t.common.simulatedBadge}
+                            </Badge>
+                            <button
+                              onClick={async () => {
+                                const res = await fetch('/api/lesson-plans/generate', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    thematicPlanId: selectedPlan.id,
+                                    rowId: row.id,
+                                  }),
+                                });
+                                const data = await res.json();
+                                if (data.lessonPlan) {
+                                  alert(`Դասի պլանը ստեղծված է «${row.topic}» թեմայով:`);
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded text-[11px] transition-colors"
+                            >
+                              {t.thematicPlan.createLessonPlanBtn}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

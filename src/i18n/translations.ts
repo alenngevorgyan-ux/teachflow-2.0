@@ -35,6 +35,8 @@ export const translations = {
     },
     common: {
       demoBadge: 'ՑՈՒՑԱԴՐԱԿԱՆ ՆՄՈՒՇ — Սինթետիկ տվյալներ',
+      simulatedBadge: 'ՍԻՄՈՒԼՅԱՑՎԱԾ — առանց իրական մոդելային կանչի',
+      simulatedNotice: 'Այս գործառույթը դեռ չի կանչում իրական AI մոդել. արդյունքը ձևանմուշային/քարտեզագրված է, ոչ թե գեներացված:',
       pinnedContext: 'Ակտիվ համատեքստ (Pinned Context)',
       subject: 'Առարկա',
       grade: 'Դասարան',
@@ -316,6 +318,8 @@ export const translations = {
     },
     common: {
       demoBadge: 'ДЕМО ОБРАЗЕЦ — Синтетические данные',
+      simulatedBadge: 'СИМУЛЯЦИЯ — без реального вызова модели',
+      simulatedNotice: 'Эта функция пока не вызывает настоящую AI-модель: результат шаблонный, а не сгенерированный.',
       pinnedContext: 'Закрепленный контекст',
       subject: 'Предмет',
       grade: 'Класс',
@@ -597,6 +601,8 @@ export const translations = {
     },
     common: {
       demoBadge: 'DEMO SAMPLE — Synthetic Data',
+      simulatedBadge: 'SIMULATED — no real model call',
+      simulatedNotice: 'This feature does not yet call a real AI model: the output is templated/mapped, not generated.',
       pinnedContext: 'Pinned Context',
       subject: 'Subject',
       grade: 'Grade',
