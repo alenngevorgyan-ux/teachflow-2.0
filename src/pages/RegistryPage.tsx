@@ -32,7 +32,9 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
   const [outcomes, setOutcomes] = useState<CurriculumOutcome[]>([]);
   const [loading, setLoading] = useState(false);
   const [showUploadForm, setShowUploadForm] = useState(false);
-  const [embeddingWarning, setEmbeddingWarning] = useState<string | null>(null);
+  const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
+  const [uploadMode, setUploadMode] = useState<'paste' | 'file'>('paste');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [supersedeModalSource, setSupersedeModalSource] = useState<Source | null>(null);
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
 
@@ -75,35 +77,59 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
     fetchSourcesAndOutcomes();
   }, []);
 
+  const resetUploadForm = () => {
+    setTitle('');
+    setAuthority('');
+    setContent('');
+    setSelectedFile(null);
+    setShowUploadForm(false);
+  };
+
   const handleCreateSource = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !content) return;
+    if (!title) return;
+    if (uploadMode === 'paste' && !content) return;
+    if (uploadMode === 'file' && !selectedFile) return;
 
     setLoading(true);
     try {
-      const res = await fetch('/api/sources', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          authority,
-          docType,
-          subject,
-          grades: grades.split(',').map((s) => Number(s.trim())),
-          role,
-          version,
-          text: content,
-          isOcr,
-        }),
-      });
+      let res: Response;
+      if (uploadMode === 'file' && selectedFile) {
+        const form = new FormData();
+        form.append('file', selectedFile);
+        form.append('title', title);
+        form.append('authority', authority);
+        form.append('docType', docType);
+        form.append('subject', subject);
+        for (const g of grades.split(',').map((s) => s.trim())) form.append('grades', g);
+        form.append('role', role || 'FACT');
+        form.append('version', version);
+        res = await fetch('/api/sources/upload', { method: 'POST', body: form });
+      } else {
+        res = await fetch('/api/sources', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title,
+            authority,
+            docType,
+            subject,
+            grades: grades.split(',').map((s) => Number(s.trim())),
+            role,
+            version,
+            text: content,
+            isOcr,
+          }),
+        });
+      }
+
       const data = await res.json();
       if (res.ok) {
-        setTitle('');
-        setAuthority('');
-        setContent('');
-        setShowUploadForm(false);
-        setEmbeddingWarning(data.embeddingWarning || null);
+        resetUploadForm();
+        setUploadWarnings(data.warnings || (data.embeddingWarning ? [data.embeddingWarning] : []));
         await fetchSourcesAndOutcomes();
+      } else {
+        setUploadWarnings([data.error || 'Ներբեռնումը ձախողվեց:']);
       }
     } catch (err) {
       console.error('Create source failed:', err);
@@ -229,11 +255,15 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
         </div>
       </div>
 
-      {embeddingWarning && (
+      {uploadWarnings.length > 0 && (
         <div className="flex items-start justify-between gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
-          <span className="font-medium">{embeddingWarning}</span>
+          <div className="space-y-1 font-medium">
+            {uploadWarnings.map((w, i) => (
+              <p key={i}>{w}</p>
+            ))}
+          </div>
           <button
-            onClick={() => setEmbeddingWarning(null)}
+            onClick={() => setUploadWarnings([])}
             className="shrink-0 text-amber-700 hover:text-amber-900 font-bold"
           >
             ✕
@@ -343,32 +373,74 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
             </div>
           </div>
 
-          <div className="text-xs">
-            <label className="block font-medium text-gray-700 mb-1">
-              {t.registry.content} * (Տեքստը կբաժանվի ~800 նիշանոց հատվածների)
-            </label>
-            <textarea
-              required
-              rows={6}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Տեղադրեք դասագրքի, չափորոշչի կամ մեթոդական ուղեցույցի բնօրինակ տեքստը..."
-              className="w-full border border-gray-300 rounded-lg p-3 text-xs text-gray-900 focus:ring-1 focus:ring-indigo-500 outline-hidden font-mono"
-            />
+          <div className="flex items-center gap-2 text-xs bg-gray-50 p-1 rounded-lg w-fit">
+            <button
+              type="button"
+              onClick={() => setUploadMode('paste')}
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+                uploadMode === 'paste' ? 'bg-white text-indigo-700 shadow-2xs font-semibold' : 'text-gray-600'
+              }`}
+            >
+              Տեքստի փոխադրում (Paste)
+            </button>
+            <button
+              type="button"
+              onClick={() => setUploadMode('file')}
+              className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+                uploadMode === 'file' ? 'bg-white text-indigo-700 shadow-2xs font-semibold' : 'text-gray-600'
+              }`}
+            >
+              Ֆայլի վերբեռնում (PDF/DOCX/TXT)
+            </button>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              id="ocrCheck"
-              checked={isOcr}
-              onChange={(e) => setIsOcr(e.target.checked)}
-              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            <label htmlFor="ocrCheck" className="text-gray-700 font-medium cursor-pointer">
-              {t.common.ocrNotice}
-            </label>
-          </div>
+          {uploadMode === 'paste' ? (
+            <>
+              <div className="text-xs">
+                <label className="block font-medium text-gray-700 mb-1">
+                  {t.registry.content} * (Տեքստը կբաժանվի ~800 նիշանոց հատվածների)
+                </label>
+                <textarea
+                  required={uploadMode === 'paste'}
+                  rows={6}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Տեղադրեք դասագրքի, չափորոշչի կամ մեթոդական ուղեցույցի բնօրինակ տեքստը..."
+                  className="w-full border border-gray-300 rounded-lg p-3 text-xs text-gray-900 focus:ring-1 focus:ring-indigo-500 outline-hidden font-mono"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  id="ocrCheck"
+                  checked={isOcr}
+                  onChange={(e) => setIsOcr(e.target.checked)}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <label htmlFor="ocrCheck" className="text-gray-700 font-medium cursor-pointer">
+                  {t.common.ocrNotice}
+                </label>
+              </div>
+            </>
+          ) : (
+            <div className="text-xs">
+              <label className="block font-medium text-gray-700 mb-1">
+                Ֆայլ * (PDF, DOCX կամ TXT, մինչև 25MB)
+              </label>
+              <input
+                type="file"
+                required={uploadMode === 'file'}
+                accept=".pdf,.docx,.txt"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                className="w-full border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900 focus:ring-1 focus:ring-indigo-500 outline-hidden file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border-0 file:bg-indigo-50 file:text-indigo-700 file:font-semibold file:cursor-pointer hover:file:bg-indigo-100"
+              />
+              <p className="text-gray-500 mt-1.5">
+                PDF-ը մշակվում է իրական էջերով (իրական էջահամարներ); սկանավորված (առանց տեքստային շերտի) էջերը
+                անցնում են Gemini OCR-ով: DOCX/TXT-ը՝ առանց ֆիքսված էջագրության:
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
             <button

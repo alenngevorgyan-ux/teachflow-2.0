@@ -14,6 +14,9 @@ export interface SourceChunk {
   // Absent when GEMINI_API_KEY was not configured or the embedding call
   // failed — retrieval falls back to keyword-only scoring for that chunk.
   embedding?: number[];
+  // true if this chunk's text came from Gemini OCR of a scanned PDF page
+  // rather than the file's own text layer.
+  ocr?: boolean;
 }
 
 export interface Source {

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import multer from 'multer';
 import { Request, Response, Router } from 'express';
 import { ExtractedOutcomesSchema } from '../../shared/schemas.js';
 import {
@@ -35,6 +36,9 @@ import { importLegacyReport } from '../pipeline/legacyReportImporter.js';
 import { checkPrivacy } from '../pipeline/privacyGuard.js';
 import { emisAdapter } from '../pipeline/emisAdapter.js';
 import { runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
+import { ingestSourceFile } from '../pipeline/sourceIngestion.js';
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 export function createApiRouter(): Router {
   const router = Router();
@@ -148,6 +152,41 @@ export function createApiRouter(): Router {
 
       const saved = repository.saveSource(newSource);
       res.json({ source: saved, embeddingWarning: embeddingResult.warning });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // Real file upload: PDF (per-page, real page numbers, scanned pages -> Gemini
+  // OCR), DOCX, TXT. sha256 is computed over the raw uploaded bytes.
+  router.post('/sources/upload', upload.single('file'), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Ֆայլ չի ուղարկվել (multipart field name՝ "file")' });
+      }
+
+      const { title, authority, docType, subject, grades, role, version, effectiveFrom } = req.body;
+      if (!title || !subject) {
+        return res.status(400).json({ error: 'Missing required source metadata (title, subject).' });
+      }
+
+      const { source, warnings } = await ingestSourceFile({
+        fileBuffer: req.file.buffer,
+        fileName: req.file.originalname,
+        title,
+        authority,
+        docType,
+        subject,
+        grades: (Array.isArray(grades) ? grades : typeof grades === 'string' ? grades.split(',') : [5]).map(
+          Number
+        ),
+        role,
+        version,
+        effectiveFrom,
+      });
+
+      res.json({ source, warnings });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: msg });
