@@ -76,9 +76,15 @@ Instructions:
     for (const f of res.output.fields) {
       extractionMap.set(f.key, f);
     }
-  } catch (err) {
-    // If model call fails, extractionMap remains empty -> all fields fall to null and 0 confidence
-    console.warn('Gemini structured extraction failed or was unavailable, flagging fields for manual review:', err);
+  } catch (err: unknown) {
+    // SPEC: A failed extraction call must surface as a visible error, not
+    // silently produce a report where every field looks like "not found in
+    // the document" — that's indistinguishable from a genuinely empty legacy
+    // file and would hide a real model/provider outage from the teacher.
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Ներմուծման քաղվածքի մոդելային կանչը ձախողվեց («${fileName}»): ${msg} Հաշվետվությունը չի ստեղծվել. փորձեք կրկին:`
+    );
   }
 
   // Deterministic validation of extracted fields

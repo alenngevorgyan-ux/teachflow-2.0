@@ -36,6 +36,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [legacyText, setLegacyText] = useState('');
   const [showLegacyModal, setShowLegacyModal] = useState(false);
+  const [legacyImportError, setLegacyImportError] = useState<string | null>(null);
   const [commentText, setCommentText] = useState('');
 
   useEffect(() => {
@@ -117,6 +118,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
   const handleLegacyImport = async () => {
     if (!legacyText.trim()) return;
     setIsImporting(true);
+    setLegacyImportError(null);
     try {
       const res = await fetch('/api/reports/legacy-import', {
         method: 'POST',
@@ -129,14 +131,17 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
         }),
       });
       const data = await res.json();
-      if (data.report) {
+      if (res.ok && data.report) {
         setReports((prev) => [data.report, ...prev]);
         setSelectedReport(data.report);
         setShowLegacyModal(false);
         setLegacyText('');
+      } else {
+        setLegacyImportError(data.error || 'Ներմուծումը ձախողվեց: Անհայտ սխալ:');
       }
     } catch (err) {
       console.error(err);
+      setLegacyImportError(err instanceof Error ? err.message : 'Ցանցային սխալ ներմուծման ժամանակ:');
     } finally {
       setIsImporting(false);
     }
@@ -158,7 +163,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowLegacyModal(true)}
+            onClick={() => {
+              setLegacyImportError(null);
+              setShowLegacyModal(true);
+            }}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl text-xs font-semibold shadow-2xs transition-colors"
           >
             <FileUp className="w-4 h-4 text-indigo-600" />
@@ -464,6 +472,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
               Տեղադրեք հին Docx կամ PDF հաշվետվության տեքստը: TeachFlow-ը կկատարի կառուցվածքային
               քաղվածք, կվերագրի վստահության գործակիցներ (confidence) և ցույց կտա աղբյուրի տողերը (provenance):
             </p>
+
+            {legacyImportError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 font-medium">
+                {legacyImportError}
+              </div>
+            )}
 
             <textarea
               rows={8}
