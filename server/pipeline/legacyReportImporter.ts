@@ -1,6 +1,7 @@
 import { ReportField, ReportInstance, ReportTemplate } from '../../shared/types.js';
 import { IModelProvider, getProvider } from '../providers/modelProvider.js';
 import { repository } from '../store/repository.js';
+import { assertNoPii } from './privacyGuard.js';
 import { z } from 'zod';
 
 export interface LegacyImportParams {
@@ -28,6 +29,8 @@ const ExtractionResponseSchema = z.object({
 
 export async function importLegacyReport(params: LegacyImportParams): Promise<ReportInstance> {
   const { rawText, fileName, templateId, schoolId, schoolName, authorName, modelId } = params;
+  // Check before the text reaches a model or the store.
+  assertNoPii(rawText, 'legacyImport.rawText');
   const template = repository.getReportTemplate(templateId) || repository.getReportTemplates()[0];
 
   const extractedData: Record<string, any> = {};

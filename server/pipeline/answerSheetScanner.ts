@@ -1,6 +1,6 @@
 import { AnswerSheetSubmission } from '../../shared/types.js';
 import { repository } from '../store/repository.js';
-import { checkPrivacy } from './privacyGuard.js';
+import { assertStudentCode } from './privacyGuard.js';
 import { gradeSubmissionDeterministically } from './autoGrader.js';
 import { decodeAnswerSheetQr } from './answerSheetQr.js';
 import { readAnswerSheet } from '../providers/visionProvider.js';
@@ -74,10 +74,7 @@ export async function scanAnswerSheet(params: ScanAnswerSheetParams): Promise<Sc
     );
   }
 
-  const priv = checkPrivacy(studentCode);
-  if (priv.blocked) {
-    throw new Error(priv.warnings[0]);
-  }
+  assertStudentCode(studentCode);
 
   const answers = vision.answers.map((a) => {
     const item = variantItems[a.itemIndex - 1];

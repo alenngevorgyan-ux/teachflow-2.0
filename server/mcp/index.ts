@@ -19,6 +19,7 @@ import { runReportReview } from '../pipeline/reportReviewer.js';
 import { importLegacyReport } from '../pipeline/legacyReportImporter.js';
 import { emisAdapter } from '../pipeline/emisAdapter.js';
 import { runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
+import { assertStudentCode } from '../pipeline/privacyGuard.js';
 
 // Every tool response carries the current policyVersion (the hash of active
 // sources + method rules at call time) so an MCP client can tell whether the
@@ -224,7 +225,7 @@ export function createMcpServer(): McpServer {
     {
       assessmentId: z.string(),
       variant: z.enum(['A', 'B']).default('A'),
-      studentCode: z.string().default('7B-01'),
+      studentCode: z.string().describe('Anonymous student code (e.g. 7B-14). Names are rejected.'),
       answers: z.array(
         z.object({
           itemIndex: z.number(),
@@ -237,6 +238,7 @@ export function createMcpServer(): McpServer {
       const assessment = repository.getAssessment(assessmentId);
       if (!assessment) throw new Error(`Assessment not found: ${assessmentId}`);
 
+      assertStudentCode(studentCode);
       const graded = gradeSubmissionDeterministically(assessment, {
         assessmentId,
         variant,

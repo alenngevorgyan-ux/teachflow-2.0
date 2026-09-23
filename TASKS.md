@@ -26,7 +26,7 @@ Already merged into this base (from the interrupted AI Studio session): default 
 ## P2 — Quality and hygiene
 
 - [x] **T13. Armenian eval scoring.** Wrong answer 0, forbidden form 0; show raw outputs; allow per-task-type default model selection by score.
-- [ ] **T14. Privacy guard** on every write path (materials, report fields, legacy import, student codes, chat). Flag name+surname only near student codes / class labels / phone / email; do not block historical names in content (e.g. «Տիգրան Մեծ»).
+- [x] **T14. Privacy guard** on every write path (materials, report fields, legacy import, student codes, chat). Flag name+surname only near student codes / class labels / phone / email; do not block historical names in content (e.g. «Տիգրան Մեծ»).
 - [ ] **T15. Clean install** without `--legacy-peer-deps`.
 - [ ] **T16. Demo data** uses the 2026–2027 academic year; remove invented curriculum codes from demo seeds or label them clearly as fictional.
 - [ ] **T17. README**: setup, env, architecture, honest limitations.

@@ -33,7 +33,12 @@ import { generateLessonPlanFromRow } from '../pipeline/lessonPlanGenerator.js';
 import { computeItemAnalysis, gradeSubmissionDeterministically } from '../pipeline/autoGrader.js';
 import { runReportReview } from '../pipeline/reportReviewer.js';
 import { importLegacyReport } from '../pipeline/legacyReportImporter.js';
-import { checkPrivacy } from '../pipeline/privacyGuard.js';
+import {
+  PrivacyViolationError,
+  assertNoPii,
+  assertStudentCode,
+  checkPrivacy,
+} from '../pipeline/privacyGuard.js';
 import { emisAdapter } from '../pipeline/emisAdapter.js';
 import { computeCategoryModelRecommendations, runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
 import { ingestSourceFile } from '../pipeline/sourceIngestion.js';
@@ -42,6 +47,19 @@ import { scanAnswerSheet } from '../pipeline/answerSheetScanner.js';
 import { generateAnswerSheetQrDataUrl } from '../pipeline/answerSheetQr.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+// Privacy violations are client errors (422) with the findings attached so the
+// UI can show exactly what was blocked; everything else stays a 500.
+function sendError(res: Response, err: unknown) {
+  if (err instanceof PrivacyViolationError) {
+    return res.status(422).json({
+      error: err.message,
+      privacy: { where: err.where, warnings: err.warnings, findings: err.findings },
+    });
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return res.status(500).json({ error: msg });
+}
 
 export function createApiRouter(): Router {
   const router = Router();
@@ -156,8 +174,7 @@ export function createApiRouter(): Router {
       const saved = repository.saveSource(newSource);
       res.json({ source: saved, embeddingWarning: embeddingResult.warning });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -191,8 +208,7 @@ export function createApiRouter(): Router {
 
       res.json({ source, warnings });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -231,8 +247,7 @@ export function createApiRouter(): Router {
       const result = repository.supersedeSource(oldId, newSource);
       res.json(result);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -265,8 +280,7 @@ export function createApiRouter(): Router {
       repository.saveOutcomes(outcomes);
       res.json({ outcomes });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -392,8 +406,7 @@ export function createApiRouter(): Router {
 
       res.json({ assessment });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -460,6 +473,7 @@ export function createApiRouter(): Router {
       const itemIdx = assessment.items.findIndex((i) => i.id === req.params.itemId);
       if (itemIdx < 0) return res.status(404).json({ error: 'Item not found' });
 
+      assertNoPii(req.body.item, 'assessment.item');
       const updatedItem: AssessmentItem = {
         ...assessment.items[itemIdx],
         ...req.body.item,
@@ -498,8 +512,7 @@ export function createApiRouter(): Router {
       repository.saveAssessment(assessment);
       res.json({ assessment, item: updatedItem, trace });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -541,8 +554,7 @@ export function createApiRouter(): Router {
       );
       res.json({ report });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -587,8 +599,7 @@ export function createApiRouter(): Router {
 
       res.json({ report });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -627,8 +638,7 @@ export function createApiRouter(): Router {
       const run = await runRegressionSuite(provider, modelId);
       res.json({ run });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -689,8 +699,10 @@ export function createApiRouter(): Router {
 
   // --- Privacy Check ---
   router.post('/privacy/check', (req: Request, res: Response) => {
-    const { content = '' } = req.body;
-    const result = checkPrivacy(content);
+    const { content = '', context } = req.body;
+    const result = checkPrivacy(String(content), {
+      context: context === 'student_code' ? 'student_code' : 'content',
+    });
     res.json(result);
   });
 
@@ -736,8 +748,7 @@ export function createApiRouter(): Router {
 
       res.json(result);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -769,13 +780,17 @@ export function createApiRouter(): Router {
 
       res.json({ plan });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
   router.put('/thematic-plans/:id/rows/:rowId', (req: Request, res: Response) => {
     const { id, rowId } = req.params;
+    try {
+      assertNoPii(req.body, 'thematicPlan.row');
+    } catch (err) {
+      return sendError(res, err);
+    }
     const updated = repository.updateThematicPlanRow(id, rowId, req.body);
     if (!updated) return res.status(404).json({ error: 'Thematic plan or row not found' });
     res.json({ plan: updated });
@@ -825,8 +840,7 @@ export function createApiRouter(): Router {
       });
       res.json({ lessonPlan });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -855,8 +869,7 @@ export function createApiRouter(): Router {
       });
       res.json({ dataUrl });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -869,21 +882,16 @@ export function createApiRouter(): Router {
   router.post('/answer-sheets/scan', (req: Request, res: Response) => {
     try {
       const { assessmentId, variant = 'A', studentCode, answers = [], imageUrl } = req.body;
+      // Student code is required and must be anonymous; never invent one.
+      const code = assertStudentCode(studentCode);
+
       const assessment = repository.getAssessment(assessmentId);
       if (!assessment) return res.status(404).json({ error: 'Assessment not found' });
-
-      // Privacy check on student code (prevent full student names)
-      if (studentCode) {
-        const priv = checkPrivacy(studentCode);
-        if (priv.blocked) {
-          return res.status(400).json({ error: priv.warnings[0] });
-        }
-      }
 
       const graded = gradeSubmissionDeterministically(assessment, {
         assessmentId,
         variant,
-        studentCode: studentCode || `7B-${Math.floor(10 + Math.random() * 89)}`,
+        studentCode: code,
         timestamp: new Date().toISOString(),
         status: 'scanned_pending_review',
         confidenceOverall: undefined,
@@ -894,8 +902,7 @@ export function createApiRouter(): Router {
       const saved = repository.saveAnswerSheet(graded);
       res.json({ answerSheet: saved });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -918,8 +925,7 @@ export function createApiRouter(): Router {
 
       res.json({ answerSheet: result.submission, qrDecoded: result.qrDecoded, warnings: result.warnings });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -988,11 +994,11 @@ export function createApiRouter(): Router {
 
   router.post('/reports', (req: Request, res: Response) => {
     try {
+      assertNoPii(req.body?.data, 'report.data');
       const report = repository.saveReport(req.body);
       res.json({ report });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -1015,8 +1021,7 @@ export function createApiRouter(): Router {
       );
       res.json({ report: consolidated });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -1046,8 +1051,7 @@ export function createApiRouter(): Router {
 
       res.json({ report });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 
@@ -1060,6 +1064,11 @@ export function createApiRouter(): Router {
 
   router.put('/reports/:id/status', (req: Request, res: Response) => {
     const { status, comment } = req.body;
+    try {
+      if (comment) assertNoPii(comment, 'report.comment');
+    } catch (err) {
+      return sendError(res, err);
+    }
     const updated = repository.updateReportStatus(req.params.id, status, comment);
     if (!updated) return res.status(404).json({ error: 'Report not found' });
     res.json({ report: updated });
@@ -1121,8 +1130,7 @@ export function createApiRouter(): Router {
       const result = await runArmenianEvaluation(provider, modelId);
       res.json({ result });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
+      sendError(res, err);
     }
   });
 

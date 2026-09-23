@@ -6,6 +6,7 @@ import { IModelProvider } from '../providers/modelProvider.js';
 import { IJudgeProvider, getJudgeProvider } from '../providers/judgeProvider.js';
 import { repository } from '../store/repository.js';
 import { normalizeArmenianText } from './normalization.js';
+import { assertNoPii } from './privacyGuard.js';
 import { retrieveChunks } from './retrieval.js';
 
 export async function validateExternalMaterial(
@@ -20,6 +21,8 @@ export async function validateExternalMaterial(
     judgeConfidenceThreshold?: number;
   }
 ): Promise<MaterialValidationReport> {
+  // Material text is stored in the validation report and sent to models.
+  assertNoPii(text, 'material.text');
   const policyVersion = repository.computePolicyVersion();
   const judge = options?.judgeProvider || getJudgeProvider('gemini');
   const confidenceThreshold = options?.judgeConfidenceThreshold ?? 0.8;
