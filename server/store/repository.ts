@@ -71,7 +71,7 @@ export interface IRepository {
   getAssessments(): Assessment[];
   getAssessment(id: string): Assessment | undefined;
   saveAssessment(assessment: Assessment): Assessment;
-  updateAssessmentStatus(id: string, status: Assessment['status']): boolean;
+  updateAssessmentStatus(id: string, status: Assessment['status'], acceptedWarnings?: string[]): boolean;
   deleteAssessment(id: string): boolean;
 
   // Material Validation Reports
@@ -527,10 +527,13 @@ export class JsonFileRepository implements IRepository {
     return assessment;
   }
 
-  updateAssessmentStatus(id: string, status: Assessment['status']): boolean {
+  updateAssessmentStatus(id: string, status: Assessment['status'], acceptedWarnings?: string[]): boolean {
     const asm = this.assessments.find((a) => a.id === id);
     if (asm) {
       asm.status = status;
+      if (acceptedWarnings) {
+        asm.acceptedWarnings = acceptedWarnings;
+      }
       this.saveToDisk();
       return true;
     }

@@ -19,6 +19,7 @@ import { computeRegressionDiff, runRegressionSuite } from '../pipeline/regressio
 import { runFullGenerationPipeline } from '../pipeline/orchestrator.js';
 import { retrieveChunks } from '../pipeline/retrieval.js';
 import { validateSingleItem } from '../pipeline/validator.js';
+import { evaluateReadyForClassroomGate } from '../pipeline/statusGate.js';
 import { getDefaultProviderId, getProvider, isProviderConfigured } from '../providers/modelProvider.js';
 import { getJudgeProvider, isTypeSafeJevConfigured } from '../providers/judgeProvider.js';
 import { repository } from '../store/repository.js';
@@ -358,9 +359,48 @@ export function createApiRouter(): Router {
   });
 
   router.post('/assessments/:id/status', (req: Request, res: Response) => {
-    const { status } = req.body;
-    const ok = repository.updateAssessmentStatus(req.params.id, status);
-    res.json({ success: ok });
+    const { status, acceptedWarnings } = req.body as {
+      status?: string;
+      acceptedWarnings?: string[];
+    };
+
+    const assessment = repository.getAssessment(req.params.id);
+    if (!assessment) return res.status(404).json({ error: 'Assessment not found' });
+
+    // 'validated' and 'refused' are computed by the server during generation/re-validation.
+    // Clients may only ever request 'draft' (revert) or 'ready_for_classroom' (promote).
+    if (status !== 'draft' && status !== 'ready_for_classroom') {
+      return res.status(400).json({
+        error: `Կարգավիճակը («${status}») չի կարող սահմանվել ուղղակիորեն: Թույլատրված է միայն 'draft' կամ 'ready_for_classroom':`,
+      });
+    }
+
+    if (status === 'draft') {
+      repository.updateAssessmentStatus(assessment.id, 'draft');
+      return res.json({ success: true, status: 'draft' });
+    }
+
+    // status === 'ready_for_classroom': server-side gate on the independently
+    // computed item traces, never on client-asserted state.
+    const gate = evaluateReadyForClassroomGate(assessment.traces, acceptedWarnings || []);
+    if (!gate.ok) {
+      if (gate.reason === 'has_fail') {
+        return res.status(409).json({
+          error: `Հնարավոր չէ պատրաստել դասարանի համար. ${gate.failingItemIds.length} առաջադրանք ունի FAIL ստուգում. ${gate.failingItemIds.join(', ')}`,
+        });
+      }
+      return res.status(409).json({
+        error: `${gate.unacceptedWarningItemIds.length} առաջադրանք ունի WARN ստուգում, որը դեռ չի հաստատվել ուսուցչի կողմից:`,
+        warningItemIds: gate.unacceptedWarningItemIds,
+      });
+    }
+
+    const ok = repository.updateAssessmentStatus(
+      assessment.id,
+      'ready_for_classroom',
+      gate.warningItemIds.length > 0 ? gate.warningItemIds : undefined
+    );
+    res.json({ success: ok, status: 'ready_for_classroom' });
   });
 
   router.post('/assessments/:id/items/:itemId', async (req: Request, res: Response) => {

@@ -114,15 +114,36 @@ export const AssessmentViewPage: React.FC<AssessmentViewPageProps> = ({
     }
   };
 
+  const failingItemIds = assessment.traces.filter((tr) => tr.status === 'FAIL').map((tr) => tr.itemId);
+  const warningItemIds = assessment.traces.filter((tr) => tr.status === 'WARN').map((tr) => tr.itemId);
+
   const handleMarkReady = async () => {
+    if (failingItemIds.length > 0) {
+      alert(t.common.readyBlockedByFail.replace('{{count}}', String(failingItemIds.length)));
+      return;
+    }
+
+    if (warningItemIds.length > 0) {
+      const confirmed = window.confirm(
+        t.common.readyConfirmWarnings.replace('{{count}}', String(warningItemIds.length))
+      );
+      if (!confirmed) return;
+    }
+
     try {
       const res = await fetch(`/api/assessments/${assessment.id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'ready_for_classroom' }),
+        body: JSON.stringify({
+          status: 'ready_for_classroom',
+          acceptedWarnings: warningItemIds,
+        }),
       });
+      const data = await res.json();
       if (res.ok) {
-        setAssessment({ ...assessment, status: 'ready_for_classroom' });
+        setAssessment({ ...assessment, status: 'ready_for_classroom', acceptedWarnings: warningItemIds });
+      } else {
+        alert(data.error || 'Failed to mark ready for classroom.');
       }
     } catch (err) {
       console.error('Failed to mark ready:', err);
@@ -203,7 +224,17 @@ export const AssessmentViewPage: React.FC<AssessmentViewPageProps> = ({
           {assessment.status !== 'ready_for_classroom' && (
             <button
               onClick={handleMarkReady}
-              className="px-3.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 shadow-xs flex items-center gap-1.5"
+              disabled={failingItemIds.length > 0}
+              title={
+                failingItemIds.length > 0
+                  ? t.common.readyBlockedByFail.replace('{{count}}', String(failingItemIds.length))
+                  : undefined
+              }
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 ${
+                failingItemIds.length > 0
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
+              }`}
             >
               <CheckSquare className="w-3.5 h-3.5" />
               {t.common.readyForClassroom}

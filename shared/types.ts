@@ -111,6 +111,10 @@ export interface Assessment {
   variantEquivalence: CheckResult[];
   createdAt: string;
   policyVersion: string;
+  // Item ids with WARN status that a teacher has explicitly reviewed and accepted
+  // before moving the assessment to ready_for_classroom. Set only by the server,
+  // once every WARN item is covered — see POST /assessments/:id/status.
+  acceptedWarnings?: string[];
 }
 
 export interface MaterialValidationReport {
