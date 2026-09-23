@@ -22,7 +22,20 @@ export async function extractDocxPages(buffer: Buffer): Promise<ExtractedPage[]>
   return [{ text: result.value, scanned: false }];
 }
 
+// pdfjs-dist resolves its worker via a dynamic import() of a computed path,
+// which serverless bundlers (Vercel's Node builder included) cannot trace —
+// the worker file silently isn't included in the function bundle. Pre-import
+// it ourselves with a static import specifier (so the bundler DOES trace it)
+// and register it on globalThis; pdfjs-dist then uses it directly instead of
+// falling back to that untraceable dynamic import.
+async function ensurePdfWorkerRegistered(): Promise<void> {
+  const g = globalThis as unknown as { pdfjsWorker?: unknown };
+  if (g.pdfjsWorker) return;
+  g.pdfjsWorker = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
+}
+
 export async function extractPdfPages(buffer: Buffer): Promise<ExtractedPage[]> {
+  await ensurePdfWorkerRegistered();
   const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const standardFontDataUrl = `${path.join(process.cwd(), 'node_modules/pdfjs-dist/standard_fonts')}${path.sep}`;
 
