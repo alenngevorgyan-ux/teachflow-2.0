@@ -56,6 +56,14 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
   // Extract outcomes modal
   const [outcomeSourceId, setOutcomeSourceId] = useState<string | null>(null);
   const [extractingOutcomes, setExtractingOutcomes] = useState(false);
+  const [extractResult, setExtractResult] = useState<{
+    sourceTitle: string;
+    error?: string;
+    saved?: CurriculumOutcome[];
+    skipped?: { code: string | null; text: string; reason: string }[];
+    providerId?: string;
+    modelId?: string;
+  } | null>(null);
 
   const fetchSourcesAndOutcomes = async () => {
     setLoading(true);
@@ -177,8 +185,14 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
   };
 
   const handleExtractOutcomes = async (src: Source) => {
+    const grade = src.grades[0];
+    if (grade === undefined) {
+      setExtractResult({ sourceTitle: src.title, error: t.registry.extractNoGrade });
+      return;
+    }
     setOutcomeSourceId(src.id);
     setExtractingOutcomes(true);
+    setExtractResult(null);
     try {
       const textToExtract = src.chunks.map((c) => c.text).join('\n\n');
       const res = await fetch('/api/sources/extract-outcomes', {
@@ -187,15 +201,25 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
         body: JSON.stringify({
           sourceId: src.id,
           subject: src.subject,
-          grade: src.grades[0] || 5,
+          grade,
           text: textToExtract,
         }),
       });
-      if (res.ok) {
-        await fetchSourcesAndOutcomes();
+      const data = await res.json();
+      if (!res.ok) {
+        setExtractResult({ sourceTitle: src.title, error: data.error || `HTTP ${res.status}` });
+        return;
       }
+      setExtractResult({
+        sourceTitle: src.title,
+        saved: data.saved,
+        skipped: data.skipped,
+        providerId: data.providerId,
+        modelId: data.modelId,
+      });
+      await fetchSourcesAndOutcomes();
     } catch (err) {
-      console.error('Failed to extract outcomes:', err);
+      setExtractResult({ sourceTitle: src.title, error: err instanceof Error ? err.message : String(err) });
     } finally {
       setExtractingOutcomes(false);
       setOutcomeSourceId(null);
@@ -254,6 +278,52 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
           </button>
         </div>
       </div>
+
+      {extractResult && (
+        <div
+          className={`p-3.5 rounded-xl border text-xs space-y-2 ${
+            extractResult.error ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-indigo-50/60 border-indigo-200 text-indigo-950'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p className="font-semibold">
+              {t.registry.extractResultTitle}: {extractResult.sourceTitle}
+              {extractResult.modelId && (
+                <span className="font-normal text-gray-700">
+                  {' '}
+                  · {t.registry.extractModel}: {extractResult.providerId} / {extractResult.modelId}
+                </span>
+              )}
+            </p>
+            <button onClick={() => setExtractResult(null)} className="text-gray-500 hover:text-gray-800" title={t.common.close}>
+              ✕
+            </button>
+          </div>
+          {extractResult.error && <p className="font-medium">{extractResult.error}</p>}
+          {extractResult.saved && (
+            <p>
+              {t.registry.extractSaved}: <span className="font-semibold">{extractResult.saved.length}</span>
+              {extractResult.saved.length > 0 && ` (${extractResult.saved.map((o) => o.code).join(', ')})`}
+            </p>
+          )}
+          {extractResult.skipped && extractResult.skipped.length > 0 && (
+            <div>
+              <p>
+                {t.registry.extractSkipped}: <span className="font-semibold">{extractResult.skipped.length}</span>
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 text-gray-800">
+                {extractResult.skipped.map((o, i) => (
+                  <li key={i}>
+                    <span className="font-mono">{o.code ?? 'n/a'}</span> — «{o.text.slice(0, 80)}
+                    {o.text.length > 80 ? '…' : ''}» —{' '}
+                    {t.registry.extractReasons[o.reason as keyof typeof t.registry.extractReasons] ?? o.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {uploadWarnings.length > 0 && (
         <div className="flex items-start justify-between gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">

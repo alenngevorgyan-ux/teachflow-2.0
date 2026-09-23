@@ -35,7 +35,7 @@ The core bet: generation is a commodity. TeachFlow is only valuable if it can **
 - Env: `MODEL_PROVIDER` = `gemini` (default) or `openrouter`. Gemini: `GEMINI_API_KEY`. OpenRouter: `OPENROUTER_API_KEY` + `OPENROUTER_MODEL_ID` (exact id, no default), optional `OPENROUTER_JUDGE_MODEL_ID`. Optional TypeSafe Jev judge (OpenRouter Decisions API, `@openrouter/sdk`): `OPENROUTER_JEV_API_KEY` (own key, no fallback to the general one), `JEV_MODEL_ID` (default `~typesafe/jev-latest`). See `.env.example`.
 
 ## Map of the code
-- `server/pipeline/`: `retrieval`, `coverage`, `generator`, `validator`, `equivalence`, `orchestrator`, `materialValidator`, `compare`, `regression`, `normalization` (Armenian-aware text normalization), `thematicPlanGenerator`, `lessonPlanGenerator`, `autoGrader`, `reportReviewer`, `legacyReportImporter`, `armenianEvalHarness`, `privacyGuard`, `emisAdapter`.
+- `server/pipeline/`: `retrieval`, `coverage`, `generator`, `validator`, `equivalence`, `orchestrator`, `materialValidator`, `outcomeExtractor`, `compare`, `regression`, `normalization` (Armenian-aware text normalization), `thematicPlanGenerator`, `lessonPlanGenerator`, `autoGrader`, `reportReviewer`, `legacyReportImporter`, `armenianEvalHarness`, `privacyGuard`, `emisAdapter`.
 - `server/api/routes.ts`: REST API. `server/mcp/index.ts`: MCP tools.
 - `src/pages/`: one page per module; `src/i18n/translations.ts`: hy / ru / en strings (Armenian primary, reformed orthography).
 

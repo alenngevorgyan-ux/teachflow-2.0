@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import multer from 'multer';
 import { Request, Response, Router } from 'express';
-import { ExtractedOutcomesSchema } from '../../shared/schemas.js';
 import {
   AssessmentItem,
   CurriculumOutcome,
@@ -33,6 +32,7 @@ import { generateLessonPlanFromRow } from '../pipeline/lessonPlanGenerator.js';
 import { computeItemAnalysis, gradeSubmissionDeterministically } from '../pipeline/autoGrader.js';
 import { runReportReview } from '../pipeline/reportReviewer.js';
 import { importLegacyReport } from '../pipeline/legacyReportImporter.js';
+import { extractOutcomes } from '../pipeline/outcomeExtractor.js';
 import {
   PrivacyViolationError,
   assertNoPii,
@@ -259,26 +259,17 @@ export function createApiRouter(): Router {
   router.post('/sources/extract-outcomes', async (req: Request, res: Response) => {
     try {
       const { text, subject, grade, sourceId } = req.body;
-      const provider = getProvider();
-
-      const prompt = `You are a curriculum specialist. Extract standard curriculum outcome codes and text descriptions in Armenian for Grade ${grade} Subject "${subject}":\n\n${text}`;
-      const resAI = await provider.generateStructured(prompt, ExtractedOutcomesSchema, {
-        temperature: 0.0,
-        actionName: 'extractOutcomes',
-      });
-
-      const outcomes: CurriculumOutcome[] = resAI.output.outcomes.map((o) => ({
-        code: o.code,
-        text: o.text,
-        subject,
+      if (!text || !subject || !sourceId || grade === undefined || grade === null || grade === '') {
+        return res.status(400).json({ error: 'text, subject, grade and sourceId are required' });
+      }
+      const result = await extractOutcomes({
+        provider: getProvider(),
+        text: String(text),
+        subject: String(subject),
         grade: Number(grade),
-        standardVersion: 'pending-confirmation',
-        sourceId: sourceId || 'extracted',
-        confirmed: false, // Unconfirmed outcomes are never used until methodologist confirms
-      }));
-
-      repository.saveOutcomes(outcomes);
-      res.json({ outcomes });
+        sourceId: String(sourceId),
+      });
+      res.json({ outcomes: result.saved, ...result });
     } catch (err: unknown) {
       sendError(res, err);
     }

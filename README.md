@@ -91,6 +91,7 @@ The main modules in `server/pipeline/`:
 
 | Module | Role |
 | --- | --- |
+| `outcomeExtractor` | Extracts outcomes from a standard/program. A code is saved only if it appears in the source (never invented or numbered), the description must be verbatim, and confirmed outcomes are never overwritten; saved outcomes are unconfirmed until a methodologist confirms them |
 | `retrieval` | Top-K FACT / METHOD chunks, hybrid of embedding similarity and keyword score |
 | `coverage` | Coverage gate: refuses to generate when the sources do not cover the topic |
 | `generator`, `orchestrator` | Item generation with verbatim citations, and the full pipeline |
@@ -126,6 +127,7 @@ The main modules in `server/pipeline/`:
 ## Honest status
 
 ### Real (backed by a model call or a deterministic check, with tests)
+- Outcome extraction from standards and programs. Codes and descriptions are checked verbatim against the source, and everything waits for methodologist confirmation.
 - Registry with versions, roles, effective dates and hashes. Upload of PDF (per page, with OCR fallback for scanned pages), DOCX and TXT.
 - Retrieval (top-K, embeddings + keywords) and the coverage gate.
 - Generation with citations and per-item validation: verbatim quote, claim support, FACT/METHOD roles, language judge, method rules, variant equivalence, trace.

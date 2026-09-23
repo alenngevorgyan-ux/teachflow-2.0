@@ -196,7 +196,10 @@ export type ExtractedClaimsOutput = z.infer<typeof ExtractedClaimsSchema>;
 export const ExtractedOutcomesSchema = z.object({
   outcomes: z.array(
     z.object({
-      code: z.string().describe('Official outcome or standard code, e.g., ԲՆ-5-1'),
+      code: z
+        .string()
+        .nullable()
+        .describe('Outcome code exactly as written in the document; null if the document gives no code. Never invented.'),
       text: z.string().describe('The textual standard/outcome description'),
       grade: z.number(),
     })
