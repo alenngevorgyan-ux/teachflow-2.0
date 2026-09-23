@@ -255,7 +255,7 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                     </span>
                   ) : (
                     <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-medium">
-                      Պահանջում է TYPESAFE_API_KEY
+                      Պահանջում է OPENROUTER_JEV_API_KEY
                     </span>
                   )}
                 </div>
@@ -408,7 +408,7 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                   <span className="text-xl font-bold font-mono text-gray-500">{na}</span>
                   <p className="text-[10px] text-gray-500">
                     {t.compare.agreementNotComputed}
-                    {typeSafeConfigured ? '' : ' (TYPESAFE_API_KEY)'}
+                    {typeSafeConfigured ? '' : ' (OPENROUTER_JEV_API_KEY)'}
                   </p>
                 </div>
               )}

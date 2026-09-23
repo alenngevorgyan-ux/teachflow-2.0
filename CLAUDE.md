@@ -32,7 +32,7 @@ The core bet: generation is a commodity. TeachFlow is only valuable if it can **
 - Prompts: versioned text files in `server/prompts/*.vN.txt` (prompt version is part of `policyVersion`).
 - Install: `npm install --legacy-peer-deps` (peer conflict is a known task).
 - Dev: `npm run dev` (serves API + Vite on port 3000). Typecheck: `npx tsc --noEmit`.
-- Env: `MODEL_PROVIDER` = `gemini` (default) or `openrouter`. Gemini: `GEMINI_API_KEY`. OpenRouter: `OPENROUTER_API_KEY` + `OPENROUTER_MODEL_ID` (exact id, no default), optional `OPENROUTER_JUDGE_MODEL_ID`. Optional `TYPESAFE_API_URL`, `TYPESAFE_MODEL_ID`, `TYPESAFE_API_KEY`. See `.env.example`.
+- Env: `MODEL_PROVIDER` = `gemini` (default) or `openrouter`. Gemini: `GEMINI_API_KEY`. OpenRouter: `OPENROUTER_API_KEY` + `OPENROUTER_MODEL_ID` (exact id, no default), optional `OPENROUTER_JUDGE_MODEL_ID`. Optional TypeSafe Jev judge (OpenRouter Decisions API, `@openrouter/sdk`): `OPENROUTER_JEV_API_KEY` (own key, no fallback to the general one), `JEV_MODEL_ID` (default `~typesafe/jev-latest`). See `.env.example`.
 
 ## Map of the code
 - `server/pipeline/`: `retrieval`, `coverage`, `generator`, `validator`, `equivalence`, `orchestrator`, `materialValidator`, `compare`, `regression`, `normalization` (Armenian-aware text normalization), `thematicPlanGenerator`, `lessonPlanGenerator`, `autoGrader`, `reportReviewer`, `legacyReportImporter`, `armenianEvalHarness`, `privacyGuard`, `emisAdapter`.

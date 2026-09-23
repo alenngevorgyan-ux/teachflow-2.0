@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { OpenRouter } from '@openrouter/sdk';
 import { z } from 'zod';
 import { repository } from '../store/repository.js';
 import { IModelProvider, getDefaultProviderId, getProvider } from './modelProvider.js';
@@ -207,22 +208,79 @@ export class GeminiJudgeProvider implements IJudgeProvider {
 }
 
 /**
- * Implementation 2: TypeSafe Jev Judge Provider (Optional)
- * Enabled ONLY if TYPESAFE_API_KEY is set in environment.
- * If missing or a call fails: throws a visible error — never silently switches judge!
+ * Implementation 2: TypeSafe Jev judge via OpenRouter Decisions API
+ * (POST /api/alpha/decisions, model ~typesafe/jev-latest by default).
+ * Key: OPENROUTER_JEV_API_KEY only (a separate OpenRouter key with its own limit).
+ * Jev answers typed questions with probabilities; it gives no free-text
+ * reasoning, so `reason` only restates the returned distribution.
+ * Missing key, missing probabilities or a failed call throw a visible error —
+ * never a default value, never a silent switch to another judge.
  */
+export const JEV_DEFAULT_MODEL_ID = '~typesafe/jev-latest';
+
+type DecisionAnswer = {
+  type: string;
+  choice?: string;
+  confidence?: number;
+  probabilities?: Record<string, number>;
+  noul?: number;
+};
+
+export function getJevApiKey(): string | undefined {
+  return process.env.OPENROUTER_JEV_API_KEY?.trim() || undefined;
+}
+
 export class TypeSafeJevJudgeProvider implements IJudgeProvider {
   public providerId = 'typesafe_jev';
-  public modelId = process.env.TYPESAFE_MODEL_ID || 'jev-standard';
+  public modelId = process.env.JEV_MODEL_ID?.trim() || JEV_DEFAULT_MODEL_ID;
 
-  private getApiKey(): string {
-    const key = process.env.TYPESAFE_API_KEY;
-    if (!key) {
+  private client(): OpenRouter {
+    const apiKey = getJevApiKey();
+    if (!apiKey) {
       throw new Error(
-        'TypeSafe Jev Judge Error: TYPESAFE_API_KEY is not set in environment. Visible judge error: Cannot use TypeSafe Jev without a valid API key. (Never silently switching judge).'
+        'TypeSafe Jev Judge Error: OPENROUTER_JEV_API_KEY is not set. Never silently switching judge.'
       );
     }
-    return key;
+    return new OpenRouter({ apiKey });
+  }
+
+  private async decide(
+    action: string,
+    state: string | Record<string, unknown>,
+    questions: Record<string, unknown>
+  ): Promise<Record<string, DecisionAnswer>> {
+    const start = Date.now();
+    const client = this.client();
+    try {
+      const res = await client.alpha.decisions.create({
+        decisionsRequest: {
+          model: this.modelId,
+          state,
+          questions: questions as never,
+        },
+      });
+      this.modelId = res.model || this.modelId;
+      repository.logAIInteraction({
+        providerId: this.providerId,
+        modelId: this.modelId,
+        action: `judge:typesafe_jev:${action}`,
+        prompt: JSON.stringify({ state, questions }),
+        output: JSON.stringify(res),
+        latencyMs: Date.now() - start,
+      });
+      return res.answers as Record<string, DecisionAnswer>;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      repository.logAIInteraction({
+        providerId: this.providerId,
+        modelId: this.modelId,
+        action: `judge:typesafe_jev:${action}:FAILED`,
+        prompt: JSON.stringify({ state, questions }),
+        output: `Error: ${msg}`,
+        latencyMs: Date.now() - start,
+      });
+      throw new Error(`TypeSafe Jev Judge Call Failed: ${msg}`);
+    }
   }
 
   async verifyClaim(
@@ -230,101 +288,71 @@ export class TypeSafeJevJudgeProvider implements IJudgeProvider {
     evidenceText: string,
     context?: { stem?: string; options?: string[]; answerKey?: string }
   ): Promise<ClaimVerificationResult> {
-    const apiKey = this.getApiKey();
-    const apiUrl = process.env.TYPESAFE_API_URL || 'https://api.typesafe.ai/v1/verify';
-    const start = Date.now();
-
-    try {
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+    const answers = await this.decide(
+      'verifyClaim',
+      {
+        evidence: evidenceText,
+        claim,
+        ...(context?.stem ? { stem: context.stem } : {}),
+        ...(context?.answerKey ? { answerKey: context.answerKey } : {}),
+      },
+      {
+        verdict: {
+          type: 'choice',
+          instructions: 'Is the claim (question with its answer key) supported by the evidence text only?',
+          criteria: {
+            supported: 'Fully corroborated by the evidence text',
+            partially_supported: 'Partly corroborated, or missing a nuance the evidence states',
+            not_supported: 'Contradicted by, or not mentioned in, the evidence text',
+          },
         },
-        body: JSON.stringify({
-          model: this.modelId,
-          claim,
-          evidence: evidenceText,
-          context,
-          temperature: 0,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(
-          `TypeSafe Jev API error (${res.status}): ${errorText || res.statusText}`
-        );
+        fully_supported: {
+          type: 'noul',
+          instructions: 'Is every fact in the claim stated in the evidence text?',
+          criteria: { true: 'Every fact is in the evidence', false: 'At least one fact is missing or contradicted' },
+        },
       }
+    );
 
-      const data = await res.json();
-      const verdict = data.verdict || (data.supported ? 'supported' : 'not_supported');
-      const confidence = typeof data.confidence === 'number' ? data.confidence : 0.85;
-      const probability = typeof data.probability === 'number' ? data.probability : 0.9;
-      const reason = data.reason || 'TypeSafe Jev verification completed.';
-
-      repository.logAIInteraction({
-        providerId: this.providerId,
-        modelId: this.modelId,
-        action: 'judge:typesafe_jev:verifyClaim',
-        prompt: `Claim: ${claim}`,
-        output: JSON.stringify(data),
-        latencyMs: Date.now() - start,
-      });
-
-      return {
-        verdict,
-        probability,
-        confidence,
-        reason,
-      };
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      repository.logAIInteraction({
-        providerId: this.providerId,
-        modelId: this.modelId,
-        action: 'judge:typesafe_jev:FAILED',
-        prompt: `Claim: ${claim}`,
-        output: `Error: ${msg}`,
-        latencyMs: Date.now() - start,
-      });
-      // Spec: Never silently switch judge!
-      throw new Error(`TypeSafe Jev Judge Call Failed: ${msg}`);
+    const v = answers.verdict;
+    const full = answers.fully_supported;
+    const verdicts = ['supported', 'partially_supported', 'not_supported'] as const;
+    if (v?.type !== 'choice' || !verdicts.includes(v.choice as (typeof verdicts)[number])) {
+      throw new Error(`TypeSafe Jev Judge: unexpected verdict answer ${JSON.stringify(v)}`);
     }
+    if (full?.type !== 'noul' || typeof full.noul !== 'number') {
+      throw new Error(`TypeSafe Jev Judge: missing fully_supported probability ${JSON.stringify(full)}`);
+    }
+    const confidence = v.confidence ?? v.probabilities?.[v.choice as string];
+    if (typeof confidence !== 'number') {
+      throw new Error('TypeSafe Jev Judge: no confidence returned for the verdict');
+    }
+    const verdict = v.choice as ClaimVerificationResult['verdict'];
+    return {
+      verdict,
+      probability: full.noul,
+      confidence,
+      reason: `Jev: ${verdict} (p=${confidence.toFixed(2)}); P(all facts in evidence)=${full.noul.toFixed(2)}`,
+    };
   }
 
   async classify(text: string, labels: string[]): Promise<ClassificationResult> {
-    const apiKey = this.getApiKey();
-    const apiUrl = process.env.TYPESAFE_API_URL || 'https://api.typesafe.ai/v1/classify';
-
-    try {
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: this.modelId,
-          text,
-          labels,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`TypeSafe Jev Classify API error (${res.status})`);
-      }
-
-      const data = await res.json();
-      return {
-        label: data.label,
-        probabilities: data.probabilities || {},
-        confidence: data.confidence ?? 0.85,
-      };
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new Error(`TypeSafe Jev Judge Classify Failed: ${msg}`);
+    const answers = await this.decide('classify', text, {
+      label: {
+        type: 'choice',
+        instructions: 'Which label fits the text?',
+        criteria: Object.fromEntries(labels.map((l) => [l, l])),
+      },
+    });
+    const a = answers.label;
+    if (a?.type !== 'choice' || !a.choice || !labels.includes(a.choice)) {
+      throw new Error(`TypeSafe Jev Judge Classify: unexpected answer ${JSON.stringify(a)}`);
     }
+    const confidence = a.confidence ?? a.probabilities?.[a.choice];
+    if (typeof confidence !== 'number' || !a.probabilities) {
+      throw new Error('TypeSafe Jev Judge Classify: no probabilities returned');
+    }
+    return { label: a.choice, probabilities: a.probabilities, confidence };
   }
 }
 
@@ -400,5 +428,5 @@ export function getJudgeProvider(providerId = 'gemini'): IJudgeProvider {
 }
 
 export function isTypeSafeJevConfigured(): boolean {
-  return Boolean(process.env.TYPESAFE_API_KEY && process.env.TYPESAFE_API_KEY.trim());
+  return Boolean(getJevApiKey());
 }
