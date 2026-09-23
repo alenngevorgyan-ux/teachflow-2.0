@@ -30,7 +30,7 @@ The core bet: generation is a commodity. TeachFlow is only valuable if it can **
 - AI: `@google/genai` (Gemini direct) or OpenRouter (OpenAI-compatible HTTP), chosen by `MODEL_PROVIDER`. Provider layer: `server/providers/modelProvider.ts`, judges: `server/providers/judgeProvider.ts`.
 - Store: JSON file behind `server/store/repository.ts`; demo seeding in `server/store/demoData.ts`.
 - Prompts: versioned text files in `server/prompts/*.vN.txt` (prompt version is part of `policyVersion`).
-- Install: `npm install --legacy-peer-deps` (peer conflict is a known task).
+- Install: `npm install` (CI and Vercel: `npm ci`). No `--legacy-peer-deps`.
 - Dev: `npm run dev` (serves API + Vite on port 3000). Typecheck: `npx tsc --noEmit`.
 - Env: `MODEL_PROVIDER` = `gemini` (default) or `openrouter`. Gemini: `GEMINI_API_KEY`. OpenRouter: `OPENROUTER_API_KEY` + `OPENROUTER_MODEL_ID` (exact id, no default), optional `OPENROUTER_JUDGE_MODEL_ID`. Optional TypeSafe Jev judge (OpenRouter Decisions API, `@openrouter/sdk`): `OPENROUTER_JEV_API_KEY` (own key, no fallback to the general one), `JEV_MODEL_ID` (default `~typesafe/jev-latest`). See `.env.example`.
 
