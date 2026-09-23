@@ -19,8 +19,14 @@ import { isQuoteVerbatimInChunk } from './normalization.js';
 
 export interface ValidationOptions {
   modelId?: string;
+  // The model id actually returned by the generation call for these items (not the
+  // requested id), recorded in the trace. Falls back to `modelId` / provider default.
+  generationModelId?: string;
   judgeProvider?: IJudgeProvider;
   judgeConfidenceThreshold?: number; // default 0.8
+  // Item count per variant across the whole assessment, used to enforce rule-max-items.
+  // Supplied by validateAllItems; single-item revalidation callers should pass it too.
+  variantItemCounts?: Record<string, number>;
 }
 
 export async function validateSingleItem(
@@ -93,8 +99,7 @@ export async function validateSingleItem(
   // 2. Check citation_is_fact_source (deterministic)
   // Catches METHOD / TEMPLATE contamination or wrong grade / inactive
   let isFactSourcePass = true;
-  let primaryFactChunkText = '';
-  let primaryQuote = '';
+  const factCitationsForJudge: { chunkId: string; quote: string; chunkText: string }[] = [];
 
   if (item.citations && item.citations.length > 0) {
     for (const cit of item.citations) {
@@ -135,10 +140,11 @@ export async function validateSingleItem(
             chunkId: chunk.id,
             page: chunk.page,
           });
-          if (!primaryFactChunkText) {
-            primaryFactChunkText = chunk.text;
-            primaryQuote = cit.quote;
-          }
+          factCitationsForJudge.push({
+            chunkId: chunk.id,
+            quote: cit.quote,
+            chunkText: chunk.text,
+          });
         }
       }
     }
@@ -274,84 +280,92 @@ export async function validateSingleItem(
         continue;
       }
     }
+
+    if (rule.id === 'rule-max-items' && options?.variantItemCounts) {
+      const maxItems = rule.params?.max_items as number | undefined;
+      const countInVariant = options.variantItemCounts[item.variant] ?? 1;
+      if (typeof maxItems === 'number' && countInVariant > maxItems) {
+        checks.push({
+          checkId: rule.id,
+          label: rule.title,
+          kind: 'deterministic',
+          result: rule.severity === 'error' ? 'fail' : 'warn',
+          detail: `«${item.variant}» տարբերակն ունի ${countInVariant} առաջադրանք, պահանջվում է առավելագույնը ${maxItems}:`,
+        });
+        continue;
+      }
+    }
   }
 
-  // 6. Pluggable Judge: claim_supported (Separate call, strict judge layer)
+  // 6. Pluggable Judge: claim_supported for EVERY FACT citation (worst verdict wins)
   let judgeVerificationConfidence: number | undefined = undefined;
 
-  if (primaryFactChunkText) {
-    try {
-      const claimText = `${item.stem} (Ճիշտ պատասխան: ${String(item.answerKey)}). Մեջբերում: ${primaryQuote}`;
-      const verification = await judge.verifyClaim(claimText, primaryFactChunkText, {
-        stem: item.stem,
-        options: item.options,
-        answerKey: String(item.answerKey),
-      });
+  if (factCitationsForJudge.length > 0) {
+    for (const fc of factCitationsForJudge) {
+      try {
+        const claimText = `${item.stem} (Ճիշտ պատասխան: ${String(item.answerKey)}). Մեջբերում: ${fc.quote}`;
+        const verification = await judge.verifyClaim(claimText, fc.chunkText, {
+          stem: item.stem,
+          options: item.options,
+          answerKey: String(item.answerKey),
+        });
 
-      judgeVerificationConfidence = verification.confidence;
+        // Worst-wins: keep the lowest confidence seen across all judged citations.
+        judgeVerificationConfidence =
+          judgeVerificationConfidence === undefined
+            ? verification.confidence
+            : Math.min(judgeVerificationConfidence, verification.confidence);
 
-      if (verification.verdict === 'supported') {
+        const resultForVerdict: Record<typeof verification.verdict, 'pass' | 'warn' | 'fail'> = {
+          supported: 'pass',
+          partially_supported: 'warn',
+          not_supported: 'fail',
+        };
+        const detailForVerdict: Record<typeof verification.verdict, string> = {
+          supported: verification.reason || 'Հարցը և պատասխանը լիովին հիմնավորված են աղբյուրի տեքստով:',
+          partially_supported: `Մասամբ հիմնավորված: ${verification.reason}`,
+          not_supported: `Անհիմն փաստ: ${verification.reason}`,
+        };
+
         checks.push({
           checkId: 'claim_supported',
-          label: 'Փաստացի հիմնավորվածություն (Claim supported by source)',
+          label: `Փաստացի հիմնավորվածություն (${fc.chunkId})`,
           kind: 'llm_judged',
-          result: 'pass',
-          detail: verification.reason || 'Հարցը և պատասխանը լիովին հիմնավորված են աղբյուրի տեքստով:',
+          result: resultForVerdict[verification.verdict],
+          detail: detailForVerdict[verification.verdict],
           judgeProviderId: judge.providerId,
           judgeModelId: judge.modelId,
           confidence: verification.confidence,
         });
-      } else if (verification.verdict === 'partially_supported') {
+
+        // Check configurable confidence threshold (default 0.8)
+        // Items with judge confidence below threshold go to the methodologist review queue
+        if (verification.confidence < confidenceThreshold) {
+          checks.push({
+            checkId: 'judge_confidence_threshold',
+            label: `Դատավորի վստահության շեմ (${fc.chunkId})`,
+            kind: 'llm_judged',
+            result: 'warn',
+            detail: `Դատավորի վստահությունը (${verification.confidence.toFixed(2)}) ցածր է սահմանված շեմից (${confidenceThreshold}): Առաջադրանքն ուղարկված է մեթոդիստի ստուգման հերթ (Review Queue):`,
+            judgeProviderId: judge.providerId,
+            judgeModelId: judge.modelId,
+            confidence: verification.confidence,
+          });
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('Judge verifyClaim failed:', msg);
+        // SPEC: Never silently switch judge! If judge fails (e.g. TypeSafe Jev missing key), record visible error check
         checks.push({
           checkId: 'claim_supported',
-          label: 'Փաստացի հիմնավորվածություն (Claim supported by source)',
-          kind: 'llm_judged',
-          result: 'warn',
-          detail: `Մասամբ հիմնավորված: ${verification.reason}`,
-          judgeProviderId: judge.providerId,
-          judgeModelId: judge.modelId,
-          confidence: verification.confidence,
-        });
-      } else {
-        checks.push({
-          checkId: 'claim_supported',
-          label: 'Փաստացի հիմնավորվածություն (Claim supported by source)',
+          label: `Փաստացի հիմնավորվածություն (Judge Error, ${fc.chunkId})`,
           kind: 'llm_judged',
           result: 'fail',
-          detail: `Անհիմն փաստ: ${verification.reason}`,
+          detail: `Դատավորի ստուգման խափանում: ${msg}`,
           judgeProviderId: judge.providerId,
           judgeModelId: judge.modelId,
-          confidence: verification.confidence,
         });
       }
-
-      // Check configurable confidence threshold (default 0.8)
-      // Items with judge confidence below threshold go to the methodologist review queue
-      if (verification.confidence < confidenceThreshold) {
-        checks.push({
-          checkId: 'judge_confidence_threshold',
-          label: 'Դատավորի վստահության շեմ (Judge Confidence Threshold)',
-          kind: 'llm_judged',
-          result: 'warn',
-          detail: `Դատավորի վստահությունը (${verification.confidence.toFixed(2)}) ցածր է սահմանված շեմից (${confidenceThreshold}): Առաջադրանքն ուղարկված է մեթոդիստի ստուգման հերթ (Review Queue):`,
-          judgeProviderId: judge.providerId,
-          judgeModelId: judge.modelId,
-          confidence: verification.confidence,
-        });
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn('Judge verifyClaim failed:', msg);
-      // SPEC: Never silently switch judge! If judge fails (e.g. TypeSafe Jev missing key), record visible error check
-      checks.push({
-        checkId: 'claim_supported',
-        label: 'Փաստացի հիմնավորվածություն (Judge Error)',
-        kind: 'llm_judged',
-        result: 'fail',
-        detail: `Դատավորի ստուգման խափանում: ${msg}`,
-        judgeProviderId: judge.providerId,
-        judgeModelId: judge.modelId,
-      });
     }
   } else {
     checks.push({
@@ -404,7 +418,16 @@ export async function validateSingleItem(
       });
     }
   } catch (err: unknown) {
-    console.warn('Language judge check failed:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('Language judge check failed:', msg);
+    // SPEC: A failed judge call must produce a visible check, not a silent skip.
+    checks.push({
+      checkId: 'armenian_language_check',
+      label: 'Հայերենի և տերմինաբանության ստուգում (Language Judge Error)',
+      kind: 'llm_judged',
+      result: 'fail',
+      detail: `Լեզվական ստուգման խափանում: ${msg}`,
+    });
   }
 
   // 8. LLM Judged Method Rules
@@ -439,7 +462,16 @@ export async function validateSingleItem(
         detail: rRes.output.detail,
       });
     } catch (err: unknown) {
-      console.warn(`Rule judge failed for ${rule.id}:`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`Rule judge failed for ${rule.id}:`, msg);
+      // SPEC: A failed judge call must produce a visible check, not a silent skip.
+      checks.push({
+        checkId: rule.id,
+        label: `${rule.title} (Judge Error)`,
+        kind: 'llm_judged',
+        result: rule.severity === 'error' ? 'fail' : 'warn',
+        detail: `Կանոնի ստուգման խափանում: ${msg}`,
+      });
     }
   }
 
@@ -459,7 +491,7 @@ export async function validateSingleItem(
     factSources: factSourcesRef,
     methodRulesApplied: activeRules.map((r) => r.id),
     providerId: provider.providerId,
-    modelId: options?.modelId || provider.defaultModelId || 'n/a',
+    modelId: options?.generationModelId || options?.modelId || provider.defaultModelId || 'n/a',
     judgeProviderId: judge.providerId,
     judgeModelId: judge.modelId,
     confidence: judgeVerificationConfidence,
@@ -479,9 +511,17 @@ export async function validateAllItems(
   provider: IModelProvider,
   options?: ValidationOptions
 ): Promise<ItemTrace[]> {
+  const variantItemCounts: Record<string, number> = {};
+  for (const item of items) {
+    variantItemCounts[item.variant] = (variantItemCounts[item.variant] || 0) + 1;
+  }
+
   const traces: ItemTrace[] = [];
   for (const item of items) {
-    const { trace } = await validateSingleItem(item, subject, grade, provider, options);
+    const { trace } = await validateSingleItem(item, subject, grade, provider, {
+      ...options,
+      variantItemCounts,
+    });
     traces.push(trace);
   }
   return traces;

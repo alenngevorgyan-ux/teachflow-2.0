@@ -380,6 +380,11 @@ export function createApiRouter(): Router {
       const provider = getProvider();
       const { judgeProviderId = 'gemini', judgeConfidenceThreshold } = req.body;
       const judgeProvider = getJudgeProvider(judgeProviderId);
+      const variantItemCounts: Record<string, number> = {};
+      for (const it of assessment.items) {
+        const v = it.id === updatedItem.id ? updatedItem.variant : it.variant;
+        variantItemCounts[v] = (variantItemCounts[v] || 0) + 1;
+      }
       const { trace } = await validateSingleItem(
         updatedItem,
         assessment.subject,
@@ -389,6 +394,7 @@ export function createApiRouter(): Router {
           judgeProvider,
           judgeConfidenceThreshold:
             typeof judgeConfidenceThreshold === 'number' ? judgeConfidenceThreshold : 0.8,
+          variantItemCounts,
         }
       );
 

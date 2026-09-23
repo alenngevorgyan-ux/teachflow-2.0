@@ -87,6 +87,7 @@ export async function runFullGenerationPipeline(
     provider,
     {
       modelId,
+      generationModelId: genResult.modelId,
       judgeProvider: params.judgeProvider,
       judgeConfidenceThreshold: params.judgeConfidenceThreshold,
     }

@@ -83,10 +83,54 @@ const provider: IModelProvider = {
   generateText: vi.fn() as unknown as IModelProvider['generateText'],
 };
 
-async function run(it: AssessmentItem, j: IJudgeProvider = supported, grade = 7) {
-  const { trace, status } = await validateSingleItem(it, 'history', grade, provider, { judgeProvider: j });
+async function run(
+  it: AssessmentItem,
+  j: IJudgeProvider = supported,
+  grade = 7,
+  extraOptions: Record<string, unknown> = {}
+) {
+  const { trace, status } = await validateSingleItem(it, 'history', grade, provider, {
+    judgeProvider: j,
+    ...extraOptions,
+  });
   const byId = (id: string) => trace.checks.filter((c) => c.checkId === id).map((c) => c.result);
   return { trace, status, byId };
+}
+
+function sequentialJudge(
+  results: (Awaited<ReturnType<IJudgeProvider['verifyClaim']>> | Error)[]
+): IJudgeProvider {
+  let call = 0;
+  return {
+    providerId: 'fake-judge',
+    modelId: 'fake-judge-model',
+    verifyClaim: vi.fn(async () => {
+      const r = results[Math.min(call, results.length - 1)];
+      call++;
+      if (r instanceof Error) throw r;
+      return r;
+    }),
+    classify: vi.fn(),
+  } as unknown as IJudgeProvider;
+}
+
+function providerThrowingFor(actionPrefix: string): IModelProvider {
+  return {
+    providerId: 'fake',
+    generateStructured: vi.fn(async (_prompt: string, _schema: unknown, opts?: { actionName?: string }) => {
+      if (opts?.actionName?.startsWith(actionPrefix)) {
+        throw new Error(`${actionPrefix} boom`);
+      }
+      return {
+        output: { hasIssues: false, issues: [] },
+        providerId: 'fake',
+        modelId: 'fake-model',
+        latencyMs: 0,
+        requestId: 'r',
+      };
+    }) as unknown as IModelProvider['generateStructured'],
+    generateText: vi.fn() as unknown as IModelProvider['generateText'],
+  };
 }
 
 beforeEach(() => {
@@ -239,5 +283,157 @@ describe('validator judge handling', () => {
     expect(check?.result).toBe('fail');
     expect(check?.detail).toContain('no key');
     expect(r.trace.confidence).toBeUndefined();
+  });
+});
+
+describe('validator claim_supported across multiple FACT citations (worst wins)', () => {
+  it('checks every FACT citation and fails overall if any is not_supported', async () => {
+    store.sources = [
+      source({
+        chunks: [
+          { id: 'src-fact#p1#c1', sourceId: 'src-fact', page: 1, text: FACT_TEXT },
+          { id: 'src-fact#p1#c2', sourceId: 'src-fact', page: 1, text: 'Մայրաքաղաքը Տիգրանակերտն էր։' },
+        ],
+      }),
+    ];
+    const twoCitationItem = item({
+      citations: [
+        { chunkId: 'src-fact#p1#c1', quote: 'թագավորել է մ.թ.ա. 95–55 թվականներին' },
+        { chunkId: 'src-fact#p1#c2', quote: 'Մայրաքաղաքը Տիգրանակերտն էր' },
+      ],
+    });
+    const j = sequentialJudge([
+      { verdict: 'supported', probability: 0.95, confidence: 0.9, reason: 'ok' },
+      { verdict: 'not_supported', probability: 0.9, confidence: 0.7, reason: 'wrong' },
+    ]);
+
+    const r = await run(twoCitationItem, j);
+
+    expect(r.byId('claim_supported')).toEqual(['pass', 'fail']);
+    expect(r.status).toBe('FAIL');
+    // worst-wins confidence: the lower of the two judged confidences
+    expect(r.trace.confidence).toBe(0.7);
+  });
+
+  it('worst verdict is partially_supported -> WARN when no citation fails', async () => {
+    store.sources = [
+      source({
+        chunks: [
+          { id: 'src-fact#p1#c1', sourceId: 'src-fact', page: 1, text: FACT_TEXT },
+          { id: 'src-fact#p1#c2', sourceId: 'src-fact', page: 1, text: 'Մայրաքաղաքը Տիգրանակերտն էր։' },
+        ],
+      }),
+    ];
+    const twoCitationItem = item({
+      citations: [
+        { chunkId: 'src-fact#p1#c1', quote: 'թագավորել է մ.թ.ա. 95–55 թվականներին' },
+        { chunkId: 'src-fact#p1#c2', quote: 'Մայրաքաղաքը Տիգրանակերտն էր' },
+      ],
+    });
+    const j = sequentialJudge([
+      { verdict: 'supported', probability: 0.95, confidence: 0.95, reason: 'ok' },
+      { verdict: 'partially_supported', probability: 0.6, confidence: 0.85, reason: 'meh' },
+    ]);
+
+    const r = await run(twoCitationItem, j);
+
+    expect(r.byId('claim_supported')).toEqual(['pass', 'warn']);
+    expect(r.status).toBe('WARN');
+  });
+});
+
+describe('validator rule-max-items (per variant)', () => {
+  const maxItems = (severity: MethodRule['severity']): MethodRule => ({
+    id: 'rule-max-items',
+    title: 'Max items per variant',
+    description: '',
+    kind: 'deterministic',
+    params: { max_items: 2 },
+    severity,
+    active: true,
+  });
+
+  it('fails when the variant has more items than the max (error severity)', async () => {
+    store.rules = [maxItems('error')];
+    const r = await run(item(), supported, 7, { variantItemCounts: { A: 3, B: 0 } });
+    expect(r.byId('rule-max-items')).toEqual(['fail']);
+    expect(r.status).toBe('FAIL');
+  });
+
+  it('warns when the variant has more items than the max (warning severity)', async () => {
+    store.rules = [maxItems('warning')];
+    const r = await run(item(), supported, 7, { variantItemCounts: { A: 3, B: 0 } });
+    expect(r.byId('rule-max-items')).toEqual(['warn']);
+    expect(r.status).toBe('WARN');
+  });
+
+  it('passes when the variant is within the limit', async () => {
+    store.rules = [maxItems('error')];
+    const r = await run(item(), supported, 7, { variantItemCounts: { A: 2, B: 0 } });
+    expect(r.byId('rule-max-items')).toEqual([]);
+    expect(r.status).toBe('PASS');
+  });
+
+  it('is not applied when variantItemCounts is not supplied', async () => {
+    store.rules = [maxItems('error')];
+    const r = await run(item());
+    expect(r.byId('rule-max-items')).toEqual([]);
+  });
+});
+
+describe('validator judge/rule error visibility', () => {
+  it('a failing language judge call produces a visible failed check, not a silent skip', async () => {
+    store.rules = [];
+    const { trace, status } = await validateSingleItem(
+      item(),
+      'history',
+      7,
+      providerThrowingFor('languageJudge'),
+      { judgeProvider: supported }
+    );
+    const check = trace.checks.find((c) => c.checkId === 'armenian_language_check');
+    expect(check?.result).toBe('fail');
+    expect(check?.detail).toContain('languageJudge boom');
+    expect(status).toBe('FAIL');
+  });
+
+  it('a failing llm_judged rule call produces a visible check honoring rule severity', async () => {
+    store.rules = [
+      {
+        id: 'rule-custom-style',
+        title: 'Custom style rule',
+        description: 'desc',
+        kind: 'llm_judged',
+        params: {},
+        severity: 'warning',
+        active: true,
+      },
+    ];
+    const { trace, status } = await validateSingleItem(
+      item(),
+      'history',
+      7,
+      providerThrowingFor('ruleJudge:rule-custom-style'),
+      { judgeProvider: supported }
+    );
+    const check = trace.checks.find((c) => c.checkId === 'rule-custom-style');
+    expect(check?.result).toBe('warn');
+    expect(check?.detail).toContain('boom');
+    expect(status).toBe('WARN');
+  });
+});
+
+describe('validator trace.modelId', () => {
+  it('uses the model id actually returned by generation, not just the requested one', async () => {
+    const r = await run(item(), supported, 7, {
+      modelId: 'requested-model',
+      generationModelId: 'actually-used-model',
+    });
+    expect(r.trace.modelId).toBe('actually-used-model');
+  });
+
+  it('falls back to the requested modelId when generationModelId is absent', async () => {
+    const r = await run(item(), supported, 7, { modelId: 'requested-model' });
+    expect(r.trace.modelId).toBe('requested-model');
   });
 });
