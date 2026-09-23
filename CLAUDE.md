@@ -1,0 +1,52 @@
+# TeachFlow — project brief for Claude Code
+
+## What this is
+TeachFlow is an Armenian curriculum connector for AI in schools. Armenian public schools get ChatGPT Edu from 2026–2027 (entry via my.emis.am). General AI can generate tests and plans; nobody can prove the output follows the **official Armenian standard, the right program version, approved sources and methodological rules**. TeachFlow does that:
+
+- **Registry** of official sources (standard, subject programs, textbooks, methodological guides) with version, effective dates, role (FACT / METHOD / TEMPLATE), status, hash.
+- **Engine**: retrieval → coverage gate (refuse if the source is insufficient) → generation with verbatim citations → **independent validation** of every item → variant equivalence → per-item **trace**.
+- **Validate material**: check any material made in any AI (incl. ChatGPT Edu).
+- **Teacher tools**: chat + canvas workspace, thematic plan, lesson plan, tests with answer sheets, auto-grading, program progress, one-click reports.
+- **Reporting chain**: teacher → director → reviewer (authority), templates as data, automatic review, legacy report import.
+- **Quality**: side-by-side compare with a strong ChatGPT baseline, regression runner, Armenian model evaluation, terminology glossary.
+- **Integrations**: MCP server (for ChatGPT Edu Apps and other assistants), EMIS export adapter (files only).
+
+The core bet: generation is a commodity. TeachFlow is only valuable if it can **enforce, detect, prove and regress** better than a well-configured ChatGPT Edu with the same sources. The compare screen must stay honest.
+
+## Non-negotiable rules
+1. **Never fabricate.** No default values, no default confidence (`?? 0.95` is forbidden), no invented curriculum content, outcome codes, statistics, endpoints or model ids. Missing = `null` / `undefined`, shown as "n/a", routed to manual confirmation.
+2. **Deterministic checks must be able to fail.** Never adjust data to make a check pass.
+3. **Every model call is visible**: provider + exact model id recorded; no silent fallback between providers; errors surface in the UI.
+4. **AI assists, humans decide.** Nothing is auto-approved, auto-submitted or auto-signed.
+5. **No student personal data.** Anonymous student codes only (e.g. `7B-14`). No names, contacts, birth dates. Answer-sheet images deleted after confirmation by default.
+6. **No teacher surveillance.** No rankings, leaderboards or risk scores about teachers. Directors see only report status per teacher.
+7. **Not an official system.** No state emblems or ministry names in the UI chrome. Footer: "TeachFlow prototype — not an official system of any state body".
+8. **Templates are data.** Report forms are unconfirmed; every form is a JSON template editable in the UI, marked `DRAFT — form not yet confirmed`.
+9. **Demo data is synthetic and labeled `DEMO DATA`.** Anything that runs without a real model call shows a `SIMULATED` badge.
+10. **Content rights.** Standards and programs (official acts) can be ingested; textbook texts only with permission. Do not bundle copyrighted textbook text in the repo.
+
+## Stack and commands
+- React 19 + Vite + Tailwind (frontend, `src/`), Express + TypeScript via `tsx` (backend, `server/`, entry `server.ts`), shared types/zod schemas in `shared/`.
+- AI: `@google/genai` (Gemini default). Provider layer: `server/providers/modelProvider.ts`, judges: `server/providers/judgeProvider.ts`.
+- Store: JSON file behind `server/store/repository.ts`; demo seeding in `server/store/demoData.ts`.
+- Prompts: versioned text files in `server/prompts/*.vN.txt` (prompt version is part of `policyVersion`).
+- Install: `npm install --legacy-peer-deps` (peer conflict is a known task).
+- Dev: `npm run dev` (serves API + Vite on port 3000). Typecheck: `npx tsc --noEmit`.
+- Env: `GEMINI_API_KEY` (required for real calls), optional `OPENAI_API_KEY`, `TYPESAFE_API_URL`, `TYPESAFE_MODEL_ID`, `TYPESAFE_API_KEY`.
+
+## Map of the code
+- `server/pipeline/`: `retrieval`, `coverage`, `generator`, `validator`, `equivalence`, `orchestrator`, `materialValidator`, `compare`, `regression`, `normalization` (Armenian-aware text normalization), `thematicPlanGenerator`, `lessonPlanGenerator`, `autoGrader`, `reportReviewer`, `legacyReportImporter`, `armenianEvalHarness`, `privacyGuard`, `emisAdapter`.
+- `server/api/routes.ts`: REST API. `server/mcp/index.ts`: MCP tools.
+- `src/pages/`: one page per module; `src/i18n/translations.ts`: hy / ru / en strings (Armenian primary, reformed orthography).
+
+## Honest status (as of 2026-09-24) — see TASKS.md
+Real: registry, citation/quote/FACT-vs-METHOD checks, coverage gate, validation of pasted material, deterministic grading and item analysis, report data model and lifecycle, Armenian eval harness (lenient scoring), legacy import via Gemini with verbatim-quote verification.
+Simulated or incomplete: thematic plan generator (hardcoded), lesson plan generator (template), answer-sheet image reading (not implemented), workspace chat (keyword routing, no confirmation chips), compare screen (biased against baseline), retrieval (no top-K / no embeddings), PDF/DOCX upload, MCP transport (SSE), tests.
+
+## How to work in this repo
+- Read TASKS.md first; work top-down; one task per commit with a clear message.
+- Before saying a task is done: typecheck passes, relevant tests pass, and you ran the flow (or explain why you could not, e.g. no API key).
+- Write unit tests for every deterministic check you touch (`npm test` — set up vitest if missing).
+- Prefer small, reviewable diffs. Ask before large refactors, new dependencies with heavy footprint, or schema migrations of stored data.
+- Keep UI text in `translations.ts`; Armenian first.
+- If a requirement is ambiguous, stop and ask rather than invent domain facts (report forms, program content, legal bases are unknown until confirmed by real teachers/authorities).
