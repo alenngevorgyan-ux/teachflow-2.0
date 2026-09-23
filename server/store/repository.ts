@@ -172,7 +172,11 @@ export interface IRepository {
   resetDemoData(): void;
 }
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+// Vercel serverless functions only allow writes under /tmp; data there does not
+// persist across cold starts or separate instances.
+const DATA_DIR = process.env.VERCEL
+  ? path.join('/tmp', 'teachflow-data')
+  : path.resolve(process.cwd(), 'data');
 const STORE_FILE = path.join(DATA_DIR, 'teachflow_store.json');
 
 export class JsonFileRepository implements IRepository {
