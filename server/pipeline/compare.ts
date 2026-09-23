@@ -332,7 +332,7 @@ export async function runSideBySideComparison(
   const teachflowRuns: ScorecardMetric[] = [];
   const collectedItemsForAgreement: { claim: string; evidenceText: string }[] = [];
 
-  const { factChunks, methodChunks } = retrieveChunks(subject, grade, topic, selectedSourceIds);
+  const { factChunks, methodChunks } = await retrieveChunks(subject, grade, topic, selectedSourceIds);
 
   const factSourceText = factChunks.map((c) => `[CHUNK: ${c.chunk.id}]\n${c.chunk.text}`).join('\n\n');
   const methodSourceText = methodChunks.map((c) => `[CHUNK: ${c.chunk.id}]\n${c.chunk.text}`).join('\n\n');

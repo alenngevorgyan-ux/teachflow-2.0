@@ -10,6 +10,10 @@ export interface SourceChunk {
   sourceId: string;
   page?: number;
   text: string;
+  // Gemini embedding vector (gemini-embedding-001), computed at upload time.
+  // Absent when GEMINI_API_KEY was not configured or the embedding call
+  // failed — retrieval falls back to keyword-only scoring for that chunk.
+  embedding?: number[];
 }
 
 export interface Source {

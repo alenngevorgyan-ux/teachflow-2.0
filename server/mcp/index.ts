@@ -73,7 +73,7 @@ export function createMcpServer(): McpServer {
       query: z.string().describe('Topic or concept keyword'),
     },
     async ({ subject, grade, query }) => {
-      const { factChunks } = retrieveChunks(subject, grade, query);
+      const { factChunks } = await retrieveChunks(subject, grade, query);
       const policyVersion = repository.computePolicyVersion();
       const topFragments = factChunks.slice(0, 5).map((f) => ({
         chunkId: f.chunk.id,

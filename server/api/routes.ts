@@ -21,6 +21,7 @@ import { retrieveChunks } from '../pipeline/retrieval.js';
 import { validateSingleItem } from '../pipeline/validator.js';
 import { evaluateReadyForClassroomGate } from '../pipeline/statusGate.js';
 import { getDefaultProviderId, getProvider, isProviderConfigured } from '../providers/modelProvider.js';
+import { embedChunksInPlace } from '../providers/embeddingProvider.js';
 import { getJudgeProvider, isTypeSafeJevConfigured } from '../providers/judgeProvider.js';
 import { repository } from '../store/repository.js';
 import {
@@ -63,7 +64,7 @@ export function createApiRouter(): Router {
     res.json({ sources: enriched });
   });
 
-  router.post('/sources', (req: Request, res: Response) => {
+  router.post('/sources', async (req: Request, res: Response) => {
     try {
       const {
         title,
@@ -121,6 +122,12 @@ export function createApiRouter(): Router {
         });
       }
 
+      // Compute Gemini embeddings per chunk so retrieval can use semantic
+      // similarity, not just keyword matching. Never blocks the upload: a
+      // missing GEMINI_API_KEY or a failed call just means these chunks
+      // degrade to keyword-only retrieval, and that is reported back visibly.
+      const embeddingResult = await embedChunksInPlace(chunks);
+
       const newSource: Source = {
         id: sourceId,
         title,
@@ -140,7 +147,7 @@ export function createApiRouter(): Router {
       };
 
       const saved = repository.saveSource(newSource);
-      res.json({ source: saved });
+      res.json({ source: saved, embeddingWarning: embeddingResult.warning });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: msg });

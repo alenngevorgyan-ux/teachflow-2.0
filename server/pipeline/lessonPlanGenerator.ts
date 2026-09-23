@@ -25,7 +25,7 @@ export async function generateLessonPlanFromRow(
   }
 
   // Retrieve FACT chunks for this subject, grade, and topic
-  const { factChunks } = retrieveChunks(plan.subject, plan.grade, row.topic);
+  const { factChunks } = await retrieveChunks(plan.subject, plan.grade, row.topic);
 
   const durationMinutes = params.durationMinutes || 45;
   const lessonPlanId = `lp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;

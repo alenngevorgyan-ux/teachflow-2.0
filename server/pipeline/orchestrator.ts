@@ -30,7 +30,7 @@ export async function runFullGenerationPipeline(
   const policyVersion = repository.computePolicyVersion();
 
   // Step 1: Retrieval
-  const { factChunks, methodChunks } = retrieveChunks(
+  const { factChunks, methodChunks } = await retrieveChunks(
     subject,
     grade,
     topic,

@@ -32,6 +32,7 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
   const [outcomes, setOutcomes] = useState<CurriculumOutcome[]>([]);
   const [loading, setLoading] = useState(false);
   const [showUploadForm, setShowUploadForm] = useState(false);
+  const [embeddingWarning, setEmbeddingWarning] = useState<string | null>(null);
   const [supersedeModalSource, setSupersedeModalSource] = useState<Source | null>(null);
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
 
@@ -95,11 +96,13 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
           isOcr,
         }),
       });
+      const data = await res.json();
       if (res.ok) {
         setTitle('');
         setAuthority('');
         setContent('');
         setShowUploadForm(false);
+        setEmbeddingWarning(data.embeddingWarning || null);
         await fetchSourcesAndOutcomes();
       }
     } catch (err) {
@@ -225,6 +228,18 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
           </button>
         </div>
       </div>
+
+      {embeddingWarning && (
+        <div className="flex items-start justify-between gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+          <span className="font-medium">{embeddingWarning}</span>
+          <button
+            onClick={() => setEmbeddingWarning(null)}
+            className="shrink-0 text-amber-700 hover:text-amber-900 font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Upload/Add Form Drawer */}
       {showUploadForm && (
