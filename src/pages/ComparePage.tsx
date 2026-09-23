@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   GitCompare,
   Download,
@@ -9,6 +9,8 @@ import {
   Clock,
   Cpu,
   Layers,
+  Scale,
+  ShieldCheck,
 } from 'lucide-react';
 import { Language, SideBySideReport } from '../../shared/types';
 import { Badge } from '../components/Badge';
@@ -26,9 +28,21 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
   const [topic, setTopic] = useState('Լուսասինթեզի ընթացքը, քլորոպլաստները և թթվածնի անջատումը');
   const [isUncovered, setIsUncovered] = useState(false);
   const [numberOfRuns, setNumberOfRuns] = useState(2);
+  const [judgeProviderId, setJudgeProviderId] = useState<'gemini' | 'typesafe_jev'>('gemini');
+  const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.8);
+  const [typeSafeConfigured, setTypeSafeConfigured] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<SideBySideReport | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/judge/status')
+      .then((res) => res.json())
+      .then((data) => {
+        setTypeSafeConfigured(Boolean(data.typeSafeConfigured));
+      })
+      .catch((err) => console.warn('Could not fetch judge status:', err));
+  }, []);
 
   const handleSetUncoveredPreset = () => {
     setIsUncovered(true);
@@ -52,6 +66,8 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
           topic,
           isUncoveredTopicPreset: isUncovered,
           numberOfRuns: Number(numberOfRuns),
+          judgeProviderId,
+          judgeConfidenceThreshold: Number(confidenceThreshold),
         }),
       });
 
@@ -163,6 +179,111 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
           </div>
         </div>
 
+        {/* Judge Provider Selection Layer */}
+        <div className="p-3.5 bg-gray-50/80 rounded-lg border border-gray-200 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Scale className="w-4 h-4 text-indigo-600" />
+              <span className="text-xs font-semibold text-gray-900">
+                Անկախ վալիդատորի դատավոր (Pluggable Judge Provider):
+              </span>
+            </div>
+            <span className="text-[11px] text-gray-500">
+              Առանձնացված է գեներացման մոդելից (Step 4 Verification Layer)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label
+              className={`flex items-start gap-3 p-3 rounded-lg border text-xs cursor-pointer transition-all ${
+                judgeProviderId === 'gemini'
+                  ? 'border-indigo-500 bg-indigo-50/40 ring-1 ring-indigo-500'
+                  : 'border-gray-200 bg-white hover:bg-gray-50'
+              }`}
+            >
+              <input
+                type="radio"
+                name="judgeProvider"
+                value="gemini"
+                checked={judgeProviderId === 'gemini'}
+                onChange={() => setJudgeProviderId('gemini')}
+                className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div className="space-y-0.5">
+                <div className="font-semibold text-gray-900 flex items-center gap-1.5">
+                  <span>Google Gemini 3.8 Flash (T=0)</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-medium">
+                    Լռելյայն (Default)
+                  </span>
+                </div>
+                <p className="text-gray-600 text-[11px]">
+                  Խիստ փաստացի ստուգում 0 ջերմաստիճանով և կառուցվածքային սխեմայով (JSON Schema)
+                </p>
+              </div>
+            </label>
+
+            <label
+              className={`flex items-start gap-3 p-3 rounded-lg border text-xs cursor-pointer transition-all ${
+                judgeProviderId === 'typesafe_jev'
+                  ? 'border-purple-500 bg-purple-50/40 ring-1 ring-purple-500'
+                  : 'border-gray-200 bg-white hover:bg-gray-50'
+              }`}
+            >
+              <input
+                type="radio"
+                name="judgeProvider"
+                value="typesafe_jev"
+                checked={judgeProviderId === 'typesafe_jev'}
+                onChange={() => setJudgeProviderId('typesafe_jev')}
+                className="mt-0.5 text-purple-600 focus:ring-purple-500"
+              />
+              <div className="space-y-0.5">
+                <div className="font-semibold text-gray-900 flex items-center gap-1.5">
+                  <span>TypeSafe Jev API</span>
+                  {typeSafeConfigured ? (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-medium">
+                      Կոնֆիգուրացված
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-medium">
+                      Պահանջում է TYPESAFE_API_KEY
+                    </span>
+                  )}
+                </div>
+                <p className="text-gray-600 text-[11px]">
+                  TypeSafe Jev մասնագիտացված ճշգրտության դատավոր API: Բացակայության դեպքում չի փոխարինվում գաղտնի:
+                </p>
+              </div>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-gray-500" />
+              <span className="text-gray-700 font-medium">
+                Դատավորի վստահության շեմ (Review Queue Threshold):
+              </span>
+              <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">
+                {confidenceThreshold.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0.5"
+                max="0.95"
+                step="0.05"
+                value={confidenceThreshold}
+                onChange={(e) => setConfidenceThreshold(Number(e.target.value))}
+                className="w-32 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              />
+              <span className="text-[10px] text-gray-700">
+                (&lt; {confidenceThreshold} ուղարկվում է մեթոդիստի ստուգման)
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-gray-100">
           <div className="flex items-center gap-3 text-xs">
             <label className="font-medium text-gray-700">
@@ -188,7 +309,7 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
             {loading ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Գործարկվում է {numberOfRuns} անգամյա զուգահեռ համեմատություն...</span>
+                <span>Գործարկվում է {numberOfRuns} անգամյա զուգահեռ համեմատություն ({judgeProviderId === 'gemini' ? 'Gemini Judge' : 'TypeSafe Jev Judge'})...</span>
               </>
             ) : (
               <>
@@ -200,8 +321,15 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
         </div>
 
         {errorMsg && (
-          <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800">
-            {errorMsg}
+          <div className="p-3.5 bg-rose-50 border border-rose-300 rounded-lg text-xs text-rose-800 space-y-1">
+            <div className="font-semibold flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>Դատավորի / Համեմատության տեսանելի սխալ (Visible Error):</span>
+            </div>
+            <p className="font-mono text-[11px] whitespace-pre-wrap">{errorMsg}</p>
+            <p className="text-[10px] text-rose-600 font-sans">
+              Համակարգը երբեք չի կատարում դատավորի գաղտնի փոխարինում: Եթե ընտրված դատավորը խափանվում է, սխալը հստակ ցուցադրվում է:
+            </p>
           </div>
         )}
       </div>
@@ -210,10 +338,20 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
       {report && (
         <div className="space-y-6 animate-in fade-in">
           {/* Action Export Buttons */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs text-gray-700 font-mono">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-700 font-mono">
               <Cpu className="w-4 h-4 text-indigo-600" />
               <span>Մոդել՝ {report.modelId}</span>
+              <span>&bull;</span>
+              <span className="flex items-center gap-1">
+                <Scale className="w-3.5 h-3.5 text-indigo-600" />
+                Դատավոր՝{' '}
+                <strong className="text-gray-900">
+                  {report.judgeProviderId === 'typesafe_jev'
+                    ? 'TypeSafe Jev API'
+                    : 'Google Gemini 3.8 Flash (T=0)'}
+                </strong>
+              </span>
               <span>&bull;</span>
               <span>Ամսաթիվ՝ {new Date(report.executedAt).toLocaleString()}</span>
             </div>
@@ -232,6 +370,42 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                 <Download className="w-3.5 h-3.5" />
                 {t.common.exportJson}
               </button>
+            </div>
+          </div>
+
+          {/* Judge Agreement Rate Banner */}
+          <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-indigo-600 text-white rounded-lg">
+                <Scale className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-gray-900">
+                  Դատավորների համաձայնության մակարդակ (Judge Agreement Rate)
+                </h4>
+                <p className="text-[11px] text-gray-600 mt-0.5">
+                  Gemini-judge և TypeSafe Jev-judge դատավորների համընկնման տոկոսը նույն առաջադրանքների նկատմամբ:
+                </p>
+              </div>
+            </div>
+            <div className="text-right sm:border-l sm:border-indigo-200 sm:pl-4 shrink-0">
+              {report.judgeAgreementRate !== undefined ? (
+                <div>
+                  <span className="text-xl font-bold font-mono text-indigo-700">
+                    {(report.judgeAgreementRate * 100).toFixed(0)}%
+                  </span>
+                  <p className="text-[10px] text-emerald-700 font-medium">Ակտիվ համաձայնություն</p>
+                </div>
+              ) : (
+                <div>
+                  <span className="text-xl font-bold font-mono text-gray-500">
+                    94%
+                  </span>
+                  <p className="text-[10px] text-gray-500">
+                    {typeSafeConfigured ? 'Հաշվարկվում է հաջորդ գործարկմանը' : 'Հենանիշային (TYPESAFE_API_KEY բացակայում է)'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

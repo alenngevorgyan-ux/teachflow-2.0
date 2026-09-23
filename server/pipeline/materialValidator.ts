@@ -3,6 +3,7 @@ import path from 'path';
 import { ClaimJudgeSchema, ExtractedClaimsSchema } from '../../shared/schemas.js';
 import { CheckResult, MaterialValidationReport } from '../../shared/types.js';
 import { IModelProvider } from '../providers/modelProvider.js';
+import { IJudgeProvider, getJudgeProvider } from '../providers/judgeProvider.js';
 import { repository } from '../store/repository.js';
 import { normalizeArmenianText } from './normalization.js';
 import { retrieveChunks } from './retrieval.js';
@@ -13,9 +14,15 @@ export async function validateExternalMaterial(
   grade: number,
   text: string,
   selectedSourceIds?: string[],
-  options?: { modelId?: string }
+  options?: {
+    modelId?: string;
+    judgeProvider?: IJudgeProvider;
+    judgeConfidenceThreshold?: number;
+  }
 ): Promise<MaterialValidationReport> {
   const policyVersion = repository.computePolicyVersion();
+  const judge = options?.judgeProvider || getJudgeProvider('gemini');
+  const confidenceThreshold = options?.judgeConfidenceThreshold ?? 0.8;
 
   // 1. Split text into items and claims
   const splitPromptTemplate = path.resolve(
@@ -101,29 +108,17 @@ export async function validateExternalMaterial(
         });
       }
 
-      // Run strict claim judge
+      // Run strict claim judge using pluggable JudgeProvider
       try {
-        const judgePromptTemplate = path.resolve(
-          process.cwd(),
-          'server/prompts/claim_judge.v1.txt'
-        );
-        let judgePrompt = fs.readFileSync(judgePromptTemplate, 'utf-8');
-        judgePrompt = judgePrompt
-          .replace('{{stem}}', item.stem)
-          .replace('{{type}}', item.type || 'question')
-          .replace('{{options}}', item.options ? item.options.join(' | ') : 'N/A')
-          .replace('{{answerKey}}', item.answerKey || 'N/A')
-          .replace('{{chunkText}}', bestChunk.text)
-          .replace('{{quote}}', item.claimFact || item.stem);
-
-        const judgeRes = await provider.generateStructured(judgePrompt, ClaimJudgeSchema, {
-          modelId: options?.modelId,
-          temperature: 0.0,
-          actionName: 'validateExternalClaim',
+        const claimText = `${item.stem} (Պատասխան: ${item.answerKey || 'N/A'}). Փաստ: ${item.claimFact || item.stem}`;
+        const verification = await judge.verifyClaim(claimText, bestChunk.text, {
+          stem: item.stem,
+          options: item.options,
+          answerKey: item.answerKey,
         });
 
-        supportStatus = judgeRes.output.supportStatus;
-        reason = judgeRes.output.reason;
+        supportStatus = verification.verdict;
+        reason = verification.reason;
 
         checks.push({
           checkId: 'claim_supported',
@@ -131,14 +126,41 @@ export async function validateExternalMaterial(
           kind: 'llm_judged',
           result: supportStatus === 'supported' ? 'pass' : supportStatus === 'partially_supported' ? 'warn' : 'fail',
           detail: reason,
+          judgeProviderId: judge.providerId,
+          judgeModelId: judge.modelId,
+          confidence: verification.confidence,
         });
+
+        if (verification.confidence < confidenceThreshold) {
+          checks.push({
+            checkId: 'judge_confidence_threshold',
+            label: 'Դատավորի վստահության շեմ (Judge Confidence Threshold)',
+            kind: 'llm_judged',
+            result: 'warn',
+            detail: `Դատավորի վստահությունը (${verification.confidence.toFixed(2)}) ցածր է շեմից (${confidenceThreshold}): Պահանջվում է մեթոդիստի ստուգում:`,
+            judgeProviderId: judge.providerId,
+            judgeModelId: judge.modelId,
+            confidence: verification.confidence,
+          });
+        }
 
         if (supportStatus === 'not_supported') {
           unsupportedCount++;
         }
       } catch (err: unknown) {
-        console.warn('Judge failed for external claim:', err);
-        reason = 'Չհաջողվեց կատարել դատավորի ավտոմատ ստուգումը';
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('Judge failed for external claim:', msg);
+        reason = `Դատավորի ստուգման խափանում: ${msg}`;
+        checks.push({
+          checkId: 'claim_supported',
+          label: 'Փաստացի հիմնավորվածություն (Judge Error)',
+          kind: 'llm_judged',
+          result: 'fail',
+          detail: reason,
+          judgeProviderId: judge.providerId,
+          judgeModelId: judge.modelId,
+        });
+        unsupportedCount++;
       }
     }
 

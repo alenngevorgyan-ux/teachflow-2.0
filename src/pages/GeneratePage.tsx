@@ -30,6 +30,9 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
   const [topic, setTopic] = useState('');
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const [modelId, setModelId] = useState('gemini-3.8-flash');
+  const [judgeProviderId, setJudgeProviderId] = useState<'gemini' | 'typesafe_jev'>('gemini');
+  const [judgeConfidenceThreshold, setJudgeConfidenceThreshold] = useState<number>(0.8);
+  const [typeSafeConfigured, setTypeSafeConfigured] = useState<boolean>(false);
 
   const [loading, setLoading] = useState(false);
   const [pipelinePhase, setPipelinePhase] = useState<string>('');
@@ -45,6 +48,11 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
         setSelectedSourceIds(active.map((s: Source) => s.id));
       })
       .catch(console.error);
+
+    fetch('/api/judge/status')
+      .then((r) => r.json())
+      .then((d) => setTypeSafeConfigured(Boolean(d.typeSafeConfigured)))
+      .catch((e) => console.warn('Judge status error:', e));
   }, []);
 
   const eligibleSources = sources.filter(
@@ -85,6 +93,8 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
           selectedSourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : undefined,
           modelId,
           generateOnlyCoveredPart,
+          judgeProviderId,
+          judgeConfidenceThreshold: Number(judgeConfidenceThreshold),
         }),
       });
 
@@ -253,6 +263,99 @@ export const GeneratePage: React.FC<GeneratePageProps> = ({
               })}
             </div>
           )}
+        </div>
+
+        {/* Judge Provider Selection */}
+        <div className="p-3.5 bg-gray-50/80 rounded-lg border border-gray-200 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-gray-900">
+              Անկախ վալիդատորի դատավոր (Judge Provider)
+            </span>
+            <span className="text-[11px] text-gray-500">
+              Step 4 Verification Layer (Անկախ ստուգիչ)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label
+              className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                judgeProviderId === 'gemini'
+                  ? 'border-indigo-500 bg-indigo-50/50 ring-1 ring-indigo-500'
+                  : 'border-gray-200 bg-white hover:bg-gray-50'
+              }`}
+            >
+              <input
+                type="radio"
+                name="judgeGenProvider"
+                value="gemini"
+                checked={judgeProviderId === 'gemini'}
+                onChange={() => setJudgeProviderId('gemini')}
+                className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div className="space-y-0.5">
+                <div className="font-semibold text-gray-900 flex items-center gap-1.5">
+                  <span>Google Gemini 3.8 Flash (T=0)</span>
+                  <span className="text-[10px] px-1 bg-emerald-100 text-emerald-800 rounded">
+                    Default
+                  </span>
+                </div>
+                <p className="text-gray-500 text-[11px]">Խիստ ստուգում 0 ջերմաստիճանով</p>
+              </div>
+            </label>
+
+            <label
+              className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                judgeProviderId === 'typesafe_jev'
+                  ? 'border-purple-500 bg-purple-50/50 ring-1 ring-purple-500'
+                  : 'border-gray-200 bg-white hover:bg-gray-50'
+              }`}
+            >
+              <input
+                type="radio"
+                name="judgeGenProvider"
+                value="typesafe_jev"
+                checked={judgeProviderId === 'typesafe_jev'}
+                onChange={() => setJudgeProviderId('typesafe_jev')}
+                className="mt-0.5 text-purple-600 focus:ring-purple-500"
+              />
+              <div className="space-y-0.5">
+                <div className="font-semibold text-gray-900 flex items-center gap-1.5">
+                  <span>TypeSafe Jev API</span>
+                  {typeSafeConfigured ? (
+                    <span className="text-[10px] px-1 bg-emerald-100 text-emerald-800 rounded">
+                      Կոնֆիգուրացված
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-1 bg-amber-100 text-amber-800 rounded">
+                      Needs Key
+                    </span>
+                  )}
+                </div>
+                <p className="text-gray-500 text-[11px]">TypeSafe Jev ճշգրտության դատավոր API</p>
+              </div>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs">
+            <span className="text-gray-600">
+              Վստահության շեմ՝{' '}
+              <strong className="text-indigo-700 font-mono">
+                {judgeConfidenceThreshold.toFixed(2)}
+              </strong>{' '}
+              <span className="text-[10px] text-gray-700">
+                (&lt; {judgeConfidenceThreshold.toFixed(2)} ուղարկվում է մեթոդիստի ստուգման)
+              </span>
+            </span>
+            <input
+              type="range"
+              min="0.5"
+              max="0.95"
+              step="0.05"
+              value={judgeConfidenceThreshold}
+              onChange={(e) => setJudgeConfidenceThreshold(Number(e.target.value))}
+              className="w-32 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+            />
+          </div>
         </div>
 
         {/* Error message */}

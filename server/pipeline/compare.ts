@@ -7,6 +7,13 @@ import {
   SideBySideReport,
 } from '../../shared/types.js';
 import { IModelProvider } from '../providers/modelProvider.js';
+import {
+  IJudgeProvider,
+  getJudgeProvider,
+  isTypeSafeJevConfigured,
+  GeminiJudgeProvider,
+  TypeSafeJevJudgeProvider,
+} from '../providers/judgeProvider.js';
 import { repository } from '../store/repository.js';
 import { runFullGenerationPipeline } from './orchestrator.js';
 import { retrieveChunks } from './retrieval.js';
@@ -20,6 +27,8 @@ export interface RunCompareOptions {
   selectedSourceIds?: string[];
   numberOfRuns?: number;
   modelId?: string;
+  judgeProviderId?: string; // 'gemini' | 'typesafe_jev'
+  judgeConfidenceThreshold?: number;
 }
 
 export async function runSideBySideComparison(
@@ -34,10 +43,16 @@ export async function runSideBySideComparison(
     selectedSourceIds,
     numberOfRuns = 3,
     modelId = 'gemini-3.8-flash',
+    judgeProviderId = 'gemini',
+    judgeConfidenceThreshold = 0.8,
   } = options;
+
+  // Selected judge provider: Never silently switch judge!
+  const selectedJudge: IJudgeProvider = getJudgeProvider(judgeProviderId);
 
   const baselineRuns: ScorecardMetric[] = [];
   const teachflowRuns: ScorecardMetric[] = [];
+  const collectedItemsForAgreement: { claim: string; evidenceText: string }[] = [];
 
   const { factChunks, methodChunks } = retrieveChunks(
     subject,
@@ -110,13 +125,17 @@ export async function runSideBySideComparison(
 
     const baselineLatency = Date.now() - startBaseline;
 
-    // Validate baseline items with SAME validator
+    // Validate baseline items with SAME validator and selected judge
     const baselineTraces = await validateAllItems(
       baselineItems,
       subject,
       grade,
       provider,
-      { modelId }
+      {
+        modelId,
+        judgeProvider: selectedJudge,
+        judgeConfidenceThreshold,
+      }
     );
 
     let baseUnsupported = 0;
@@ -159,6 +178,8 @@ export async function runSideBySideComparison(
       selectedSourceIds,
       provider,
       modelId,
+      judgeProvider: selectedJudge,
+      judgeConfidenceThreshold,
     });
     const tfLatency = Date.now() - startTf;
 
@@ -173,6 +194,19 @@ export async function runSideBySideComparison(
         if (chk.checkId === 'claim_supported' && chk.result === 'fail') tfUnsupported++;
         if (chk.checkId === 'citation_is_fact_source' && chk.result === 'fail') tfMethodAsFact++;
         if (chk.checkId === 'quote_verbatim' && chk.result === 'fail') tfUnverifiableQuote++;
+      }
+    }
+
+    // Collect items for agreement evaluation
+    for (const item of tfAssessment.items) {
+      if (item.citations && item.citations[0]) {
+        const chunk = factChunks.find((c) => c.chunk.id === item.citations[0].chunkId);
+        if (chunk) {
+          collectedItemsForAgreement.push({
+            claim: `${item.stem} (Ans: ${item.answerKey})`,
+            evidenceText: chunk.chunk.text,
+          });
+        }
       }
     }
 
@@ -192,6 +226,29 @@ export async function runSideBySideComparison(
       validatorViolationsCaught: tfUnsupported + tfMethodAsFact + tfUnverifiableQuote,
       latencyMs: tfLatency,
     });
+  }
+
+  // Judge agreement rate calculation between Gemini-judge and Jev-judge
+  let judgeAgreementRate: number | undefined = undefined;
+  if (isTypeSafeJevConfigured() && collectedItemsForAgreement.length > 0) {
+    try {
+      const geminiJudge = new GeminiJudgeProvider();
+      const jevJudge = new TypeSafeJevJudgeProvider();
+      const sample = collectedItemsForAgreement.slice(0, 5);
+      let matches = 0;
+      for (const s of sample) {
+        const [gRes, jRes] = await Promise.all([
+          geminiJudge.verifyClaim(s.claim, s.evidenceText),
+          jevJudge.verifyClaim(s.claim, s.evidenceText),
+        ]);
+        if (gRes.verdict === jRes.verdict) {
+          matches++;
+        }
+      }
+      judgeAgreementRate = matches / sample.length;
+    } catch (err) {
+      console.warn('Could not compute Jev agreement rate:', err);
+    }
   }
 
   // Calculate aggregations & stability
@@ -217,6 +274,8 @@ export async function runSideBySideComparison(
     numberOfRuns,
     executedAt: new Date().toISOString(),
     modelId,
+    judgeProviderId,
+    judgeAgreementRate,
     baselineRuns,
     teachflowRuns,
     aggregated: {

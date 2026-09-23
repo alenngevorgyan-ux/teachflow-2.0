@@ -13,19 +13,29 @@ import {
   Source,
 } from '../../shared/types.js';
 import { IModelProvider } from '../providers/modelProvider.js';
+import { IJudgeProvider, getJudgeProvider } from '../providers/judgeProvider.js';
 import { repository } from '../store/repository.js';
 import { isQuoteVerbatimInChunk } from './normalization.js';
+
+export interface ValidationOptions {
+  modelId?: string;
+  judgeProvider?: IJudgeProvider;
+  judgeConfidenceThreshold?: number; // default 0.8
+}
 
 export async function validateSingleItem(
   item: AssessmentItem,
   subject: string,
   grade: number,
   provider: IModelProvider,
-  options?: { modelId?: string }
+  options?: ValidationOptions
 ): Promise<{ trace: ItemTrace; status: 'PASS' | 'WARN' | 'FAIL' }> {
   const sources = repository.getSources();
   const activeRules = repository.getActiveRules();
   const policyVersion = repository.computePolicyVersion();
+
+  const judge = options?.judgeProvider || getJudgeProvider('gemini');
+  const confidenceThreshold = options?.judgeConfidenceThreshold ?? 0.8;
 
   const checks: CheckResult[] = [];
   const factSourcesRef: {
@@ -266,43 +276,41 @@ export async function validateSingleItem(
     }
   }
 
-  // 6. LLM Judge: claim_supported (Separate call, strict judge)
+  // 6. Pluggable Judge: claim_supported (Separate call, strict judge layer)
+  let judgeVerificationConfidence: number | undefined = undefined;
+
   if (primaryFactChunkText) {
     try {
-      const claimJudgePromptTemplate = path.resolve(
-        process.cwd(),
-        'server/prompts/claim_judge.v1.txt'
-      );
-      let claimPrompt = fs.readFileSync(claimJudgePromptTemplate, 'utf-8');
-      claimPrompt = claimPrompt
-        .replace('{{stem}}', item.stem)
-        .replace('{{type}}', item.type)
-        .replace('{{options}}', item.options ? item.options.join(' | ') : 'N/A')
-        .replace('{{answerKey}}', String(item.answerKey))
-        .replace('{{chunkText}}', primaryFactChunkText)
-        .replace('{{quote}}', primaryQuote);
-
-      const judgeRes = await provider.generateStructured(claimPrompt, ClaimJudgeSchema, {
-        modelId: options?.modelId,
-        temperature: 0.0,
-        actionName: 'claimJudge',
+      const claimText = `${item.stem} (Ճիշտ պատասխան: ${String(item.answerKey)}). Մեջբերում: ${primaryQuote}`;
+      const verification = await judge.verifyClaim(claimText, primaryFactChunkText, {
+        stem: item.stem,
+        options: item.options,
+        answerKey: String(item.answerKey),
       });
 
-      if (judgeRes.output.supportStatus === 'supported') {
+      judgeVerificationConfidence = verification.confidence;
+
+      if (verification.verdict === 'supported') {
         checks.push({
           checkId: 'claim_supported',
           label: 'Փաստացի հիմնավորվածություն (Claim supported by source)',
           kind: 'llm_judged',
           result: 'pass',
-          detail: judgeRes.output.reason || 'Հարցը և պատասխանը լիովին հիմնավորված են աղբյուրի տեքստով:',
+          detail: verification.reason || 'Հարցը և պատասխանը լիովին հիմնավորված են աղբյուրի տեքստով:',
+          judgeProviderId: judge.providerId,
+          judgeModelId: judge.modelId,
+          confidence: verification.confidence,
         });
-      } else if (judgeRes.output.supportStatus === 'partially_supported') {
+      } else if (verification.verdict === 'partially_supported') {
         checks.push({
           checkId: 'claim_supported',
           label: 'Փաստացի հիմնավորվածություն (Claim supported by source)',
           kind: 'llm_judged',
           result: 'warn',
-          detail: `Մասամբ հիմնավորված: ${judgeRes.output.reason}`,
+          detail: `Մասամբ հիմնավորված: ${verification.reason}`,
+          judgeProviderId: judge.providerId,
+          judgeModelId: judge.modelId,
+          confidence: verification.confidence,
         });
       } else {
         checks.push({
@@ -310,17 +318,39 @@ export async function validateSingleItem(
           label: 'Փաստացի հիմնավորվածություն (Claim supported by source)',
           kind: 'llm_judged',
           result: 'fail',
-          detail: `Անհիմն փաստ: ${judgeRes.output.reason}`,
+          detail: `Անհիմն փաստ: ${verification.reason}`,
+          judgeProviderId: judge.providerId,
+          judgeModelId: judge.modelId,
+          confidence: verification.confidence,
+        });
+      }
+
+      // Check configurable confidence threshold (default 0.8)
+      // Items with judge confidence below threshold go to the methodologist review queue
+      if (verification.confidence < confidenceThreshold) {
+        checks.push({
+          checkId: 'judge_confidence_threshold',
+          label: 'Դատավորի վստահության շեմ (Judge Confidence Threshold)',
+          kind: 'llm_judged',
+          result: 'warn',
+          detail: `Դատավորի վստահությունը (${verification.confidence.toFixed(2)}) ցածր է սահմանված շեմից (${confidenceThreshold}): Առաջադրանքն ուղարկված է մեթոդիստի ստուգման հերթ (Review Queue):`,
+          judgeProviderId: judge.providerId,
+          judgeModelId: judge.modelId,
+          confidence: verification.confidence,
         });
       }
     } catch (err: unknown) {
-      console.warn('Claim judge check failed:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('Judge verifyClaim failed:', msg);
+      // SPEC: Never silently switch judge! If judge fails (e.g. TypeSafe Jev missing key), record visible error check
       checks.push({
         checkId: 'claim_supported',
-        label: 'Փաստացի հիմնավորվածություն (Claim judge)',
+        label: 'Փաստացի հիմնավորվածություն (Judge Error)',
         kind: 'llm_judged',
-        result: 'warn',
-        detail: 'Չհաջողվեց կատարել դատավորի ստուգումը (LLM call error):',
+        result: 'fail',
+        detail: `Դատավորի ստուգման խափանում: ${msg}`,
+        judgeProviderId: judge.providerId,
+        judgeModelId: judge.modelId,
       });
     }
   } else {
@@ -330,6 +360,8 @@ export async function validateSingleItem(
       kind: 'llm_judged',
       result: 'fail',
       detail: 'Առաջադրանքը չունի վավեր ՓԱՍՏԱՑԻ աղբյուրի տեքստ ստուգման համար:',
+      judgeProviderId: judge.providerId,
+      judgeModelId: judge.modelId,
     });
   }
 
@@ -428,6 +460,9 @@ export async function validateSingleItem(
     methodRulesApplied: activeRules.map((r) => r.id),
     providerId: provider.providerId,
     modelId: options?.modelId || 'gemini-3.8-flash',
+    judgeProviderId: judge.providerId,
+    judgeModelId: judge.modelId,
+    confidence: judgeVerificationConfidence ?? 0.95,
     policyVersion,
     generatedAt: new Date().toISOString(),
     checks,
@@ -442,7 +477,7 @@ export async function validateAllItems(
   subject: string,
   grade: number,
   provider: IModelProvider,
-  options?: { modelId?: string }
+  options?: ValidationOptions
 ): Promise<ItemTrace[]> {
   const traces: ItemTrace[] = [];
   for (const item of items) {

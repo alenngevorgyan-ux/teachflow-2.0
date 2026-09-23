@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Assessment, AssessmentItem, ItemTrace } from '../../shared/types.js';
 import { IModelProvider } from '../providers/modelProvider.js';
+import { IJudgeProvider } from '../providers/judgeProvider.js';
 import { repository } from '../store/repository.js';
 import { checkCoverageGate } from './coverage.js';
 import { checkVariantEquivalence } from './equivalence.js';
@@ -16,6 +17,8 @@ export interface GenerateAssessmentParams {
   provider: IModelProvider;
   modelId?: string;
   generateOnlyCoveredPart?: boolean;
+  judgeProvider?: IJudgeProvider;
+  judgeConfidenceThreshold?: number;
 }
 
 export async function runFullGenerationPipeline(
@@ -76,13 +79,17 @@ export async function runFullGenerationPipeline(
     { modelId }
   );
 
-  // Step 4: Independent Validation
+  // Step 4: Independent Validation (with pluggable JudgeProvider)
   const traces: ItemTrace[] = await validateAllItems(
     genResult.items,
     subject,
     grade,
     provider,
-    { modelId }
+    {
+      modelId,
+      judgeProvider: params.judgeProvider,
+      judgeConfidenceThreshold: params.judgeConfidenceThreshold,
+    }
   );
 
   // Step 5: Variant Equivalence

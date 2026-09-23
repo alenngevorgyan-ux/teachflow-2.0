@@ -84,13 +84,23 @@ export const ReviewQueuePage: React.FC<ReviewQueuePageProps> = ({
             >
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                 <div className="space-y-1.5 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-mono font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
                       {item.id}
                     </span>
                     <Badge variant={trace.status === 'FAIL' ? 'fail' : 'warn'}>
                       {trace.status}
                     </Badge>
+                    {trace.judgeProviderId && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono">
+                        Judge: {trace.judgeProviderId}
+                      </span>
+                    )}
+                    {trace.confidence !== undefined && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-mono font-medium">
+                        Conf: {(trace.confidence * 100).toFixed(0)}%
+                      </span>
+                    )}
                     <span className="text-xs text-gray-700 font-medium">
                       Թեստ՝ «{topic}»
                     </span>

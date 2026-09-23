@@ -9,6 +9,7 @@ import { runFullGenerationPipeline } from '../pipeline/orchestrator.js';
 import { retrieveChunks } from '../pipeline/retrieval.js';
 import { validateSingleItem } from '../pipeline/validator.js';
 import { getProvider } from '../providers/modelProvider.js';
+import { getJudgeProvider, isTypeSafeJevConfigured } from '../providers/judgeProvider.js';
 import { repository } from '../store/repository.js';
 
 export function createApiRouter(): Router {
@@ -245,6 +246,27 @@ export function createApiRouter(): Router {
     res.json({ success: ok });
   });
 
+  // --- Judge Status ---
+  router.get('/judge/status', (_req: Request, res: Response) => {
+    res.json({
+      availableJudges: [
+        {
+          id: 'gemini',
+          name: 'Google Gemini 3.8 Flash (T=0, Structured)',
+          configured: Boolean(process.env.GEMINI_API_KEY),
+          isDefault: true,
+        },
+        {
+          id: 'typesafe_jev',
+          name: 'TypeSafe Jev API',
+          configured: isTypeSafeJevConfigured(),
+          isDefault: false,
+        },
+      ],
+      typeSafeConfigured: isTypeSafeJevConfigured(),
+    });
+  });
+
   // --- Assessments ---
   router.post('/assessments/generate', async (req: Request, res: Response) => {
     try {
@@ -256,6 +278,8 @@ export function createApiRouter(): Router {
         providerId = 'gemini',
         modelId,
         generateOnlyCoveredPart,
+        judgeProviderId = 'gemini',
+        judgeConfidenceThreshold,
       } = req.body;
 
       if (!subject || !grade || !topic) {
@@ -263,6 +287,8 @@ export function createApiRouter(): Router {
       }
 
       const provider = getProvider(providerId);
+      const judgeProvider = getJudgeProvider(judgeProviderId);
+
       const assessment = await runFullGenerationPipeline({
         subject,
         grade: Number(grade),
@@ -271,6 +297,9 @@ export function createApiRouter(): Router {
         provider,
         modelId,
         generateOnlyCoveredPart: Boolean(generateOnlyCoveredPart),
+        judgeProvider,
+        judgeConfidenceThreshold:
+          typeof judgeConfidenceThreshold === 'number' ? judgeConfidenceThreshold : 0.8,
       });
 
       res.json({ assessment });
@@ -311,11 +340,18 @@ export function createApiRouter(): Router {
 
       // Re-run validation for edited item
       const provider = getProvider('gemini');
+      const { judgeProviderId = 'gemini', judgeConfidenceThreshold } = req.body;
+      const judgeProvider = getJudgeProvider(judgeProviderId);
       const { trace } = await validateSingleItem(
         updatedItem,
         assessment.subject,
         assessment.grade,
-        provider
+        provider,
+        {
+          judgeProvider,
+          judgeConfidenceThreshold:
+            typeof judgeConfidenceThreshold === 'number' ? judgeConfidenceThreshold : 0.8,
+        }
       );
 
       assessment.items[itemIdx] = updatedItem;
@@ -342,18 +378,33 @@ export function createApiRouter(): Router {
   // --- Validate Material ---
   router.post('/validate-material', async (req: Request, res: Response) => {
     try {
-      const { subject, grade, text, selectedSourceIds, providerId = 'gemini' } = req.body;
+      const {
+        subject,
+        grade,
+        text,
+        selectedSourceIds,
+        providerId = 'gemini',
+        judgeProviderId = 'gemini',
+        judgeConfidenceThreshold,
+      } = req.body;
       if (!subject || !grade || !text) {
         return res.status(400).json({ error: 'Subject, grade, and text are required.' });
       }
 
       const provider = getProvider(providerId);
+      const judgeProvider = getJudgeProvider(judgeProviderId);
+
       const report = await validateExternalMaterial(
         provider,
         subject,
         Number(grade),
         text,
-        selectedSourceIds
+        selectedSourceIds,
+        {
+          judgeProvider,
+          judgeConfidenceThreshold:
+            typeof judgeConfidenceThreshold === 'number' ? judgeConfidenceThreshold : 0.8,
+        }
       );
       res.json({ report });
     } catch (err: unknown) {
@@ -383,6 +434,8 @@ export function createApiRouter(): Router {
         numberOfRuns = 3,
         providerId = 'gemini',
         modelId,
+        judgeProviderId = 'gemini',
+        judgeConfidenceThreshold,
       } = req.body;
 
       const provider = getProvider(providerId);
@@ -394,6 +447,9 @@ export function createApiRouter(): Router {
         selectedSourceIds,
         numberOfRuns: Number(numberOfRuns) || 3,
         modelId,
+        judgeProviderId,
+        judgeConfidenceThreshold:
+          typeof judgeConfidenceThreshold === 'number' ? judgeConfidenceThreshold : 0.8,
       });
 
       res.json({ report });

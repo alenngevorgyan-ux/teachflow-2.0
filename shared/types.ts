@@ -69,6 +69,9 @@ export interface CheckResult {
   kind: 'deterministic' | 'llm_judged';
   result: 'pass' | 'warn' | 'fail';
   detail: string;
+  judgeProviderId?: string;
+  judgeModelId?: string;
+  confidence?: number;
 }
 
 export interface ItemTrace {
@@ -78,6 +81,9 @@ export interface ItemTrace {
   templateId?: string;
   providerId: string;
   modelId: string;
+  judgeProviderId?: string;
+  judgeModelId?: string;
+  confidence?: number;
   policyVersion: string;
   generatedAt: string;
   checks: CheckResult[];
@@ -187,6 +193,8 @@ export interface SideBySideReport {
   numberOfRuns: number;
   executedAt: string;
   modelId: string;
+  judgeProviderId?: string;
+  judgeAgreementRate?: number; // e.g. 0.92 for 92% agreement between Gemini and Jev
   baselineRuns: ScorecardMetric[];
   teachflowRuns: ScorecardMetric[];
   aggregated: {

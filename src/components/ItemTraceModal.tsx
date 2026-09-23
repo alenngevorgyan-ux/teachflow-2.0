@@ -94,19 +94,25 @@ export const ItemTraceModal: React.FC<ItemTraceModalProps> = ({
             </div>
           </div>
 
-          {/* Model and Policy Environment */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Model, Judge and Policy Environment */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <div className="p-3 border border-gray-200 rounded-lg bg-white">
-              <span className="text-xs text-gray-700 block">Մոդել (Model ID)</span>
+              <span className="text-xs text-gray-700 block">Գեներացման մոդել</span>
               <span className="font-mono text-xs font-medium text-gray-900 flex items-center gap-1 mt-0.5">
                 <Cpu className="w-3.5 h-3.5 text-indigo-500" />
                 {trace.modelId}
               </span>
             </div>
             <div className="p-3 border border-gray-200 rounded-lg bg-white">
-              <span className="text-xs text-gray-700 block">Պրովայդեր</span>
-              <span className="text-xs font-medium text-gray-900 capitalize mt-0.5 block">
-                {trace.providerId}
+              <span className="text-xs text-gray-700 block">Դատավոր (Judge)</span>
+              <span className="text-xs font-semibold text-indigo-900 capitalize mt-0.5 block truncate">
+                {trace.judgeProviderId === 'typesafe_jev' ? 'TypeSafe Jev' : 'Gemini Judge'}
+              </span>
+            </div>
+            <div className="p-3 border border-gray-200 rounded-lg bg-white">
+              <span className="text-xs text-gray-700 block">Դատավորի վստահություն</span>
+              <span className="font-mono text-xs font-bold text-gray-900 mt-0.5 block">
+                {trace.confidence !== undefined ? `${(trace.confidence * 100).toFixed(0)}%` : '—'}
               </span>
             </div>
             <div className="p-3 border border-gray-200 rounded-lg bg-white col-span-2">
@@ -171,11 +177,21 @@ export const ItemTraceModal: React.FC<ItemTraceModalProps> = ({
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-gray-900">{chk.label}</span>
                       <span className="text-[10px] text-gray-700 font-mono">
                         ({chk.kind})
                       </span>
+                      {chk.judgeProviderId && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono">
+                          Judge: {chk.judgeProviderId}
+                        </span>
+                      )}
+                      {chk.confidence !== undefined && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-mono font-medium">
+                          Conf: {(chk.confidence * 100).toFixed(0)}%
+                        </span>
+                      )}
                       <Badge
                         size="sm"
                         variant={
