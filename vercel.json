@@ -4,6 +4,9 @@
   "installCommand": "npm install --legacy-peer-deps",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/mcp/(.*)", "destination": "/api" }
+    { "source": "/mcp", "destination": "/api" },
+    { "source": "/mcp/(.*)", "destination": "/api" },
+    { "source": "/sse", "destination": "/api" },
+    { "source": "/sse/(.*)", "destination": "/api" }
   ]
 }
