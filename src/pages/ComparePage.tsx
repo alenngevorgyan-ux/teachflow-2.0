@@ -22,6 +22,13 @@ interface ComparePageProps {
 
 export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
   const t = translations[lang];
+  const na = t.compare.notAvailable;
+  const num = (v: number | null | undefined, digits = 1) =>
+    v === null || v === undefined ? na : v.toFixed(digits);
+  const pct = (v: number | null | undefined) =>
+    v === null || v === undefined ? na : `${(v * 100).toFixed(0)}%`;
+  const secs = (v: number | null | undefined) =>
+    v === null || v === undefined ? na : `${(v / 1000).toFixed(1)} վրկ`;
 
   const [subject, setSubject] = useState('Բնագիտություն');
   const [grade, setGrade] = useState(5);
@@ -94,12 +101,12 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
 
   const exportCsv = () => {
     if (!report) return;
-    let csv = 'Run,Engine,UnsupportedClaims,CorrectRefusal,MethodAsFact,NoQuote,Equivalence,MachineTrace,LatencyMs\n';
+    let csv = 'Run,Engine,UnsupportedClaims,CorrectRefusal,MethodAsFact,NoQuote,Equivalence,MachineTrace,LatencyMs,Error\n';
     report.baselineRuns.forEach((r) => {
-      csv += `${r.runIndex},Baseline,${r.unsupportedClaimsCount},${r.correctRefusal},${r.methodUsedAsFactCount},${r.itemsWithoutVerifiableQuote},${r.variantEquivalencePassed},${r.machineReadableTrace},${r.latencyMs}\n`;
+      csv += `${r.runIndex},Baseline,${r.unsupportedClaimsCount},${r.correctRefusal},${r.methodUsedAsFactCount},${r.itemsWithoutVerifiableQuote},${r.variantEquivalencePassed},${r.machineReadableTrace ?? ''},${r.latencyMs},${JSON.stringify(r.error ?? '')}\n`;
     });
     report.teachflowRuns.forEach((r) => {
-      csv += `${r.runIndex},TeachFlow,${r.unsupportedClaimsCount},${r.correctRefusal},${r.methodUsedAsFactCount},${r.itemsWithoutVerifiableQuote},${r.variantEquivalencePassed},${r.machineReadableTrace},${r.latencyMs}\n`;
+      csv += `${r.runIndex},TeachFlow,${r.unsupportedClaimsCount},${r.correctRefusal},${r.methodUsedAsFactCount},${r.itemsWithoutVerifiableQuote},${r.variantEquivalencePassed},${r.machineReadableTrace ?? ''},${r.latencyMs},${JSON.stringify(r.error ?? '')}\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -398,11 +405,10 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                 </div>
               ) : (
                 <div>
-                  <span className="text-xl font-bold font-mono text-gray-500">
-                    94%
-                  </span>
+                  <span className="text-xl font-bold font-mono text-gray-500">{na}</span>
                   <p className="text-[10px] text-gray-500">
-                    {typeSafeConfigured ? 'Հաշվարկվում է հաջորդ գործարկմանը' : 'Հենանիշային (TYPESAFE_API_KEY բացակայում է)'}
+                    {t.compare.agreementNotComputed}
+                    {typeSafeConfigured ? '' : ' (TYPESAFE_API_KEY)'}
                   </p>
                 </div>
               )}
@@ -435,14 +441,23 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-gray-800">
                   <tr>
+                    <td className="p-3 font-medium text-gray-900">{t.compare.metricRuns}</td>
+                    <td className="p-3 font-mono">
+                      {report.aggregated.baseline.validRuns ?? na} / {report.aggregated.baseline.errorRuns ?? na}
+                    </td>
+                    <td className="p-3 font-mono">
+                      {report.aggregated.teachflow.validRuns ?? na} / {report.aggregated.teachflow.errorRuns ?? na}
+                    </td>
+                  </tr>
+                  <tr>
                     <td className="p-3 font-medium text-gray-900">
                       {t.compare.metricUnsupported}
                     </td>
                     <td className="p-3 font-mono">
-                      {report.aggregated.baseline.avgUnsupportedClaims.toFixed(1)}
+                      {num(report.aggregated.baseline.avgUnsupportedClaims)}
                     </td>
                     <td className="p-3 font-mono font-bold text-indigo-700">
-                      {report.aggregated.teachflow.avgUnsupportedClaims.toFixed(1)}
+                      {num(report.aggregated.teachflow.avgUnsupportedClaims)}
                     </td>
                   </tr>
                   <tr>
@@ -450,10 +465,10 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                       {t.compare.metricRefusal}
                     </td>
                     <td className="p-3 font-mono">
-                      {(report.aggregated.baseline.refusalCorrectnessRate * 100).toFixed(0)}%
+                      {pct(report.aggregated.baseline.refusalCorrectnessRate)}
                     </td>
                     <td className="p-3 font-mono font-bold text-indigo-700">
-                      {(report.aggregated.teachflow.refusalCorrectnessRate * 100).toFixed(0)}%
+                      {pct(report.aggregated.teachflow.refusalCorrectnessRate)}
                     </td>
                   </tr>
                   <tr>
@@ -461,10 +476,10 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                       {t.compare.metricMethodAsFact}
                     </td>
                     <td className="p-3 font-mono">
-                      {report.aggregated.baseline.methodAsFactRate.toFixed(1)}
+                      {num(report.aggregated.baseline.methodAsFactRate)}
                     </td>
                     <td className="p-3 font-mono font-bold text-indigo-700">
-                      {report.aggregated.teachflow.methodAsFactRate.toFixed(1)}
+                      {num(report.aggregated.teachflow.methodAsFactRate)}
                     </td>
                   </tr>
                   <tr>
@@ -472,10 +487,10 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                       {t.compare.metricUnverifiableQuotes}
                     </td>
                     <td className="p-3 font-mono">
-                      {report.aggregated.baseline.unverifiableQuoteRate.toFixed(1)}
+                      {num(report.aggregated.baseline.unverifiableQuoteRate)}
                     </td>
                     <td className="p-3 font-mono font-bold text-indigo-700">
-                      {report.aggregated.teachflow.unverifiableQuoteRate.toFixed(1)}
+                      {num(report.aggregated.teachflow.unverifiableQuoteRate)}
                     </td>
                   </tr>
                   <tr>
@@ -483,10 +498,10 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                       {t.compare.metricEquivalence}
                     </td>
                     <td className="p-3 font-mono">
-                      {(report.aggregated.baseline.equivalencePassRate * 100).toFixed(0)}%
+                      {pct(report.aggregated.baseline.equivalencePassRate)}
                     </td>
                     <td className="p-3 font-mono font-bold text-indigo-700">
-                      {(report.aggregated.teachflow.equivalencePassRate * 100).toFixed(0)}%
+                      {pct(report.aggregated.teachflow.equivalencePassRate)}
                     </td>
                   </tr>
                   <tr>
@@ -494,21 +509,21 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                       {t.compare.metricStability}
                     </td>
                     <td className="p-3 font-mono">
-                      {report.aggregated.baseline.stabilityAcrossRuns.toFixed(2)}
+                      {num(report.aggregated.baseline.stabilityAcrossRuns, 2)}
                     </td>
                     <td className="p-3 font-mono font-bold text-indigo-700">
-                      {report.aggregated.teachflow.stabilityAcrossRuns.toFixed(2)}
+                      {num(report.aggregated.teachflow.stabilityAcrossRuns, 2)}
                     </td>
                   </tr>
                   <tr>
                     <td className="p-3 font-medium text-gray-900">
-                      {t.compare.metricTrace}
+                      {t.compare.metricTraceRate}
                     </td>
-                    <td className="p-3">
-                      <span className="text-rose-600 font-medium">Ոչ (Չկա մեքենայական հետագիծ)</span>
+                    <td className="p-3 font-mono">
+                      {pct(report.aggregated.baseline.machineReadableTraceRate)}
                     </td>
-                    <td className="p-3">
-                      <span className="text-emerald-700 font-bold">Այո (Per-item verifiable trace)</span>
+                    <td className="p-3 font-mono font-bold text-indigo-700">
+                      {pct(report.aggregated.teachflow.machineReadableTraceRate)}
                     </td>
                   </tr>
                   <tr>
@@ -516,12 +531,65 @@ export const ComparePage: React.FC<ComparePageProps> = ({ lang }) => {
                       Միջին տևողություն (Latency)
                     </td>
                     <td className="p-3 font-mono">
-                      {(report.aggregated.baseline.avgLatencyMs / 1000).toFixed(1)} վրկ
+                      {secs(report.aggregated.baseline.avgLatencyMs)}
                     </td>
                     <td className="p-3 font-mono">
-                      {(report.aggregated.teachflow.avgLatencyMs / 1000).toFixed(1)} վրկ
+                      {secs(report.aggregated.teachflow.avgLatencyMs)}
                     </td>
                   </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Per-run details: errors are shown, never counted as refusals */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-xs">
+            <div className="p-4 bg-gray-50 border-b border-gray-200">
+              <h3 className="text-sm font-bold text-gray-900">{t.compare.runDetails}</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-gray-100/70 border-b border-gray-200 text-gray-700">
+                  <tr>
+                    <th className="p-3 font-semibold">{t.compare.colRun}</th>
+                    <th className="p-3 font-semibold">{t.compare.colEngine}</th>
+                    <th className="p-3 font-semibold">{t.compare.colOutcome}</th>
+                    <th className="p-3 font-semibold">{t.compare.colItems}</th>
+                    <th className="p-3 font-semibold">{t.compare.colQuotes}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-gray-800">
+                  {[
+                    ...report.baselineRuns.map((r) => ({ r, engine: 'Baseline' })),
+                    ...report.teachflowRuns.map((r) => ({ r, engine: 'TeachFlow' })),
+                  ].map(({ r, engine }) => (
+                    <tr key={`${engine}-${r.runIndex}`}>
+                      <td className="p-3 font-mono">{r.runIndex}</td>
+                      <td className="p-3">{engine}</td>
+                      <td className="p-3">
+                        {r.error ? (
+                          <span className="text-rose-700 font-bold">
+                            {t.compare.outcomeError}: <span className="font-normal">{r.error}</span>
+                          </span>
+                        ) : r.refused ? (
+                          <span>
+                            {t.compare.outcomeRefused}
+                            {r.refusalReason ? ` — ${r.refusalReason}` : ''}
+                          </span>
+                        ) : r.refused === false ? (
+                          t.compare.outcomeGenerated
+                        ) : (
+                          na
+                        )}
+                      </td>
+                      <td className="p-3 font-mono">{r.itemsCount ?? na}</td>
+                      <td className="p-3 font-mono">
+                        {r.citationResolution
+                          ? `${r.citationResolution.verbatim} / ${r.citationResolution.overlap} / ${r.citationResolution.bestFact} / ${r.citationResolution.unresolved} / ${r.parserDroppedQuotes ?? 0}`
+                          : na}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

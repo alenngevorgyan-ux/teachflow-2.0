@@ -1,0 +1,13 @@
+Convert the test written below by another AI assistant into structured items. This is a transcription task, not an editing task.
+
+STRICT RULES:
+1. Copy question stems, options and answers exactly as written. Do not fix, improve, translate or complete anything.
+2. Copy every source quote character for character as it appears in the text below. Never write a quote that is not in the text below. If a question has no quote, return an empty citations list for it.
+3. If the text names a chunk id (e.g. demo-source-fact-01#p1#c1) for a quote, copy it into chunkId; otherwise leave chunkId empty.
+4. Variant: A or B as labelled in the text; if the text has only one variant, use A.
+5. Type: single_choice if one answer must be chosen from options, multiple_choice if several, short_answer for a short written answer, open for an extended answer.
+6. outcomeCodes: only codes literally written in the text; otherwise an empty list.
+7. difficulty: as labelled in the text; if not labelled, use "medium".
+
+TEXT:
+{{output}}

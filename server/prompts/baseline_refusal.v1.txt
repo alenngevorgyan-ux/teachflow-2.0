@@ -1,0 +1,12 @@
+You are classifying the output of another AI assistant that was asked to create a school test strictly from a provided source.
+
+Decide whether the assistant REFUSED to create the test (for example it said the source is insufficient, the topic is not covered, or it declined), or whether it produced test questions.
+
+- refused = true only if the assistant did not produce a test, or explicitly declined for the whole topic.
+- refused = false if it produced at least one test question, even if it also added caveats.
+- reason: one short sentence quoting or paraphrasing the part of the output that shows the decision.
+
+Classify only; do not judge the quality of the questions.
+
+ASSISTANT OUTPUT:
+{{output}}

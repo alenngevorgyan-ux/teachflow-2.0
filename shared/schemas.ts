@@ -32,6 +32,30 @@ export const AssessmentGenerationOutputSchema = z.object({
 
 export type AssessmentGenerationOutput = z.infer<typeof AssessmentGenerationOutputSchema>;
 
+// Transcription of a baseline (plain AI) test: quotes are kept as written,
+// chunk ids are optional because a plain assistant usually does not give them.
+export const BaselineParseSchema = z.object({
+  items: z.array(
+    AssessmentItemSchema.extend({
+      citations: z.array(
+        z.object({
+          chunkId: z.string().optional().describe('Chunk id only if literally written in the text'),
+          quote: z.string().describe('The source quote exactly as written in the text'),
+        })
+      ),
+    })
+  ),
+});
+
+export type BaselineParseOutput = z.infer<typeof BaselineParseSchema>;
+
+export const BaselineRefusalSchema = z.object({
+  refused: z.boolean(),
+  reason: z.string(),
+});
+
+export type BaselineRefusalOutput = z.infer<typeof BaselineRefusalSchema>;
+
 export const ClaimJudgeSchema = z.object({
   supportStatus: z.enum(['supported', 'partially_supported', 'not_supported']),
   confidence: z.number().min(0).max(1).optional(),

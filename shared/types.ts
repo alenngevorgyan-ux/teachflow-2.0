@@ -174,15 +174,40 @@ export interface RegressionRun {
 
 export interface ScorecardMetric {
   runIndex: number;
+  // Set when a model call failed; such a run is excluded from the aggregates.
+  error?: string;
+  refused?: boolean;
+  refusalReason?: string;
+  itemsCount?: number;
   unsupportedClaimsCount: number;
   correctRefusal: boolean;
   methodUsedAsFactCount: number;
   itemsWithoutVerifiableQuote: number;
   variantEquivalencePassed: boolean;
-  machineReadableTrace: boolean;
+  // null when the run produced no items (nothing to trace)
+  machineReadableTrace: boolean | null;
   internalViolationsCaught: number;
   validatorViolationsCaught: number;
   latencyMs: number;
+  // Baseline only: how each quote was located in the retrieved chunks
+  citationResolution?: { verbatim: number; overlap: number; bestFact: number; unresolved: number };
+  // Baseline only: quotes the parser returned that are not in the raw output (dropped)
+  parserDroppedQuotes?: number;
+  rawOutput?: string;
+}
+
+// null = no successful run to compute from
+export interface CompareAggregate {
+  validRuns: number;
+  errorRuns: number;
+  avgUnsupportedClaims: number | null;
+  refusalCorrectnessRate: number | null;
+  methodAsFactRate: number | null;
+  unverifiableQuoteRate: number | null;
+  equivalencePassRate: number | null;
+  stabilityAcrossRuns: number | null; // 0-1, share of runs agreeing with the majority refusal decision
+  machineReadableTraceRate: number | null;
+  avgLatencyMs: number | null;
 }
 
 export interface SideBySideReport {
@@ -199,24 +224,8 @@ export interface SideBySideReport {
   baselineRuns: ScorecardMetric[];
   teachflowRuns: ScorecardMetric[];
   aggregated: {
-    baseline: {
-      avgUnsupportedClaims: number;
-      refusalCorrectnessRate: number;
-      methodAsFactRate: number;
-      unverifiableQuoteRate: number;
-      equivalencePassRate: number;
-      stabilityAcrossRuns: number; // 0-1
-      avgLatencyMs: number;
-    };
-    teachflow: {
-      avgUnsupportedClaims: number;
-      refusalCorrectnessRate: number;
-      methodAsFactRate: number;
-      unverifiableQuoteRate: number;
-      equivalencePassRate: number;
-      stabilityAcrossRuns: number; // 0-1
-      avgLatencyMs: number;
-    };
+    baseline: CompareAggregate;
+    teachflow: CompareAggregate;
   };
 }
 
