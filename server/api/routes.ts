@@ -841,6 +841,25 @@ export function createApiRouter(): Router {
     res.json({ answerSheets: repository.getAnswerSheets(assessmentId ? String(assessmentId) : undefined) });
   });
 
+  // Must be registered before GET /answer-sheets/:id, or Express would match
+  // "qr" as the :id param.
+  router.get('/answer-sheets/qr', async (req: Request, res: Response) => {
+    try {
+      const { assessmentId, variant } = req.query;
+      if (!assessmentId || (variant !== 'A' && variant !== 'B')) {
+        return res.status(400).json({ error: 'Missing assessmentId or variant (A|B)' });
+      }
+      const dataUrl = await generateAnswerSheetQrDataUrl({
+        assessmentId: String(assessmentId),
+        variant: variant as 'A' | 'B',
+      });
+      res.json({ dataUrl });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
   router.get('/answer-sheets/:id', (req: Request, res: Response) => {
     const sheet = repository.getAnswerSheet(req.params.id);
     if (!sheet) return res.status(404).json({ error: 'Answer sheet not found' });
@@ -898,25 +917,6 @@ export function createApiRouter(): Router {
       });
 
       res.json({ answerSheet: result.submission, qrDecoded: result.qrDecoded, warnings: result.warnings });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: msg });
-    }
-  });
-
-  // Generates a real QR code (assessmentId + variant encoded) for the
-  // printable blank answer-sheet template.
-  router.get('/answer-sheets/qr', async (req: Request, res: Response) => {
-    try {
-      const { assessmentId, variant } = req.query;
-      if (!assessmentId || (variant !== 'A' && variant !== 'B')) {
-        return res.status(400).json({ error: 'Missing assessmentId or variant (A|B)' });
-      }
-      const dataUrl = await generateAnswerSheetQrDataUrl({
-        assessmentId: String(assessmentId),
-        variant: variant as 'A' | 'B',
-      });
-      res.json({ dataUrl });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: msg });
