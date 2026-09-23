@@ -39,9 +39,9 @@ The core bet: generation is a commodity. TeachFlow is only valuable if it can **
 - `server/api/routes.ts`: REST API. `server/mcp/index.ts`: MCP tools.
 - `src/pages/`: one page per module; `src/i18n/translations.ts`: hy / ru / en strings (Armenian primary, reformed orthography).
 
-## Honest status (as of 2026-09-24) — see TASKS.md
-Real: registry, citation/quote/FACT-vs-METHOD checks, coverage gate, validation of pasted material, deterministic grading and item analysis, report data model and lifecycle, Armenian eval harness (lenient scoring), legacy import via Gemini with verbatim-quote verification.
-Simulated or incomplete: thematic plan generator (hardcoded), lesson plan generator (template), answer-sheet image reading (not implemented), workspace chat (keyword routing, no confirmation chips), compare screen (biased against baseline), retrieval (no top-K / no embeddings), PDF/DOCX upload, MCP transport (SSE), tests.
+## Honest status — full version in README.md ("Honest status")
+Real: P0–P2 tasks T0–T16 in TASKS.md (registry + upload/OCR, top-K hybrid retrieval, coverage gate, generation + per-item validation, material validation, fair compare, thematic/lesson plans via structured calls, chat with confirmation chips, answer-sheet vision + QR + grading, legacy import with verbatim quotes, strict Armenian eval, MCP Streamable HTTP, privacy guard).
+Demo / partial / known gaps: all data synthetic; report templates and EMIS CSV are drafts; Dashboards page is hand-written numbers (labelled DEMO DATA); reportReviewer evaluates only two template rules and marks all others (incl. llm_judged) as passed — known bug; policyVersion hardcodes 6 of 14 prompt versions; no auth (role switcher is UI only); JSON store is not persistent on Vercel.
 
 ## How to work in this repo
 - Read TASKS.md first; work top-down; one task per commit with a clear message.

@@ -29,7 +29,7 @@ Already merged into this base (from the interrupted AI Studio session): default 
 - [x] **T14. Privacy guard** on every write path (materials, report fields, legacy import, student codes, chat). Flag name+surname only near student codes / class labels / phone / email; do not block historical names in content (e.g. «Տիգրան Մեծ»).
 - [x] **T15. Clean install** without `--legacy-peer-deps`.
 - [x] **T16. Demo data** uses the 2026–2027 academic year; remove invented curriculum codes from demo seeds or label them clearly as fictional.
-- [ ] **T17. README**: setup, env, architecture, honest limitations.
+- [x] **T17. README**: setup, env, architecture, honest limitations.
 
 ## Later (after teacher/KTAK feedback — do not start without confirmation)
 - Real report forms from schools → templates.
