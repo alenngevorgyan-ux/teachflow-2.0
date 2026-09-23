@@ -98,3 +98,49 @@ export const ExtractedOutcomesSchema = z.object({
 });
 
 export type ExtractedOutcomesOutput = z.infer<typeof ExtractedOutcomesSchema>;
+
+export const ThematicPlanRowSchema = z.object({
+  topic: z.string(),
+  outcomeCodes: z.array(z.string()),
+  plannedHours: z.number().min(1),
+  weekNumber: z.number().min(1),
+  plannedDates: z.string(),
+  hasAssessment: z.boolean(),
+  assessmentType: z.enum(['diagnostic', 'formative', 'summative']).optional(),
+});
+
+export const ThematicPlanOutputSchema = z.object({
+  title: z.string(),
+  subject: z.string(),
+  grade: z.number(),
+  weeklyHours: z.number(),
+  totalAnnualHours: z.number(),
+  rows: z.array(ThematicPlanRowSchema),
+});
+
+export const AnswerSheetScanOutputSchema = z.object({
+  testId: z.string(),
+  variant: z.enum(['A', 'B']),
+  studentCode: z.string(),
+  answers: z.array(
+    z.object({
+      itemIndex: z.number(),
+      studentAnswer: z.string(),
+      confidence: z.number().min(0).max(1),
+      aiRubricReasoning: z.string().optional(),
+      pointsProposed: z.number().optional(),
+    })
+  ),
+});
+
+export const LegacyReportExtractionOutputSchema = z.object({
+  fields: z.record(
+    z.string(),
+    z.object({
+      value: z.any(),
+      confidence: z.number().min(0).max(1),
+      sourceLocation: z.string().optional(),
+    })
+  ),
+  summaryArmenian: z.string(),
+});

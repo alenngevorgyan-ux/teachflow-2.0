@@ -8,6 +8,16 @@ import { normalizeArmenianText } from '../pipeline/normalization.js';
 import { runFullGenerationPipeline } from '../pipeline/orchestrator.js';
 import { retrieveChunks } from '../pipeline/retrieval.js';
 import { repository } from '../store/repository.js';
+import {
+  generateThematicPlan,
+  validateThematicPlanDeterministically,
+} from '../pipeline/thematicPlanGenerator.js';
+import { generateLessonPlanFromRow } from '../pipeline/lessonPlanGenerator.js';
+import { gradeSubmissionDeterministically } from '../pipeline/autoGrader.js';
+import { runReportReview } from '../pipeline/reportReviewer.js';
+import { importLegacyReport } from '../pipeline/legacyReportImporter.js';
+import { emisAdapter } from '../pipeline/emisAdapter.js';
+import { runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
@@ -142,6 +152,249 @@ export function createMcpServer(): McpServer {
           {
             type: 'text',
             text: JSON.stringify(report, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Tool 5: thematic_plan_generate
+  server.tool(
+    'thematic_plan_generate',
+    'Generate or scaffold a deterministic curriculum-aligned annual thematic plan with hours and outcomes',
+    {
+      subject: z.string(),
+      grade: z.number(),
+      academicYear: z.string().default('2025-2026'),
+      schoolId: z.string().default('sch-1'),
+      weeklyHours: z.number().default(2),
+      totalAnnualHours: z.number().default(68),
+    },
+    async ({ subject, grade, academicYear, schoolId, weeklyHours, totalAnnualHours }) => {
+      const plan = await generateThematicPlan({
+        subject,
+        grade,
+        programVersion: '2025-v1',
+        academicYear,
+        schoolId,
+        schoolName: 'Դպրոց Ա (Երևան, հ. 120 հիմնական դպրոց)',
+        teacherName: 'Ուսուցիչ Ա',
+        weeklyHours,
+        totalAnnualHours,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(plan, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Tool 6: thematic_plan_validate
+  server.tool(
+    'thematic_plan_validate',
+    'Deterministically validate a thematic plan against curriculum hours, mandatory outcomes, and calendar',
+    {
+      planId: z.string(),
+    },
+    async ({ planId }) => {
+      const plan = repository.getThematicPlan(planId);
+      if (!plan) throw new Error(`Plan not found: ${planId}`);
+      const outcomes = repository.getConfirmedOutcomes(plan.subject, plan.grade);
+      const errors = validateThematicPlanDeterministically(plan, outcomes);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ planId, valid: errors.length === 0, errors }, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Tool 7: lesson_plan_generate
+  server.tool(
+    'lesson_plan_generate',
+    'Generate a 45-minute lesson plan from a thematic plan row, grounded in FACT sources with citations',
+    {
+      thematicPlanId: z.string(),
+      rowId: z.string(),
+      durationMinutes: z.number().default(45),
+    },
+    async ({ thematicPlanId, rowId, durationMinutes }) => {
+      const lessonPlan = await generateLessonPlanFromRow({
+        thematicPlanId,
+        rowId,
+        durationMinutes,
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(lessonPlan, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Tool 8: answer_sheet_grade
+  server.tool(
+    'answer_sheet_grade',
+    'Deterministically grade an answer sheet against assessment answer key and propose rubric points for open answers',
+    {
+      assessmentId: z.string(),
+      variant: z.enum(['A', 'B']).default('A'),
+      studentCode: z.string().default('7B-01'),
+      answers: z.array(
+        z.object({
+          itemIndex: z.number(),
+          itemId: z.string(),
+          studentAnswer: z.string(),
+        })
+      ),
+    },
+    async ({ assessmentId, variant, studentCode, answers }) => {
+      const assessment = repository.getAssessment(assessmentId);
+      if (!assessment) throw new Error(`Assessment not found: ${assessmentId}`);
+
+      const graded = gradeSubmissionDeterministically(assessment, {
+        assessmentId,
+        variant,
+        studentCode,
+        timestamp: new Date().toISOString(),
+        status: 'scanned_pending_review',
+        confidenceOverall: 0.96,
+        answers: answers.map((a) => ({ ...a, confidence: 0.95, isLowConfidence: false })),
+      });
+
+      repository.saveAnswerSheet(graded);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(graded, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Tool 9: report_review
+  server.tool(
+    'report_review',
+    'AI review assistant: verifies completeness, rules, registry consistency, source fidelity, anomalies, and summary',
+    {
+      reportId: z.string(),
+    },
+    async ({ reportId }) => {
+      const report = repository.getReport(reportId);
+      if (!report) throw new Error(`Report not found: ${reportId}`);
+      const reviewResult = runReportReview(report);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(reviewResult, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Tool 10: legacy_report_extract
+  server.tool(
+    'legacy_report_extract',
+    'Extract unstructured legacy report text into structured template schema with confidence and provenance',
+    {
+      rawText: z.string(),
+      fileName: z.string().default('legacy_report.txt'),
+      templateId: z.string().default('tpl-program-progress'),
+      schoolId: z.string().default('sch-1'),
+    },
+    async ({ rawText, fileName, templateId, schoolId }) => {
+      const report = await importLegacyReport({
+        rawText,
+        fileName,
+        templateId,
+        schoolId,
+        schoolName: 'Դպրոց Ա',
+        authorName: 'Ուսուցիչ (ներմուծված)',
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(report, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Tool 11: emis_export
+  server.tool(
+    'emis_export',
+    'Export grades, thematic plans, or reports to EMIS-compatible CSV format',
+    {
+      exportType: z.enum(['grades', 'thematic_plan', 'report']),
+      targetId: z.string(),
+    },
+    async ({ exportType, targetId }) => {
+      let csv = '';
+      if (exportType === 'grades') {
+        const assessment = repository.getAssessment(targetId);
+        if (!assessment) throw new Error('Assessment not found');
+        const sheets = repository.getAnswerSheets(targetId);
+        csv = emisAdapter.exportGradesCsv(assessment.topic, sheets);
+      } else if (exportType === 'thematic_plan') {
+        const plan = repository.getThematicPlan(targetId);
+        if (!plan) throw new Error('Plan not found');
+        csv = emisAdapter.exportThematicPlanCsv(plan);
+      } else {
+        const report = repository.getReport(targetId);
+        if (!report) throw new Error('Report not found');
+        csv = emisAdapter.exportReportCsv(report);
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: csv,
+          },
+        ],
+      };
+    }
+  );
+
+  // Tool 12: armenian_eval_run
+  server.tool(
+    'armenian_eval_run',
+    'Run frozen Armenian evaluation harness across orthography, grammar, terminology, OCR, citations, and refusals',
+    {
+      providerId: z.string().default('gemini'),
+      modelId: z.string().default('gemini-3.8-flash'),
+    },
+    async ({ providerId, modelId }) => {
+      const provider = getProvider(providerId);
+      const res = await runArmenianEvaluation(provider, modelId);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(res, null, 2),
           },
         ],
       };

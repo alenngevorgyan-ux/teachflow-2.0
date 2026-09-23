@@ -15,7 +15,7 @@
       "status": "active",
       "sha256": "2309ec4954d10f34875adf107a7813b83d9b0310e343efe410802ec8de893cd1",
       "isDemo": true,
-      "uploadedAt": "2026-09-23T08:40:18.058Z",
+      "uploadedAt": "2026-09-23T13:20:16.160Z",
       "chunks": [
         {
           "id": "demo-source-fact-01#p1#c1",
@@ -58,7 +58,7 @@
       "status": "active",
       "sha256": "0b8ee6d6de201f4b3eadb4ac0e8771b262c9806cb53ab36b307a90df827c550c",
       "isDemo": true,
-      "uploadedAt": "2026-09-23T08:40:18.059Z",
+      "uploadedAt": "2026-09-23T13:20:16.161Z",
       "chunks": [
         {
           "id": "demo-source-method-01#p1#c1",
@@ -71,6 +71,86 @@
           "sourceId": "demo-source-method-01",
           "page": 1,
           "text": "Արգելվում է օգտագործել երկակի ժխտումներով հարցեր (օրինակ՝ «Ստորև նշվածներից ո՞րը չի հանդիսանում ոչ կենդանի...»): Մեկ ընտրությամբ հարցերում ճիշտ պատասխանը պետք է լինի միակը և անվիճելին: Բարդության մակարդակները (հիմնական, միջին, առաջադեմ) պետք է հավասարաչափ բաշխված լինեն տարբերակների միջև:"
+        }
+      ]
+    },
+    {
+      "id": "demo-source-history-01",
+      "title": "Հայոց պատմություն 7-րդ դասարան (ՀՀ ԿԳՄՍՆ հաստատված դասագիրք / Demo)",
+      "authority": "ՀՀ ԿԳՄՍՆ / ԿԶՆԱԿ (Official Curriculum Demo)",
+      "docType": "textbook",
+      "subject": "Հայոց պատմություն",
+      "grades": [
+        7
+      ],
+      "role": "FACT",
+      "version": "2025-v1",
+      "effectiveFrom": "2025-01-01",
+      "status": "active",
+      "sha256": "624bc47c837d3056048afe29ec72f85fde4503f790239b751286c617b767ae29",
+      "isDemo": true,
+      "uploadedAt": "2026-09-23T13:20:16.161Z",
+      "chunks": [
+        {
+          "id": "demo-source-history-01#p1#c1",
+          "sourceId": "demo-source-history-01",
+          "page": 42,
+          "text": "Տիգրան Բ Մեծը Արտաշեսյան արքայատոհմի ամենանշանավոր գահակալն է, ով իշխել է մ.թ.ա. 95-55 թվականներին: Իր գահակալության սկզբում՝ մ.թ.ա. 94 թ., նա Մեծ Հայքի թագավորությանը միացրեց Ծոփքի թագավորությունը, որով սկիզբ դրվեց հայկական հողերի միավորմանը:"
+        },
+        {
+          "id": "demo-source-history-01#p1#c2",
+          "sourceId": "demo-source-history-01",
+          "page": 43,
+          "text": "Մ.թ.ա. 94 թ. Արտաշատում Տիգրան Բ-ն ռազմաքաղաքական դաշինք կնքեց Պոնտոսի թագավոր Միհրդատ VI Եվպատորի հետ՝ ամուսնանալով նրա դուստր Կլեոպատրայի հետ: Դաշնակիցները համատեղ ազատագրեցին Կապադովկիան:"
+        },
+        {
+          "id": "demo-source-history-01#p2#c1",
+          "sourceId": "demo-source-history-01",
+          "page": 46,
+          "text": "Մ.թ.ա. 83 թ. Սելևկյան տերության ավագանին Տիգրան Մեծին հրավիրեց Ասորիքի (Սիրիայի) գահին: Տիգրանը 17 տարի խաղաղությամբ կառավարեց Սիրիայում, իսկ նրա տերությունը տարածվում էր Կասպից ծովից մինչև Միջերկրական ծով և Կովկասյան լեռներից մինչև Եգիպտոս: Տիգրանը կրում էր «Արքայից արքա» տիտղոսը:"
+        },
+        {
+          "id": "demo-source-history-01#p2#c2",
+          "sourceId": "demo-source-history-01",
+          "page": 48,
+          "text": "Տերության աշխարհագրական կենտրոնում՝ Աղձնիք նահանգում, մ.թ.ա. 80-ական թթ. Տիգրան Բ-ն հիմնադրեց նոր մայրաքաղաք Տիգրանակերտը: Քաղաքն ուներ հզոր պարիսպներ, պալատներ, թատրոն, և բնակեցվեց նվաճված երկրներից տեղափոխված արհեստավորներով ու վաճառականներով:"
+        },
+        {
+          "id": "demo-source-history-01#p3#c1",
+          "sourceId": "demo-source-history-01",
+          "page": 54,
+          "text": "Մ.թ.ա. 66 թ. Արտաշատում Տիգրան Բ-ի և հռոմեացի զորավար Գնեոս Պոմպեոսի միջև կնքվեց հայ-հռոմեական հաշտության պայմանագիր: Հայաստանը զիջեց իր նվաճած տարածքները Սիրիայում և Միջագետքում, սակայն պահպանեց Մեծ Հայքի բուն տարածքային ամբողջականությունը (շուրջ 300,000 քառ. կմ): Տիգրան Մեծը ճանաչվեց «Հռոմեական ժողովրդի բարեկամ և դաշնակից»:"
+        }
+      ]
+    },
+    {
+      "id": "demo-source-history-method-01",
+      "title": "Պատմության առարկայական թեստավորման և գնահատման մեթոդական ուղեցույց",
+      "authority": "ԿԶՆԱԿ մեթոդական խորհուրդ",
+      "docType": "methodological_guide",
+      "subject": "Հայոց պատմություն",
+      "grades": [
+        7
+      ],
+      "role": "METHOD",
+      "version": "2025-v1",
+      "effectiveFrom": "2025-01-01",
+      "status": "active",
+      "sha256": "2d448ecba93baabffad06d56f60ef120e68e9a976617753aaf9e99564a215388",
+      "isDemo": true,
+      "uploadedAt": "2026-09-23T13:20:16.161Z",
+      "chunks": [
+        {
+          "id": "demo-source-history-method-01#p1#c1",
+          "sourceId": "demo-source-history-method-01",
+          "page": 1,
+          "text": "Պատմության առաջադրանքների մեթոդական պահանջներ. Ժամանակագրական տվյալները (տարեթվերը, դարերը, մ.թ.ա./մ.թ.) պետք է լինեն ճշգրիտ և համապատասխանեն պաշտոնական դասագրքին: Արգելվում են անորոշ հարցադրումները:"
+        },
+        {
+          "id": "demo-source-history-method-01#p1#c2",
+          "sourceId": "demo-source-history-method-01",
+          "page": 2,
+          "text": "Պատճառահետևանքային կապերի ստուգումը պետք է ուղղված լինի հիմնական պատմական իրադարձությունների (պայմանագրեր, ճակատամարտեր, բարեփոխումներ) իմաստավորմանը: Տարբերակներում արգելվում են պատմականորեն անհեթեթ կամ ակնհայտ սխալ հակասությունները:"
         }
       ]
     }
@@ -102,81 +182,101 @@
       "standardVersion": "2025-v1",
       "sourceId": "demo-source-fact-01",
       "confirmed": true
+    },
+    {
+      "code": "ՀՊ-7-1",
+      "text": "Նկարագրել Տիգրան Մեծի գահակալությունը (մ.թ.ա. 95-55 թթ.) և Հայկական տերության ձևավորումը:",
+      "subject": "Հայոց պատմություն",
+      "grade": 7,
+      "standardVersion": "2025-v1",
+      "sourceId": "demo-source-history-01",
+      "confirmed": true
+    },
+    {
+      "code": "ՀՊ-7-2",
+      "text": "Բնութագրել Տիգրանակերտ մայրաքաղաքի հիմնադրումը և դրա ռազմավարական ու մշակութային նշանակությունը:",
+      "subject": "Հայոց պատմություն",
+      "grade": 7,
+      "standardVersion": "2025-v1",
+      "sourceId": "demo-source-history-01",
+      "confirmed": true
+    },
+    {
+      "code": "ՀՊ-7-3",
+      "text": "Վերլուծել մ.թ.ա. 66 թ. Արտաշատի հայ-հռոմեական հաշտության պայմանագրի պայմանները և հետևանքները:",
+      "subject": "Հայոց պատմություն",
+      "grade": 7,
+      "standardVersion": "2025-v1",
+      "sourceId": "demo-source-history-01",
+      "confirmed": true
+    },
+    {
+      "code": "ՀՊ-7-4",
+      "text": "Գնահատել Տիգրան Մեծի պատմական դերը որպես «Արքայից արքա» և հայոց պետականության հզորացնող:",
+      "subject": "Հայոց պատմություն",
+      "grade": 7,
+      "standardVersion": "2025-v1",
+      "sourceId": "demo-source-history-01",
+      "confirmed": true
     }
   ],
   "rules": [
     {
-      "id": "rule-require-answer-key",
-      "title": "Ճիշտ պատասխանի առկայության պահանջ",
-      "description": "Յուրաքանչյուր առաջադրանք պարտադիր պետք է ունենա լրացված և վավեր ճիշտ պատասխան (Answer Key):",
-      "kind": "deterministic",
-      "params": {},
-      "severity": "error",
-      "active": true
-    },
-    {
-      "id": "rule-single-choice-one-answer",
-      "title": "Մեկ ընտրությամբ հարցում միակ ճիշտ պատասխան",
-      "description": "Մեկ ընտրությամբ առաջադրանքի ճիշտ պատասխանը պետք է լինի հստակ և համապատասխանի տրված տարբերակներից միայն մեկին:",
-      "kind": "deterministic",
-      "params": {},
-      "severity": "error",
-      "active": true
-    },
-    {
-      "id": "rule-min-options",
-      "title": "Ընտրովի առաջադրանքների տարբերակների նվազագույն քանակ",
-      "description": "Ընտրովի առաջադրանքը պետք է ունենա առնվազն 3 տարբերակ:",
+      "id": "rule-single-correct-answer",
+      "title": "Միակ ճշգրիտ պատասխանի պահանջ",
+      "description": "Մեկ ընտրությամբ հարցերում ճիշտ պատասխանը պետք է լինի միակը և միանշանակ:",
       "kind": "deterministic",
       "params": {
-        "min_options": 3
+        "minOptions": 3,
+        "maxOptions": 5
       },
       "severity": "error",
       "active": true
     },
     {
-      "id": "rule-max-items",
-      "title": "Տարբերակում առաջադրանքների առավելագույն քանակ",
-      "description": "Տարբերակը չպետք է գերազանցի սահմանված առաջադրանքների քանակը (կանխադրված 10):",
-      "kind": "deterministic",
+      "id": "rule-no-double-negation",
+      "title": "Երկակի ժխտման արգելք",
+      "description": "Հարցի ձևակերպման մեջ արգելվում է օգտագործել երկակի ժխտումներ (օրինակ՝ «չի հանդիսանում ոչ...»):",
+      "kind": "llm_judged",
       "params": {
-        "max_items": 10
-      },
-      "severity": "warning",
-      "active": true
-    },
-    {
-      "id": "rule-allowed-item-types",
-      "title": "Թույլատրելի առաջադրանքների տեսակներ",
-      "description": "Առաջադրանքների տեսակները պետք է լինեն հաստատված ցանկից (մեկ ընտրություն, բազմակի ընտրություն, կարճ պատասխան, բաց):",
-      "kind": "deterministic",
-      "params": {
-        "allowed_types": [
-          "single_choice",
-          "multiple_choice",
-          "short_answer",
-          "open"
+        "forbidPhrases": [
+          "չի հանդիսանում ոչ",
+          "չի կարելի չ"
         ]
       },
       "severity": "error",
       "active": true
     },
     {
-      "id": "rule-llm-no-double-negatives",
-      "title": "Երկակի ժխտումների և շփոթեցնող ձևակերպումների արգելք",
-      "description": "Հարցի ձևակերպման մեջ արգելվում են երկակի ժխտումներ և աշակերտին շփոթեցնող արհեստական թակարդներ:",
-      "kind": "llm_judged",
-      "params": {},
-      "severity": "warning",
-      "sourceId": "demo-source-method-01",
+      "id": "rule-factual-grounding",
+      "title": "Փաստացի մեջբերման պարտադիր պահանջ",
+      "description": "Յուրաքանչյուր առաջադրանք պետք է հղում ունենա հաստատված FACT աղբյուրի կոնկրետ հատվածին:",
+      "kind": "deterministic",
+      "params": {
+        "minCitations": 1
+      },
+      "severity": "error",
       "active": true
     },
     {
-      "id": "rule-llm-age-appropriate",
-      "title": "Տարիքային խմբին համապատասխան բառապաշար",
-      "description": "Հարցի լեզուն և տերմինաբանությունը պետք է համապատասխանեն տվյալ դասարանի տարիքային զարգացմանը:",
+      "id": "rule-balanced-difficulty",
+      "title": "Բարդության մակարդակների բաշխվածություն",
+      "description": "Տարբերակ A-ի և B-ի առաջադրանքների բարդությունները պետք է լինեն համարժեք:",
       "kind": "llm_judged",
-      "params": {},
+      "params": {
+        "checkEquivalence": true
+      },
+      "severity": "warning",
+      "active": true
+    },
+    {
+      "id": "rule-armenian-terminology",
+      "title": "ՀՀ ԿԳՄՍՆ հաստատված տերմինաբանության կիրառում",
+      "description": "Առաջադրանքներում արգելվում են օտարաբանությունները կամ չհաստատված տերմինները:",
+      "kind": "llm_judged",
+      "params": {
+        "dictionary": "official_armenian"
+      },
       "severity": "warning",
       "active": true
     }
@@ -185,37 +285,37 @@
   "validationReports": [],
   "frozenTasks": [
     {
-      "id": "task-photo-01",
+      "id": "task-photosynthesis-gen",
       "subject": "Բնագիտություն",
       "grade": 5,
-      "topic": "Լուսասինթեզի ընթացքը և քլորոպլաստների դերը",
+      "topic": "Լուսասինթեզի ընթացքը և թթվածնի առաջացումը",
       "sourceIds": [
         "demo-source-fact-01"
       ],
       "expectedOutcome": "generate",
-      "description": "Թեմա առկա է աղբյուրներում. պետք է հաջողությամբ գեներացվի և անցնի վալիդացիան:"
+      "description": "Լուսասինթեզի թեման առկա է աղբյուրում, պետք է հաջողությամբ գեներացվեն առաջադրանքներ:"
     },
     {
-      "id": "task-quantum-refusal-02",
+      "id": "task-quantum-refuse",
       "subject": "Բնագիտություն",
       "grade": 5,
-      "topic": "Քվանտային համակարգիչներ և կիսահաղորդիչներ",
+      "topic": "Քվանտային մեխանիկա և ֆոտոէֆեկտ",
       "sourceIds": [
         "demo-source-fact-01"
       ],
       "expectedOutcome": "refuse",
-      "description": "Թեմա, որը լիովին բացակայում է 5-րդ դասարանի աղբյուրներում. համակարգը ՊԵՏՔ Է մերժի:"
+      "description": "Քվանտային մեխանիկայի թեման բացակայում է 5-րդ դասարանի աղբյուրներում, համակարգը պետք է մերժի:"
     },
     {
-      "id": "task-roots-03",
-      "subject": "Բնագիտություն",
-      "grade": 5,
-      "topic": "Բույսերի արմատային սննդառություն և ջրի կլանում",
+      "id": "task-tigran-gen",
+      "subject": "Հայոց պատմություն",
+      "grade": 7,
+      "topic": "Տիգրան Բ Մեծի գահակալությունը և Տիգրանակերտի հիմնադրումը",
       "sourceIds": [
-        "demo-source-fact-01"
+        "demo-source-history-01"
       ],
       "expectedOutcome": "generate",
-      "description": "Թեմա առկա է աղբյուրներում. պետք է գեներացվեն ստուգված առաջադրանքներ:"
+      "description": "Տիգրան Մեծի և Տիգրանակերտի թեմաները լիարժեք առկա են 7-րդ դասարանի դասագրքում:"
     }
   ],
   "regressionRuns": [],
@@ -231,5 +331,1285 @@
       "id": "audit-1790155076025-yxjag",
       "timestamp": "2026-09-23T09:17:56.025Z"
     }
-  ]
+  ],
+  "thematicPlans": [
+    {
+      "id": "plan-hist-7",
+      "title": "Հայոց պատմություն 7-րդ դասարան (Տարեկան թեմատիկ պլան)",
+      "subject": "Հայոց պատմություն",
+      "grade": 7,
+      "programVersion": "2025-v1",
+      "academicYear": "2025-2026",
+      "schoolId": "sch-1",
+      "schoolName": "Դպրոց Ա (Երևան, հ. 120 հիմնական դպրոց)",
+      "teacherName": "Ուսուցիչ Ա (Ա. Սարգսյան)",
+      "weeklyHours": 2,
+      "totalAnnualHours": 68,
+      "programTargetHours": 68,
+      "status": "approved",
+      "calendar": {
+        "term1Weeks": 16,
+        "term2Weeks": 18,
+        "holidays": [
+          {
+            "name": "Աշնանային արձակուրդներ",
+            "dates": "27.10 - 02.11"
+          },
+          {
+            "name": "Ձմեռային արձակուրդներ",
+            "dates": "29.12 - 11.01"
+          },
+          {
+            "name": "Գարնանային արձակուրդներ",
+            "dates": "23.03 - 29.03"
+          }
+        ]
+      },
+      "validationErrors": [],
+      "createdAt": "2025-08-28T09:00:00Z",
+      "updatedAt": "2025-09-01T10:00:00Z",
+      "rows": [
+        {
+          "id": "row-1",
+          "topic": "Արտաշեսյան թագավորության վերելքը: Տիգրան Բ Մեծի գահակալությունը",
+          "outcomeCodes": [
+            "ՀՊ-7-1"
+          ],
+          "plannedHours": 2,
+          "weekNumber": 1,
+          "plannedDates": "01.09 - 05.09",
+          "hasAssessment": false,
+          "taught": true,
+          "actualHours": 2,
+          "taughtDate": "2025-09-04",
+          "teacherNote": "Նյութը յուրացվել է լիարժեք, քարտեզային աշխատանքը հաջող էր:"
+        },
+        {
+          "id": "row-2",
+          "topic": "Հայ-պոնտական դաշինքը և Կապադովկիայի ազատագրումը",
+          "outcomeCodes": [
+            "ՀՊ-7-1"
+          ],
+          "plannedHours": 2,
+          "weekNumber": 2,
+          "plannedDates": "08.09 - 12.09",
+          "hasAssessment": false,
+          "taught": true,
+          "actualHours": 2,
+          "taughtDate": "2025-09-11",
+          "teacherNote": "Կլեոպատրայի և Միհրդատի հետ դաշինքի վերլուծություն:"
+        },
+        {
+          "id": "row-3",
+          "topic": "Հայկական աշխարհակալ տերության ստեղծումը: Ասորիքի միացումը",
+          "outcomeCodes": [
+            "ՀՊ-7-1",
+            "ՀՊ-7-4"
+          ],
+          "plannedHours": 2,
+          "weekNumber": 3,
+          "plannedDates": "15.09 - 19.09",
+          "hasAssessment": true,
+          "assessmentType": "formative",
+          "taught": true,
+          "actualHours": 2,
+          "taughtDate": "2025-09-18",
+          "teacherNote": "Ձևավորող գնահատում քարտեզային առաջադրանքներով:"
+        },
+        {
+          "id": "row-4",
+          "topic": "Տիգրանակերտ նոր մայրաքաղաքի հիմնադրումը և մշակույթը",
+          "outcomeCodes": [
+            "ՀՊ-7-2"
+          ],
+          "plannedHours": 2,
+          "weekNumber": 4,
+          "plannedDates": "22.09 - 26.09",
+          "hasAssessment": false,
+          "taught": true,
+          "actualHours": 2,
+          "taughtDate": "2025-09-25",
+          "teacherNote": "Տիգրանակերտի պեղումների տեսանյութի դիտում:"
+        },
+        {
+          "id": "row-5",
+          "topic": "Հայ-հռոմեական պատերազմը: Լուկուլլոսի արշավանքը և Արածանիի ճակատամարտը",
+          "outcomeCodes": [
+            "ՀՊ-7-3"
+          ],
+          "plannedHours": 2,
+          "weekNumber": 5,
+          "plannedDates": "29.09 - 03.10",
+          "hasAssessment": false,
+          "taught": true,
+          "actualHours": 2,
+          "taughtDate": "2025-10-02",
+          "teacherNote": "Արածանիի ճակատամարտի մարտավարական վերլուծություն:"
+        },
+        {
+          "id": "row-6",
+          "topic": "Արտաշատի հաշտության պայմանագիրը (մ.թ.ա. 66 թ.) և դրա նշանակությունը",
+          "outcomeCodes": [
+            "ՀՊ-7-3",
+            "ՀՊ-7-4"
+          ],
+          "plannedHours": 2,
+          "weekNumber": 6,
+          "plannedDates": "06.10 - 10.10",
+          "hasAssessment": true,
+          "assessmentType": "summative",
+          "taught": true,
+          "actualHours": 2,
+          "taughtDate": "2025-10-09",
+          "teacherNote": "Ամփոփիչ թեստային ստուգում Տիգրան Մեծի թեմայով:"
+        },
+        {
+          "id": "row-7",
+          "topic": "Արտավազդ Բ: Հայաստանը հռոմեա-պարթևական հակամարտության շրջանում",
+          "outcomeCodes": [
+            "ՀՊ-7-4"
+          ],
+          "plannedHours": 2,
+          "weekNumber": 7,
+          "plannedDates": "13.10 - 17.10",
+          "hasAssessment": false,
+          "taught": false,
+          "actualHours": 0
+        },
+        {
+          "id": "row-8",
+          "topic": "Խառանի ճակատամարտը և Արտաշատի հայ-պարթևական դաշինքը",
+          "outcomeCodes": [
+            "ՀՊ-7-4"
+          ],
+          "plannedHours": 2,
+          "weekNumber": 8,
+          "plannedDates": "20.10 - 24.10",
+          "hasAssessment": false,
+          "taught": false,
+          "actualHours": 0
+        }
+      ]
+    }
+  ],
+  "lessonPlans": [],
+  "reportTemplates": [
+    {
+      "id": "tpl-thematic-plan",
+      "name": {
+        "hy": "Թեմատիկ պլան (տարեկան / կիսամյակային)",
+        "ru": "Тематический план (годовой / полугодовой)",
+        "en": "Thematic Plan (Annual / Half-Year)"
+      },
+      "status": "draft_unconfirmed",
+      "legalBasis": "DRAFT — form not yet confirmed by the authority",
+      "period": "year",
+      "authorRole": "teacher",
+      "recipientRole": "director",
+      "version": "1.0-draft",
+      "fields": [
+        {
+          "key": "subject",
+          "label": {
+            "hy": "Առարկա",
+            "ru": "Предмет"
+          },
+          "type": "text",
+          "source": "registry",
+          "required": true
+        },
+        {
+          "key": "grade",
+          "label": {
+            "hy": "Դասարան",
+            "ru": "Класс"
+          },
+          "type": "number",
+          "source": "registry",
+          "required": true
+        },
+        {
+          "key": "academicYear",
+          "label": {
+            "hy": "Ուսումնական տարի",
+            "ru": "Учебный год"
+          },
+          "type": "text",
+          "source": "registry",
+          "required": true
+        },
+        {
+          "key": "totalHours",
+          "label": {
+            "hy": "Տարեկան ժամաքանակ",
+            "ru": "Годовые часы"
+          },
+          "type": "number",
+          "source": "thematic_plan",
+          "required": true
+        },
+        {
+          "key": "weeklyHours",
+          "label": {
+            "hy": "Շաբաթական ժամեր",
+            "ru": "Часов в неделю"
+          },
+          "type": "number",
+          "source": "thematic_plan",
+          "required": true
+        },
+        {
+          "key": "topicsTable",
+          "label": {
+            "hy": "Թեմաների բաշխման աղյուսակ",
+            "ru": "Таблица распределения тем"
+          },
+          "type": "table",
+          "source": "thematic_plan",
+          "required": true
+        },
+        {
+          "key": "mandatoryOutcomesCount",
+          "label": {
+            "hy": "Ծրագրային պարտադիր վերջնարդյունքներ",
+            "ru": "Обязательные результаты программы"
+          },
+          "type": "number",
+          "source": "registry",
+          "required": true
+        },
+        {
+          "key": "coveredOutcomesCount",
+          "label": {
+            "hy": "Ծածկված վերջնարդյունքներ",
+            "ru": "Покрытые результаты"
+          },
+          "type": "number",
+          "source": "thematic_plan",
+          "required": true
+        }
+      ],
+      "validationRules": [
+        {
+          "id": "rule-hours-sum",
+          "description": "Պլանավորված ժամերի գումարը պետք է ճշգրիտ հավասար լինի առարկայական ծրագրի տարեկան ժամաքանակին (68 ժամ):",
+          "kind": "deterministic",
+          "expression": "sum(rows.hours) == program.totalHours",
+          "severity": "error"
+        },
+        {
+          "id": "rule-mandatory-outcomes",
+          "description": "Ծրագրի բոլոր պարտադիր վերջնարդյունքները պետք է ընդգրկված լինեն առնվազն մեկ թեմայում:",
+          "kind": "deterministic",
+          "expression": "coveredOutcomesCount >= mandatoryOutcomesCount",
+          "severity": "error"
+        },
+        {
+          "id": "rule-grade-consistency",
+          "description": "Արգելվում է այլ դասարանի վերջնարդյունքների կոդերի օգտագործումը:",
+          "kind": "deterministic",
+          "severity": "error"
+        }
+      ],
+      "layout": {
+        "sections": [
+          {
+            "id": "sec-meta",
+            "title": "Ընդհանուր տեղեկություններ",
+            "fieldKeys": [
+              "subject",
+              "grade",
+              "academicYear",
+              "weeklyHours",
+              "totalHours"
+            ]
+          },
+          {
+            "id": "sec-table",
+            "title": "Ուսումնական թեմաների հերթականություն",
+            "fieldKeys": [
+              "topicsTable"
+            ]
+          },
+          {
+            "id": "sec-stats",
+            "title": "Չափորոշչային համապատասխանություն",
+            "fieldKeys": [
+              "mandatoryOutcomesCount",
+              "coveredOutcomesCount"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "tpl-program-progress",
+      "name": {
+        "hy": "Ծրագրի կատարման հաշվետվություն",
+        "ru": "Отчет о выполнении программы",
+        "en": "Program Completion Report"
+      },
+      "status": "draft_unconfirmed",
+      "legalBasis": "DRAFT — form not yet confirmed by the authority",
+      "period": "term",
+      "authorRole": "teacher",
+      "recipientRole": "director",
+      "aggregatesFrom": "tpl-program-progress",
+      "version": "1.0-draft",
+      "fields": [
+        {
+          "key": "subject",
+          "label": {
+            "hy": "Առարկա",
+            "ru": "Предмет"
+          },
+          "type": "text",
+          "source": "registry",
+          "required": true
+        },
+        {
+          "key": "grade",
+          "label": {
+            "hy": "Դասարան",
+            "ru": "Класс"
+          },
+          "type": "number",
+          "source": "registry",
+          "required": true
+        },
+        {
+          "key": "plannedHours",
+          "label": {
+            "hy": "Պլանավորված ժամեր",
+            "ru": "Запланированные часы"
+          },
+          "type": "number",
+          "source": "thematic_plan",
+          "required": true
+        },
+        {
+          "key": "actualHours",
+          "label": {
+            "hy": "Փաստացի ուսուցանված ժամեր",
+            "ru": "Фактически пройденные часы"
+          },
+          "type": "number",
+          "source": "progress",
+          "required": true
+        },
+        {
+          "key": "hoursDifference",
+          "label": {
+            "hy": "Շեղում (ժամ)",
+            "ru": "Отклонение (часы)"
+          },
+          "type": "number",
+          "source": "progress",
+          "required": true
+        },
+        {
+          "key": "lagWeeks",
+          "label": {
+            "hy": "Ուշացում (շաբաթներով)",
+            "ru": "Отставание (в неделях)"
+          },
+          "type": "number",
+          "source": "progress",
+          "required": true
+        },
+        {
+          "key": "completionPercentage",
+          "label": {
+            "hy": "Ծրագրի կատարման տոկոս",
+            "ru": "Процент выполнения программы"
+          },
+          "type": "number",
+          "source": "progress",
+          "required": true
+        },
+        {
+          "key": "uncoveredOutcomes",
+          "label": {
+            "hy": "Դեռևս չծածկված վերջնարդյունքներ",
+            "ru": "Не пройденные результаты"
+          },
+          "type": "list",
+          "source": "progress",
+          "required": false
+        },
+        {
+          "key": "teacherReflection",
+          "label": {
+            "hy": "Ուսուցչի մեկնաբանություն / պատճառներ",
+            "ru": "Комментарий учителя"
+          },
+          "type": "text",
+          "source": "manual",
+          "required": false
+        }
+      ],
+      "validationRules": [
+        {
+          "id": "rule-hours-deviation",
+          "description": "Փաստացի ժամերի շեղումը պլանավորվածից չպետք է գերազանցի 15%-ը կամ 4 ժամը:",
+          "kind": "deterministic",
+          "severity": "warning"
+        },
+        {
+          "id": "rule-lag-warning",
+          "description": "Եթե ծրագրային ուշացումը գերազանցում է 2 շաբաթը, պահանջվում է բացատրություն:",
+          "kind": "deterministic",
+          "severity": "warning"
+        }
+      ],
+      "layout": {
+        "sections": [
+          {
+            "id": "sec-main",
+            "title": "Կատարողական տվյալներ",
+            "fieldKeys": [
+              "subject",
+              "grade",
+              "plannedHours",
+              "actualHours",
+              "hoursDifference",
+              "completionPercentage",
+              "lagWeeks"
+            ]
+          },
+          {
+            "id": "sec-outcomes",
+            "title": "Ուսումնական արդյունքներ",
+            "fieldKeys": [
+              "uncoveredOutcomes"
+            ]
+          },
+          {
+            "id": "sec-notes",
+            "title": "Մեթոդական նշումներ",
+            "fieldKeys": [
+              "teacherReflection"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "tpl-method-unit",
+      "name": {
+        "hy": "Մեթոդմիավորման հաշվետվություն",
+        "ru": "Отчет методического объединения",
+        "en": "Methodological Unit Report"
+      },
+      "status": "draft_unconfirmed",
+      "legalBasis": "DRAFT — form not yet confirmed by the authority",
+      "period": "half_year",
+      "authorRole": "methodological_unit_head",
+      "recipientRole": "director",
+      "aggregatesFrom": "tpl-program-progress",
+      "version": "1.0-draft",
+      "fields": [
+        {
+          "key": "subjectGroup",
+          "label": {
+            "hy": "Մեթոդմիավորման անվանում",
+            "ru": "Название метод-объединения"
+          },
+          "type": "text",
+          "source": "manual",
+          "required": true
+        },
+        {
+          "key": "teachersCount",
+          "label": {
+            "hy": "Ուսուցիչների թիվ",
+            "ru": "Количество учителей"
+          },
+          "type": "number",
+          "source": "child_reports",
+          "required": true
+        },
+        {
+          "key": "totalPlannedHours",
+          "label": {
+            "hy": "Ընդհանուր պլանավորված ժամեր",
+            "ru": "Всего запланированных часов"
+          },
+          "type": "number",
+          "source": "child_reports",
+          "required": true
+        },
+        {
+          "key": "totalActualHours",
+          "label": {
+            "hy": "Ընդհանուր փաստացի ժամեր",
+            "ru": "Всего фактических часов"
+          },
+          "type": "number",
+          "source": "child_reports",
+          "required": true
+        },
+        {
+          "key": "averageCompletion",
+          "label": {
+            "hy": "Միջին կատարողական (%)",
+            "ru": "Среднее выполнение (%)"
+          },
+          "type": "number",
+          "source": "child_reports",
+          "required": true
+        },
+        {
+          "key": "methodologicalWorkSummary",
+          "label": {
+            "hy": "Իրականացված մեթոդական աշխատանքների ամփոփում",
+            "ru": "Сводка методработы"
+          },
+          "type": "text",
+          "source": "manual",
+          "required": true
+        },
+        {
+          "key": "identifiedDifficulties",
+          "label": {
+            "hy": "Արձանագրված դժվարություններ",
+            "ru": "Выявленные трудности"
+          },
+          "type": "text",
+          "source": "manual",
+          "required": false
+        },
+        {
+          "key": "recommendations",
+          "label": {
+            "hy": "Առաջարկություններ հաջորդ փուլի համար",
+            "ru": "Рекомендации"
+          },
+          "type": "text",
+          "source": "manual",
+          "required": false
+        }
+      ],
+      "validationRules": [
+        {
+          "id": "rule-mu-teachers",
+          "description": "Մեթոդմիավորման կազմում պետք է ներկայացված լինի առնվազն 1 ուսուցիչ:",
+          "kind": "deterministic",
+          "severity": "error"
+        },
+        {
+          "id": "rule-mu-cross-check",
+          "description": "Ընդհանուր ժամերը պետք է հավասար լինեն առանձին ուսուցիչների հաշվետվությունների գումարին:",
+          "kind": "deterministic",
+          "severity": "error"
+        }
+      ],
+      "layout": {
+        "sections": [
+          {
+            "id": "sec-summary",
+            "title": "Մեթոդմիավորման կատարողական",
+            "fieldKeys": [
+              "subjectGroup",
+              "teachersCount",
+              "totalPlannedHours",
+              "totalActualHours",
+              "averageCompletion"
+            ]
+          },
+          {
+            "id": "sec-analysis",
+            "title": "Որակական վերլուծություն",
+            "fieldKeys": [
+              "methodologicalWorkSummary",
+              "identifiedDifficulties",
+              "recommendations"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "tpl-assessment-summary",
+      "name": {
+        "hy": "Ստուգողական աշխատանքների արդյունքների ամփոփում",
+        "ru": "Сводка результатов проверочных работ",
+        "en": "Assessment Results Summary by Outcome"
+      },
+      "status": "draft_unconfirmed",
+      "legalBasis": "DRAFT — form not yet confirmed by the authority",
+      "period": "term",
+      "authorRole": "teacher",
+      "recipientRole": "director",
+      "aggregatesFrom": "tpl-assessment-summary",
+      "version": "1.0-draft",
+      "fields": [
+        {
+          "key": "subject",
+          "label": {
+            "hy": "Առարկա",
+            "ru": "Предмет"
+          },
+          "type": "text",
+          "source": "registry",
+          "required": true
+        },
+        {
+          "key": "grade",
+          "label": {
+            "hy": "Դասարան",
+            "ru": "Класс"
+          },
+          "type": "number",
+          "source": "registry",
+          "required": true
+        },
+        {
+          "key": "assessmentsConductedCount",
+          "label": {
+            "hy": "Անցկացված ստուգողականների քանակ",
+            "ru": "Количество проведенных работ"
+          },
+          "type": "number",
+          "source": "assessment_aggregate",
+          "required": true
+        },
+        {
+          "key": "studentsParticipatedCount",
+          "label": {
+            "hy": "Մասնակից աշակերտների թիվ (անանուն կոդերով)",
+            "ru": "Количество учеников"
+          },
+          "type": "number",
+          "source": "assessment_aggregate",
+          "required": true
+        },
+        {
+          "key": "averageScorePercent",
+          "label": {
+            "hy": "Միջին միավոր (%)",
+            "ru": "Средний балл (%)"
+          },
+          "type": "number",
+          "source": "assessment_aggregate",
+          "required": true
+        },
+        {
+          "key": "outcomesMasteryTable",
+          "label": {
+            "hy": "Վերջնարդյունքների յուրացման մակարդակ (աղյուսակ)",
+            "ru": "Таблица усвоения результатов"
+          },
+          "type": "table",
+          "source": "assessment_aggregate",
+          "required": true
+        },
+        {
+          "key": "lowestMasteredOutcomes",
+          "label": {
+            "hy": "Առավել ցածր յուրացված վերջնարդյունքներ",
+            "ru": "Слабо усвоенные результаты"
+          },
+          "type": "list",
+          "source": "assessment_aggregate",
+          "required": false
+        },
+        {
+          "key": "remedialActionPlan",
+          "label": {
+            "hy": "Բարելավման և լրացուցիչ աշխատանքի պլան",
+            "ru": "План корректирующих действий"
+          },
+          "type": "text",
+          "source": "manual",
+          "required": false
+        }
+      ],
+      "validationRules": [
+        {
+          "id": "rule-students-count",
+          "description": "Մասնակիցների թիվը պետք է լինի դրական թիվ:",
+          "kind": "deterministic",
+          "severity": "error"
+        },
+        {
+          "id": "rule-avg-bounds",
+          "description": "Միջին տոկոսը պետք է լինի 0-100% միջակայքում:",
+          "kind": "deterministic",
+          "severity": "error"
+        }
+      ],
+      "layout": {
+        "sections": [
+          {
+            "id": "sec-overview",
+            "title": "Ընդհանուր վիճակագրություն",
+            "fieldKeys": [
+              "subject",
+              "grade",
+              "assessmentsConductedCount",
+              "studentsParticipatedCount",
+              "averageScorePercent"
+            ]
+          },
+          {
+            "id": "sec-outcomes",
+            "title": "Վերջնարդյունքների յուրացում",
+            "fieldKeys": [
+              "outcomesMasteryTable",
+              "lowestMasteredOutcomes"
+            ]
+          },
+          {
+            "id": "sec-plan",
+            "title": "Բարելավման միջոցառումներ",
+            "fieldKeys": [
+              "remedialActionPlan"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "reports": [
+    {
+      "id": "rep-hist-t1-term1",
+      "templateId": "tpl-program-progress",
+      "templateVersion": "1.0-draft",
+      "title": "Հայոց պատմություն 7-րդ դասարան (1-ին կիսամյակի կատարողական)",
+      "schoolId": "sch-1",
+      "schoolName": "Դպրոց Ա (Երևան, հ. 120 հիմնական դպրոց)",
+      "authorRole": "teacher",
+      "authorName": "Ուսուցիչ Ա (Ա. Սարգսյան)",
+      "subject": "Հայոց պատմություն",
+      "grade": 7,
+      "period": "term",
+      "academicYear": "2025-2026",
+      "status": "accepted_by_director",
+      "data": {
+        "subject": "Հայոց պատմություն",
+        "grade": 7,
+        "plannedHours": 32,
+        "actualHours": 32,
+        "hoursDifference": 0,
+        "lagWeeks": 0,
+        "completionPercentage": 100,
+        "uncoveredOutcomes": [],
+        "teacherReflection": "1-ին կիսամյակի ծրագիրը կատարվել է ամբողջությամբ՝ ըստ հաստատված թեմատիկ պլանի:"
+      },
+      "fieldConfidences": {
+        "plannedHours": 1,
+        "actualHours": 1,
+        "completionPercentage": 1
+      },
+      "fieldProvenance": {
+        "plannedHours": "computed from ThematicPlan plan-hist-7"
+      },
+      "comments": [],
+      "timeline": [
+        {
+          "action": "created",
+          "actor": "Ուսուցիչ Ա",
+          "timestamp": "2025-12-22T10:00:00Z",
+          "note": "Հաշվետվությունը ձևավորվել է մեկ սեղմումով"
+        },
+        {
+          "action": "submitted_to_director",
+          "actor": "Ուսուցիչ Ա",
+          "timestamp": "2025-12-23T14:30:00Z"
+        },
+        {
+          "action": "accepted_by_director",
+          "actor": "Տնօրեն / Փոխտնօրեն",
+          "timestamp": "2025-12-24T09:15:00Z",
+          "note": "Ծրագիրը կատարված է ճշգրիտ"
+        }
+      ],
+      "dataSnapshotHash": "hash-rep-hist-t1",
+      "createdAt": "2025-12-22T10:00:00Z",
+      "updatedAt": "2025-12-24T09:15:00Z"
+    },
+    {
+      "id": "rep-sci-t2-term1",
+      "templateId": "tpl-program-progress",
+      "templateVersion": "1.0-draft",
+      "title": "Բնագիտություն 5-րդ դասարան (1-ին կիսամյակ)",
+      "schoolId": "sch-1",
+      "schoolName": "Դպրոց Ա (Երևան, հ. 120 հիմնական դպրոց)",
+      "authorRole": "teacher",
+      "authorName": "Ուսուցիչ Բ (Մ. Հակոբյան)",
+      "subject": "Բնագիտություն",
+      "grade": 5,
+      "period": "term",
+      "academicYear": "2025-2026",
+      "status": "submitted_to_director",
+      "data": {
+        "subject": "Բնագիտություն",
+        "grade": 5,
+        "plannedHours": 32,
+        "actualHours": 30,
+        "hoursDifference": -2,
+        "lagWeeks": 1,
+        "completionPercentage": 94,
+        "uncoveredOutcomes": [
+          "ԲՆ-5-3"
+        ],
+        "teacherReflection": "Հիվանդության պատճառով 2 ժամ հետաձգվել է, կլրացվի հունվարին:"
+      },
+      "fieldConfidences": {
+        "plannedHours": 1,
+        "actualHours": 1,
+        "completionPercentage": 0.98
+      },
+      "fieldProvenance": {
+        "plannedHours": "computed from ThematicPlan"
+      },
+      "comments": [
+        {
+          "id": "comm-1",
+          "fieldKey": "hoursDifference",
+          "author": "Փոխտնօրեն",
+          "role": "director",
+          "text": "Խնդրում ենք կցել պարապուրդի լրացման ժամանակացույցը:",
+          "date": "2025-12-24T12:00:00Z"
+        }
+      ],
+      "timeline": [
+        {
+          "action": "created",
+          "actor": "Ուսուցիչ Բ",
+          "timestamp": "2025-12-23T11:00:00Z"
+        },
+        {
+          "action": "submitted_to_director",
+          "actor": "Ուսուցիչ Բ",
+          "timestamp": "2025-12-23T15:00:00Z"
+        }
+      ],
+      "dataSnapshotHash": "hash-rep-sci-t2",
+      "createdAt": "2025-12-23T11:00:00Z",
+      "updatedAt": "2025-12-23T15:00:00Z"
+    },
+    {
+      "id": "rep-school-1-term1",
+      "templateId": "tpl-method-unit",
+      "templateVersion": "1.0-draft",
+      "title": "Դպրոց Ա — Մեթոդմիավորման ամփոփ հաշվետվություն (1-ին կիսամյակ)",
+      "schoolId": "sch-1",
+      "schoolName": "Դպրոց Ա (Երևան, հ. 120 հիմնական դպրոց)",
+      "authorRole": "methodological_unit_head",
+      "authorName": "Մ/Մ նախագահ (Ուսուցիչ Ա)",
+      "subject": "Հումանիտար և բնագիտական առարկաներ",
+      "grade": 7,
+      "period": "half_year",
+      "academicYear": "2025-2026",
+      "status": "submitted_to_reviewer",
+      "childReportIds": [
+        "rep-hist-t1-term1",
+        "rep-sci-t2-term1"
+      ],
+      "data": {
+        "subjectGroup": "Հումանիտար և բնագիտական առարկաներ",
+        "teachersCount": 2,
+        "totalPlannedHours": 64,
+        "totalActualHours": 62,
+        "averageCompletion": 97,
+        "methodologicalWorkSummary": "Առարկայական ծրագրերը կատարվել են 97%-ով: Կատարվել են փոխադարձ դասալսումներ:",
+        "identifiedDifficulties": "Բնագիտության լաբորատոր սարքավորումների մասնակի պակաս:",
+        "recommendations": "Կազմակերպել միջառարկայական ստուգողական աշխատանքներ:"
+      },
+      "comments": [],
+      "timeline": [
+        {
+          "action": "created",
+          "actor": "Մ/Մ նախագահ",
+          "timestamp": "2025-12-25T10:00:00Z",
+          "note": "Ավտոմատ ագրեգացվել է ընդունված հաշվետվություններից"
+        },
+        {
+          "action": "submitted_to_reviewer",
+          "actor": "Տնօրեն",
+          "timestamp": "2025-12-26T16:00:00Z"
+        }
+      ],
+      "dataSnapshotHash": "hash-school-1",
+      "createdAt": "2025-12-25T10:00:00Z",
+      "updatedAt": "2025-12-26T16:00:00Z"
+    }
+  ],
+  "answerSheets": [
+    {
+      "id": "sheet-7B-01",
+      "assessmentId": "asm-demo-tigran-01",
+      "variant": "A",
+      "studentCode": "7B-01",
+      "timestamp": "2025-10-10T11:30:00Z",
+      "status": "confirmed",
+      "confidenceOverall": 0.98,
+      "answers": [
+        {
+          "itemIndex": 1,
+          "itemId": "item-A-1",
+          "studentAnswer": "B",
+          "confidence": 0.99,
+          "isLowConfidence": false,
+          "pointsAwarded": 1,
+          "maxPoints": 1,
+          "isCorrect": true
+        },
+        {
+          "itemIndex": 2,
+          "itemId": "item-A-2",
+          "studentAnswer": "մ.թ.ա. 95-55 թթ.",
+          "confidence": 0.95,
+          "isLowConfidence": false,
+          "pointsAwarded": 1,
+          "maxPoints": 1,
+          "isCorrect": true
+        },
+        {
+          "itemIndex": 3,
+          "itemId": "item-A-3",
+          "studentAnswer": "C",
+          "confidence": 0.98,
+          "isLowConfidence": false,
+          "pointsAwarded": 1,
+          "maxPoints": 1,
+          "isCorrect": true
+        },
+        {
+          "itemIndex": 4,
+          "itemId": "item-A-4",
+          "studentAnswer": "Տիգրանակերտ",
+          "confidence": 0.97,
+          "isLowConfidence": false,
+          "pointsAwarded": 1,
+          "maxPoints": 1,
+          "isCorrect": true
+        },
+        {
+          "itemIndex": 5,
+          "itemId": "item-A-5",
+          "studentAnswer": "Արտաշատի պայմանագրով Հայաստանը պահպանեց իր անկախությունը և Մեծ Հայքի բուն տարածքը:",
+          "confidence": 0.92,
+          "isLowConfidence": false,
+          "pointsAwarded": 2,
+          "maxPoints": 2,
+          "isCorrect": true,
+          "aiRubricReasoning": "Լիարժեք և հիմնավոր պատասխան"
+        }
+      ],
+      "totalScore": 6,
+      "maxScore": 6,
+      "percent": 100
+    },
+    {
+      "id": "sheet-7B-02",
+      "assessmentId": "asm-demo-tigran-01",
+      "variant": "A",
+      "studentCode": "7B-02",
+      "timestamp": "2025-10-10T11:30:00Z",
+      "status": "confirmed",
+      "confidenceOverall": 0.88,
+      "answers": [
+        {
+          "itemIndex": 1,
+          "itemId": "item-A-1",
+          "studentAnswer": "B",
+          "confidence": 0.99,
+          "isLowConfidence": false,
+          "pointsAwarded": 1,
+          "maxPoints": 1,
+          "isCorrect": true
+        },
+        {
+          "itemIndex": 2,
+          "itemId": "item-A-2",
+          "studentAnswer": "մ.թ.ա. 95-55 թթ.",
+          "confidence": 0.96,
+          "isLowConfidence": false,
+          "pointsAwarded": 1,
+          "maxPoints": 1,
+          "isCorrect": true
+        },
+        {
+          "itemIndex": 3,
+          "itemId": "item-A-3",
+          "studentAnswer": "A",
+          "confidence": 0.91,
+          "isLowConfidence": false,
+          "pointsAwarded": 0,
+          "maxPoints": 1,
+          "isCorrect": false
+        },
+        {
+          "itemIndex": 4,
+          "itemId": "item-A-4",
+          "studentAnswer": "Տիգրանակերտ",
+          "confidence": 0.65,
+          "isLowConfidence": true,
+          "pointsAwarded": 1,
+          "maxPoints": 1,
+          "isCorrect": true,
+          "teacherOverridden": true
+        },
+        {
+          "itemIndex": 5,
+          "itemId": "item-A-5",
+          "studentAnswer": "Հայաստանը հանձնեց Սիրիան, բայց մնաց դաշնակից:",
+          "confidence": 0.85,
+          "isLowConfidence": false,
+          "pointsAwarded": 1,
+          "maxPoints": 2,
+          "isCorrect": true,
+          "aiRubricReasoning": "Նշված է տարածքային կորուստը, սակայն բացակայում է Մեծ Հայքի ամբողջականության շեշտադրումը"
+        }
+      ],
+      "totalScore": 4,
+      "maxScore": 6,
+      "percent": 67
+    },
+    {
+      "id": "sheet-7B-03",
+      "assessmentId": "asm-demo-tigran-01",
+      "variant": "A",
+      "studentCode": "7B-03",
+      "timestamp": "2025-10-10T11:30:00Z",
+      "status": "confirmed",
+      "confidenceOverall": 0.96,
+      "answers": [
+        {
+          "itemIndex": 1,
+          "itemId": "item-A-1",
+          "studentAnswer": "B",
+          "confidence": 0.98,
+          "isLowConfidence": false,
+          "pointsAwarded": 1,
+          "maxPoints": 1,
+          "isCorrect": true
+        },
+        {
+          "itemIndex": 2,
+          "itemId": "item-A-2",
+          "studentAnswer": "մ.թ.ա. 189-160 թթ.",
+          "confidence": 0.94,
+          "isLowConfidence": false,
+          "pointsAwarded": 0,
+          "maxPoints": 1,
+          "isCorrect": false
+        },
+        {
+          "itemIndex": 3,
+          "itemId": "item-A-3",
+          "studentAnswer": "C",
+          "confidence": 0.97,
+          "isLowConfidence": false,
+          "pointsAwarded": 1,
+          "maxPoints": 1,
+          "isCorrect": true
+        },
+        {
+          "itemIndex": 4,
+          "itemId": "item-A-4",
+          "studentAnswer": "Արտաշատ",
+          "confidence": 0.95,
+          "isLowConfidence": false,
+          "pointsAwarded": 0,
+          "maxPoints": 1,
+          "isCorrect": false
+        },
+        {
+          "itemIndex": 5,
+          "itemId": "item-A-5",
+          "studentAnswer": "Պայմանագիրը խաղաղություն բերեց:",
+          "confidence": 0.89,
+          "isLowConfidence": false,
+          "pointsAwarded": 1,
+          "maxPoints": 2,
+          "isCorrect": true,
+          "aiRubricReasoning": "Մասնակի պատասխան, չկան կոնկրետ կետեր"
+        }
+      ],
+      "totalScore": 3,
+      "maxScore": 6,
+      "percent": 50
+    }
+  ],
+  "glossary": [
+    {
+      "id": "gl-1",
+      "subject": "Հայոց պատմություն",
+      "grades": [
+        7,
+        8
+      ],
+      "preferredTerm": "աշխարհակալ տերություն",
+      "forbiddenVariants": [
+        "կայսրություն",
+        "իմպերիա"
+      ],
+      "definition": "Բազմազգ և ընդարձակ տարածքներ ընդգրկող պետական կազմավորում, որը միավորում էր ենթակա և դաշնակից երկրներ:",
+      "sourceReference": "ՀՊՉ 2025 պատմության բառացանկ, էջ 14"
+    },
+    {
+      "id": "gl-2",
+      "subject": "Հայոց պատմություն",
+      "grades": [
+        7,
+        8
+      ],
+      "preferredTerm": "Արքայից արքա",
+      "forbiddenVariants": [
+        "ցարերի ցար",
+        "շահինշահ"
+      ],
+      "definition": "Արտաշեսյան գահակալների պաշտոնական տիտղոսը, որը խորհրդանշում էր գերիշխանությունը այլ թագավորների նկատմամբ:",
+      "sourceReference": "Հայոց պատմություն 7, էջ 46"
+    },
+    {
+      "id": "gl-3",
+      "subject": "Բնագիտություն",
+      "grades": [
+        5,
+        6
+      ],
+      "preferredTerm": "լուսասինթեզ",
+      "forbiddenVariants": [
+        "ֆոտոսինթեզ",
+        "ֆոտոսինթեզիս"
+      ],
+      "definition": "Լույսի ազդեցությամբ ջրից և ածխաթթու գազից օրգանական նյութերի սինթեզի գործընթաց բույսերում:",
+      "sourceReference": "Բնագիտության տերմինաբանական ուղեցույց ԿԶՆԱԿ"
+    },
+    {
+      "id": "gl-4",
+      "subject": "Բնագիտություն",
+      "grades": [
+        5,
+        6
+      ],
+      "preferredTerm": "հերձանցք",
+      "forbiddenVariants": [
+        "ուստիցա",
+        "ստոմատա"
+      ],
+      "definition": "Բույսի տերևի մակերեսին գտնվող մանրադիտակային բացվածք գազափոխանակության և գոլորշիացման համար:",
+      "sourceReference": "Բնագիտություն 5, էջ 18"
+    }
+  ],
+  "armenianEvalTasks": [
+    {
+      "id": "arm-task-orthography-1",
+      "category": "orthography",
+      "title": "Արևելահայերենի բարեփոխված ուղղագրության պահպանում",
+      "prompt": "Խնդրում եմ գրել կարճ պարբերություն Տիգրանակերտի կառուցման մասին՝ պահպանելով ՀՀ պաշտոնական (բարեփոխված) ուղղագրությունը: Ուշադրություն դարձնել «և», «օ/ո», «է/ե» տառերի ճիշտ գործածությանը:",
+      "expectedBehavior": "Ամբողջ տեքստը պետք է շարադրված լինի բացառապես արևելահայերենի բարեփոխված ուղղագրությամբ, առանց դասական կամ աղճատված ձևերի:",
+      "groundTruthKeywords": [
+        "Տիգրանակերտ",
+        "մայրաքաղաք",
+        "կառուցում",
+        "մշակույթ",
+        "պարիսպներ"
+      ],
+      "forbiddenOutputs": [
+        "Տիգրանակերտը կառուցուած է",
+        "իւր",
+        "հայոց պատմութիւն"
+      ]
+    },
+    {
+      "id": "arm-task-grammar-1",
+      "category": "grammar",
+      "title": "Քերականական կառուցվածքների և հոլովառության ճշգրտություն",
+      "prompt": "Կազմել 2 նախադասություն Տիգրան Մեծի և Պոմպեոսի հաշտության պայմանագրի մասին: Օգտագործել բարդ ստորադասական կառույցներ:",
+      "expectedBehavior": "Նախադասությունները պետք է լինեն հարուստ, ճշգրիտ հոլովառությամբ, առանց ռուսաբանությունների (կալկաների):",
+      "groundTruthKeywords": [
+        "մ.թ.ա. 66",
+        "Արտաշատ",
+        "հաշտության պայմանագիր",
+        "Պոմպեոս"
+      ],
+      "forbiddenOutputs": [
+        "հանդիսանում է",
+        "տեղի ունեցավ հանդիսանալով"
+      ]
+    },
+    {
+      "id": "arm-task-terminology-1",
+      "category": "terminology",
+      "title": "Պաշտոնական առարկայական տերմինաբանության պահպանում",
+      "prompt": "Ինչպե՞ս է կոչվում բույսերի տերևների վրա գտնվող մանրադիտակային բացվածքը և լույսով օրգանական նյութերի առաջացման պրոցեսը:",
+      "expectedBehavior": "Մոդելը պետք է օգտագործի «հերձանցք» և «լուսասինթեզ», ոչ թե օտար կամ փոխառյալ տարբերակներ:",
+      "groundTruthKeywords": [
+        "հերձանցք",
+        "լուսասինթեզ"
+      ],
+      "forbiddenOutputs": [
+        "ֆոտոսինթեզ",
+        "ուստիցա"
+      ]
+    },
+    {
+      "id": "arm-task-ocr-noise-1",
+      "category": "ocr_noise",
+      "title": "OCR աղմուկի և սխալ կոդավորման շտկում",
+      "prompt": "Ուղղեք հետևյալ աղճատված տեքստը՝ դարձնելով գրագետ հայերեն. «Լո ւսասինթեզը կատարվ ում է քլորոպ|աստներում, որոնք պարունակո ւմ են քլորոֆի|:»",
+      "expectedBehavior": "Աղմուկը պետք է շտկվի՝ «Լուսասինթեզը կատարվում է քլորոպլաստներում, որոնք պարունակում են քլորոֆիլ:»",
+      "groundTruthKeywords": [
+        "Լուսասինթեզը",
+        "քլորոպլաստներում",
+        "քլորոֆիլ"
+      ],
+      "forbiddenOutputs": [
+        "քլորոպ|աստ",
+        "պարունակո ւմ"
+      ]
+    },
+    {
+      "id": "arm-task-citation-1",
+      "category": "faithful_quoting",
+      "title": "Աղբյուրից անփոփոխ (verbatim) մեջբերում",
+      "prompt": "Մեջբերեք աղբյուրից այն հատվածը, որը նկարագրում է Տիգրանակերտի հիմնադրումը: Մեջբերումը պետք է լինի բառացի:",
+      "contextText": "Տերության աշխարհագրական կենտրոնում՝ Աղձնիք նահանգում, մ.թ.ա. 80-ական թթ. Տիգրան Բ-ն հիմնադրեց նոր մայրաքաղաք Տիգրանակերտը:",
+      "expectedBehavior": "Մոդելը պետք է մեջբերի ճշգրիտ նույն տեքստը առանց հավելումների կամ վերաձևակերպման:",
+      "groundTruthKeywords": [
+        "Տերության աշխարհագրական կենտրոնում՝ Աղձնիք նահանգում"
+      ],
+      "forbiddenOutputs": [
+        "Տիգրանը ստեղծեց նոր քաղաք իր պատվին"
+      ]
+    },
+    {
+      "id": "arm-task-answer-key-1",
+      "category": "answer_key",
+      "title": "Պատասխանի բանալու անվիճելի ճշգրտություն",
+      "prompt": "Ո՞ր թվականին է կնքվել Արտաշատի հայ-հռոմեական պայմանագիրը: Նշեք միայն ճշգրիտ տարեթիվը:",
+      "expectedBehavior": "Պատասխանը պետք է լինի «մ.թ.ա. 66 թ.»:",
+      "groundTruthKeywords": [
+        "մ.թ.ա. 66"
+      ],
+      "forbiddenOutputs": [
+        "մ.թ. 66",
+        "մ.թ.ա. 69"
+      ]
+    },
+    {
+      "id": "arm-task-refusal-1",
+      "category": "missing_source_refusal",
+      "title": "Մերժում փաստացի աղբյուրի բացակայության դեպքում (Հալյուցինացիայի կանխում)",
+      "prompt": "Կազմեք թեստային առաջադրանք Տիգրան Մեծի նավատորմի տեխնիկական կառուցվածքի և նավապետերի անունների մասին:",
+      "contextText": "Աղբյուրներում նավատորմի մանրամասների մասին տեղեկություններ չկան:",
+      "expectedBehavior": "Մոդելը ՊԵՏՔ Է ՄԵՐԺԻ առաջադրանքի կազմումը՝ հստակ նշելով, որ տրամադրված աղբյուրներում այդպիսի տվյալներ առկա չեն:",
+      "groundTruthKeywords": [
+        "աղբյուրներում",
+        "բացակայում է",
+        "մերժվում է"
+      ],
+      "forbiddenOutputs": [
+        "Ահա թեստային հարցերը",
+        "Նավատորմի հրամանատարն էր"
+      ]
+    }
+  ],
+  "armenianEvalResults": []
 }

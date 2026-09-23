@@ -2,15 +2,37 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import {
+  AnswerSheetSubmission,
+  ArmenianEvalResult,
+  ArmenianEvalTask,
   Assessment,
   CurriculumOutcome,
   FrozenTask,
+  LessonPlan,
   MaterialValidationReport,
   MethodRule,
   RegressionRun,
+  ReportInstance,
+  ReportTemplate,
+  SchoolInfo,
   SideBySideReport,
   Source,
+  TerminologyGlossaryItem,
+  ThematicPlan,
+  ThematicPlanRow,
 } from '../../shared/types.js';
+import {
+  DEMO_SCHOOLS,
+  DEMO_TEACHERS,
+  getDemoAnswerSheets,
+  getDemoArmenianEvalTasks,
+  getDemoGlossary,
+  getDemoOutcomes,
+  getDemoReports,
+  getDemoReportTemplates,
+  getDemoSources,
+  getDemoThematicPlans,
+} from './demoData.js';
 
 export interface AuditLog {
   id: string;
@@ -68,6 +90,73 @@ export interface IRepository {
   getSideBySideReports(): SideBySideReport[];
   saveSideBySideReport(report: SideBySideReport): SideBySideReport;
 
+  // Thematic Plans
+  getThematicPlans(schoolId?: string, subject?: string, grade?: number): ThematicPlan[];
+  getThematicPlan(id: string): ThematicPlan | undefined;
+  saveThematicPlan(plan: ThematicPlan): ThematicPlan;
+  updateThematicPlanRow(planId: string, rowId: string, update: Partial<ThematicPlanRow>): ThematicPlan | undefined;
+  deleteThematicPlan(id: string): boolean;
+
+  // Lesson Plans
+  getLessonPlans(thematicPlanId?: string): LessonPlan[];
+  getLessonPlan(id: string): LessonPlan | undefined;
+  saveLessonPlan(plan: LessonPlan): LessonPlan;
+  deleteLessonPlan(id: string): boolean;
+
+  // Report Templates
+  getReportTemplates(): ReportTemplate[];
+  getReportTemplate(id: string): ReportTemplate | undefined;
+  saveReportTemplate(template: ReportTemplate): ReportTemplate;
+  deleteReportTemplate(id: string): boolean;
+
+  // Reports
+  getReports(filters?: {
+    schoolId?: string;
+    authorRole?: string;
+    period?: string;
+    status?: string;
+    templateId?: string;
+    subject?: string;
+    grade?: number;
+  }): ReportInstance[];
+  getReport(id: string): ReportInstance | undefined;
+  saveReport(report: ReportInstance): ReportInstance;
+  updateReportStatus(
+    id: string,
+    status: ReportInstance['status'],
+    comment?: { fieldKey: string; text: string; author: string; role: string }
+  ): ReportInstance | undefined;
+  consolidateSchoolReport(
+    templateId: string,
+    schoolId: string,
+    academicYear: string,
+    period: string,
+    subjectGroup: string
+  ): ReportInstance;
+  deleteReport(id: string): boolean;
+
+  // Answer Sheets
+  getAnswerSheets(assessmentId?: string): AnswerSheetSubmission[];
+  getAnswerSheet(id: string): AnswerSheetSubmission | undefined;
+  saveAnswerSheet(sheet: AnswerSheetSubmission): AnswerSheetSubmission;
+  confirmAnswerSheet(id: string): AnswerSheetSubmission | undefined;
+  deleteAnswerSheet(id: string): boolean;
+
+  // Glossary
+  getGlossary(subject?: string, grade?: number): TerminologyGlossaryItem[];
+  saveGlossaryItem(item: TerminologyGlossaryItem): TerminologyGlossaryItem;
+  deleteGlossaryItem(id: string): boolean;
+
+  // Armenian Eval
+  getArmenianEvalTasks(): ArmenianEvalTask[];
+  saveArmenianEvalTask(task: ArmenianEvalTask): ArmenianEvalTask;
+  getArmenianEvalResults(): ArmenianEvalResult[];
+  saveArmenianEvalResult(res: ArmenianEvalResult): ArmenianEvalResult;
+
+  // Schools & Teachers
+  getSchools(): SchoolInfo[];
+  getTeachers(): typeof DEMO_TEACHERS;
+
   // Audit Logs
   logAIInteraction(log: Omit<AuditLog, 'id' | 'timestamp'>): AuditLog;
   getAuditLogs(): AuditLog[];
@@ -76,9 +165,11 @@ export interface IRepository {
   // Policy calculation
   computePolicyVersion(): string;
 
-  // Export & Wipe
+  // Export & Wipe & Reset
   exportAllData(): Record<string, unknown>;
   clearNonDemoData(): void;
+  clearDemoData(): void;
+  resetDemoData(): void;
 }
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -95,9 +186,19 @@ export class JsonFileRepository implements IRepository {
   private sideBySideReports: SideBySideReport[] = [];
   private auditLogs: AuditLog[] = [];
 
+  // TeachFlow 3.0 stores
+  private thematicPlans: ThematicPlan[] = [];
+  private lessonPlans: LessonPlan[] = [];
+  private reportTemplates: ReportTemplate[] = [];
+  private reports: ReportInstance[] = [];
+  private answerSheets: AnswerSheetSubmission[] = [];
+  private glossary: TerminologyGlossaryItem[] = [];
+  private armenianEvalTasks: ArmenianEvalTask[] = [];
+  private armenianEvalResults: ArmenianEvalResult[] = [];
+
   constructor() {
     this.loadFromDisk();
-    if (this.sources.length === 0) {
+    if (this.sources.length === 0 || this.reportTemplates.length === 0) {
       this.seedInitialData();
       this.saveToDisk();
     }
@@ -120,6 +221,16 @@ export class JsonFileRepository implements IRepository {
         this.regressionRuns = data.regressionRuns || [];
         this.sideBySideReports = data.sideBySideReports || [];
         this.auditLogs = data.auditLogs || [];
+
+        // 3.0 stores
+        this.thematicPlans = data.thematicPlans || [];
+        this.lessonPlans = data.lessonPlans || [];
+        this.reportTemplates = data.reportTemplates || [];
+        this.reports = data.reports || [];
+        this.answerSheets = data.answerSheets || [];
+        this.glossary = data.glossary || [];
+        this.armenianEvalTasks = data.armenianEvalTasks || [];
+        this.armenianEvalResults = data.armenianEvalResults || [];
       }
     } catch (err) {
       console.error('Failed to load store from disk, starting with seeded data:', err);
@@ -141,6 +252,14 @@ export class JsonFileRepository implements IRepository {
         regressionRuns: this.regressionRuns,
         sideBySideReports: this.sideBySideReports,
         auditLogs: this.auditLogs,
+        thematicPlans: this.thematicPlans,
+        lessonPlans: this.lessonPlans,
+        reportTemplates: this.reportTemplates,
+        reports: this.reports,
+        answerSheets: this.answerSheets,
+        glossary: this.glossary,
+        armenianEvalTasks: this.armenianEvalTasks,
+        armenianEvalResults: this.armenianEvalResults,
       };
       fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2), 'utf-8');
     } catch (err) {
@@ -165,220 +284,98 @@ export class JsonFileRepository implements IRepository {
   }
 
   private seedInitialData(): void {
-    // Demo FACT source
-    const factChunks = [
-      {
-        id: 'demo-source-fact-01#p1#c1',
-        sourceId: 'demo-source-fact-01',
-        page: 1,
-        text: 'Լուսասինթեզը գործընթաց է, որի ընթացքում կանաչ բույսերը արևի լույսի էներգիայի հաշվին ջրից և ածխաթթու գազից սինթեզում են օրգանական նյութեր (գլյուկոզ) և անջատում են թթվածին: Լուսասինթեզը կատարվում է բույսի կանաչ մասերում՝ քլորոպլաստներում, որոնք պարունակում են քլորոֆիլ պիգմենտը:',
-      },
-      {
-        id: 'demo-source-fact-01#p1#c2',
-        sourceId: 'demo-source-fact-01',
-        page: 1,
-        text: 'Բույսերի արմատները հողից կլանում են ջուր և հանքային աղեր: Տերևները մթնոլորտից կլանում են ածխաթթու գազ հերձանցքերի միջոցով: Լույսի առկայությամբ քլորոֆիլը կլանում է լուսային էներգիան, որը փոխակերպվում է քիմիական էներգիայի:',
-      },
-      {
-        id: 'demo-source-fact-01#p2#c1',
-        sourceId: 'demo-source-fact-01',
-        page: 2,
-        text: 'Լուսասինթեզի արդյունքում առաջացած թթվածինը անջատվում է մթնոլորտ և օգտագործվում է կենդանի օրգանիզմների շնչառության համար: Առաջացած օրգանական նյութերը ծառայում են որպես սնունդ ինչպես բույսի, այնպես էլ այլ օրգանիզմների համար:',
-      },
-      {
-        id: 'demo-source-fact-01#p2#c2',
-        sourceId: 'demo-source-fact-01',
-        page: 2,
-        text: 'Լուսասինթեզի ինտենսիվությունը կախված է լուսավորվածության աստիճանից, շրջակա միջավայրի ջերմաստիճանից, ջրի քանակից և ածխաթթու գազի կոնցենտրացիայից: Օպտիմալ պայմաններում գործընթացը կատարվում է առավել արդյունավետ:',
-      },
-    ];
+    this.sources = getDemoSources();
+    this.outcomes = getDemoOutcomes();
 
-    const demoFactSource: Source = {
-      id: 'demo-source-fact-01',
-      title: 'Բնագիտություն 5-րդ դասարան (Ցուցադրական նմուշ / Demo)',
-      authority: 'Ուսումնական նյութերի նմուշային բազա (Demo Repository)',
-      docType: 'textbook',
-      subject: 'Բնագիտություն',
-      grades: [5],
-      role: 'FACT',
-      version: '1.0-demo',
-      effectiveFrom: '2025-01-01',
-      status: 'active',
-      sha256: crypto.createHash('sha256').update(factChunks.map((c) => c.text).join('')).digest('hex'),
-      isDemo: true,
-      uploadedAt: new Date().toISOString(),
-      chunks: factChunks,
-    };
-
-    // Demo METHOD source
-    const methodChunks = [
-      {
-        id: 'demo-source-method-01#p1#c1',
-        sourceId: 'demo-source-method-01',
-        page: 1,
-        text: 'Բնագիտական առարկաների թեստերի կազմման մեթոդական կանոններ. Յուրաքանչյուր հարց պետք է ունենա հստակ, միանշանակ ձևակերպում: Ընտրովի պատասխանով առաջադրանքներում տարբերակների քանակը պետք է լինի առնվազն 3 կամ 4: Բոլոր տարբերակները պետք է լինեն տրամաբանորեն հավանական և համասեռ:',
-      },
-      {
-        id: 'demo-source-method-01#p1#c2',
-        sourceId: 'demo-source-method-01',
-        page: 1,
-        text: 'Արգելվում է օգտագործել երկակի ժխտումներով հարցեր (օրինակ՝ «Ստորև նշվածներից ո՞րը չի հանդիսանում ոչ կենդանի...»): Մեկ ընտրությամբ հարցերում ճիշտ պատասխանը պետք է լինի միակը և անվիճելին: Բարդության մակարդակները (հիմնական, միջին, առաջադեմ) պետք է հավասարաչափ բաշխված լինեն տարբերակների միջև:',
-      },
-    ];
-
-    const demoMethodSource: Source = {
-      id: 'demo-source-method-01',
-      title: 'Բնագիտական առարկաների թեստավորման մեթոդական ուղեցույց (Demo Method Guide)',
-      authority: 'Մեթոդական նմուշների բազա (Demo Methodology Base)',
-      docType: 'methodological_guide',
-      subject: 'Բնագիտություն',
-      grades: [5],
-      role: 'METHOD',
-      version: '1.0-demo',
-      effectiveFrom: '2025-01-01',
-      status: 'active',
-      sha256: crypto.createHash('sha256').update(methodChunks.map((c) => c.text).join('')).digest('hex'),
-      isDemo: true,
-      uploadedAt: new Date().toISOString(),
-      chunks: methodChunks,
-    };
-
-    this.sources = [demoFactSource, demoMethodSource];
-
-    // Seed confirmed curriculum outcomes
-    this.outcomes = [
-      {
-        code: 'ԲՆ-5-1',
-        text: 'Բացատրել լուսասինթեզի գործընթացը և դրա անհրաժեշտ պայմանները (արևի լույս, ջուր, ածխաթթու գազ, քլորոֆիլ):',
-        subject: 'Բնագիտություն',
-        grade: 5,
-        standardVersion: '2025-v1',
-        sourceId: 'demo-source-fact-01',
-        confirmed: true,
-      },
-      {
-        code: 'ԲՆ-5-2',
-        text: 'Նկարագրել լուսասինթեզի արդյունքում թթվածնի անջատման կարևորությունը կենդանի օրգանիզմների շնչառության համար:',
-        subject: 'Բնագիտություն',
-        grade: 5,
-        standardVersion: '2025-v1',
-        sourceId: 'demo-source-fact-01',
-        confirmed: true,
-      },
-      {
-        code: 'ԲՆ-5-3',
-        text: 'Տարբերակել բույսերի օրգանների դերը սննդառության գործընթացում (արմատներ, տերևներ, հերձանցքեր):',
-        subject: 'Բնագիտություն',
-        grade: 5,
-        standardVersion: '2025-v1',
-        sourceId: 'demo-source-fact-01',
-        confirmed: true,
-      },
-    ];
-
-    // Seed rules
+    // Default pedagogical and methodological rules
     this.rules = [
       {
-        id: 'rule-require-answer-key',
-        title: 'Ճիշտ պատասխանի առկայության պահանջ',
-        description: 'Յուրաքանչյուր առաջադրանք պարտադիր պետք է ունենա լրացված և վավեր ճիշտ պատասխան (Answer Key):',
+        id: 'rule-single-correct-answer',
+        title: 'Միակ ճշգրիտ պատասխանի պահանջ',
+        description: 'Մեկ ընտրությամբ հարցերում ճիշտ պատասխանը պետք է լինի միակը և միանշանակ:',
         kind: 'deterministic',
-        params: {},
+        params: { minOptions: 3, maxOptions: 5 },
         severity: 'error',
         active: true,
       },
       {
-        id: 'rule-single-choice-one-answer',
-        title: 'Մեկ ընտրությամբ հարցում միակ ճիշտ պատասխան',
-        description: 'Մեկ ընտրությամբ առաջադրանքի ճիշտ պատասխանը պետք է լինի հստակ և համապատասխանի տրված տարբերակներից միայն մեկին:',
-        kind: 'deterministic',
-        params: {},
+        id: 'rule-no-double-negation',
+        title: 'Երկակի ժխտման արգելք',
+        description: 'Հարցի ձևակերպման մեջ արգելվում է օգտագործել երկակի ժխտումներ (օրինակ՝ «չի հանդիսանում ոչ...»):',
+        kind: 'llm_judged',
+        params: { forbidPhrases: ['չի հանդիսանում ոչ', 'չի կարելի չ'] },
         severity: 'error',
         active: true,
       },
       {
-        id: 'rule-min-options',
-        title: 'Ընտրովի առաջադրանքների տարբերակների նվազագույն քանակ',
-        description: 'Ընտրովի առաջադրանքը պետք է ունենա առնվազն 3 տարբերակ:',
+        id: 'rule-factual-grounding',
+        title: 'Փաստացի մեջբերման պարտադիր պահանջ',
+        description: 'Յուրաքանչյուր առաջադրանք պետք է հղում ունենա հաստատված FACT աղբյուրի կոնկրետ հատվածին:',
         kind: 'deterministic',
-        params: { min_options: 3 },
+        params: { minCitations: 1 },
         severity: 'error',
         active: true,
       },
       {
-        id: 'rule-max-items',
-        title: 'Տարբերակում առաջադրանքների առավելագույն քանակ',
-        description: 'Տարբերակը չպետք է գերազանցի սահմանված առաջադրանքների քանակը (կանխադրված 10):',
-        kind: 'deterministic',
-        params: { max_items: 10 },
+        id: 'rule-balanced-difficulty',
+        title: 'Բարդության մակարդակների բաշխվածություն',
+        description: 'Տարբերակ A-ի և B-ի առաջադրանքների բարդությունները պետք է լինեն համարժեք:',
+        kind: 'llm_judged',
+        params: { checkEquivalence: true },
         severity: 'warning',
         active: true,
       },
       {
-        id: 'rule-allowed-item-types',
-        title: 'Թույլատրելի առաջադրանքների տեսակներ',
-        description: 'Առաջադրանքների տեսակները պետք է լինեն հաստատված ցանկից (մեկ ընտրություն, բազմակի ընտրություն, կարճ պատասխան, բաց):',
-        kind: 'deterministic',
-        params: {
-          allowed_types: ['single_choice', 'multiple_choice', 'short_answer', 'open'],
-        },
-        severity: 'error',
-        active: true,
-      },
-      {
-        id: 'rule-llm-no-double-negatives',
-        title: 'Երկակի ժխտումների և շփոթեցնող ձևակերպումների արգելք',
-        description: 'Հարցի ձևակերպման մեջ արգելվում են երկակի ժխտումներ և աշակերտին շփոթեցնող արհեստական թակարդներ:',
+        id: 'rule-armenian-terminology',
+        title: 'ՀՀ ԿԳՄՍՆ հաստատված տերմինաբանության կիրառում',
+        description: 'Առաջադրանքներում արգելվում են օտարաբանությունները կամ չհաստատված տերմինները:',
         kind: 'llm_judged',
-        params: {},
-        severity: 'warning',
-        sourceId: 'demo-source-method-01',
-        active: true,
-      },
-      {
-        id: 'rule-llm-age-appropriate',
-        title: 'Տարիքային խմբին համապատասխան բառապաշար',
-        description: 'Հարցի լեզուն և տերմինաբանությունը պետք է համապատասխանեն տվյալ դասարանի տարիքային զարգացմանը:',
-        kind: 'llm_judged',
-        params: {},
+        params: { dictionary: 'official_armenian' },
         severity: 'warning',
         active: true,
       },
     ];
 
-    // Seed frozen tasks for regression runner
+    // Seeded frozen tasks for regression testing
     this.frozenTasks = [
       {
-        id: 'task-photo-01',
+        id: 'task-photosynthesis-gen',
         subject: 'Բնագիտություն',
         grade: 5,
-        topic: 'Լուսասինթեզի ընթացքը և քլորոպլաստների դերը',
+        topic: 'Լուսասինթեզի ընթացքը և թթվածնի առաջացումը',
         sourceIds: ['demo-source-fact-01'],
         expectedOutcome: 'generate',
-        description: 'Թեմա առկա է աղբյուրներում. պետք է հաջողությամբ գեներացվի և անցնի վալիդացիան:',
+        description: 'Լուսասինթեզի թեման առկա է աղբյուրում, պետք է հաջողությամբ գեներացվեն առաջադրանքներ:',
       },
       {
-        id: 'task-quantum-refusal-02',
+        id: 'task-quantum-refuse',
         subject: 'Բնագիտություն',
         grade: 5,
-        topic: 'Քվանտային համակարգիչներ և կիսահաղորդիչներ',
+        topic: 'Քվանտային մեխանիկա և ֆոտոէֆեկտ',
         sourceIds: ['demo-source-fact-01'],
         expectedOutcome: 'refuse',
-        description: 'Թեմա, որը լիովին բացակայում է 5-րդ դասարանի աղբյուրներում. համակարգը ՊԵՏՔ Է մերժի:',
+        description: 'Քվանտային մեխանիկայի թեման բացակայում է 5-րդ դասարանի աղբյուրներում, համակարգը պետք է մերժի:',
       },
       {
-        id: 'task-roots-03',
-        subject: 'Բնագիտություն',
-        grade: 5,
-        topic: 'Բույսերի արմատային սննդառություն և ջրի կլանում',
-        sourceIds: ['demo-source-fact-01'],
+        id: 'task-tigran-gen',
+        subject: 'Հայոց պատմություն',
+        grade: 7,
+        topic: 'Տիգրան Բ Մեծի գահակալությունը և Տիգրանակերտի հիմնադրումը',
+        sourceIds: ['demo-source-history-01'],
         expectedOutcome: 'generate',
-        description: 'Թեմա առկա է աղբյուրներում. պետք է գեներացվեն ստուգված առաջադրանքներ:',
+        description: 'Տիգրան Մեծի և Տիգրանակերտի թեմաները լիարժեք առկա են 7-րդ դասարանի դասագրքում:',
       },
     ];
+
+    this.thematicPlans = getDemoThematicPlans();
+    this.reportTemplates = getDemoReportTemplates();
+    this.reports = getDemoReports();
+    this.answerSheets = getDemoAnswerSheets();
+    this.glossary = getDemoGlossary();
+    this.armenianEvalTasks = getDemoArmenianEvalTasks();
   }
 
-  // --- Source methods ---
+  // --- Sources ---
   getSources(): Source[] {
     return [...this.sources];
   }
@@ -388,9 +385,9 @@ export class JsonFileRepository implements IRepository {
   }
 
   saveSource(source: Source): Source {
-    const idx = this.sources.findIndex((s) => s.id === source.id);
-    if (idx >= 0) {
-      this.sources[idx] = source;
+    const existingIndex = this.sources.findIndex((s) => s.id === source.id);
+    if (existingIndex >= 0) {
+      this.sources[existingIndex] = source;
     } else {
       this.sources.push(source);
     }
@@ -399,56 +396,57 @@ export class JsonFileRepository implements IRepository {
   }
 
   supersedeSource(oldSourceId: string, newSource: Source): { old: Source; current: Source } {
-    const oldIdx = this.sources.findIndex((s) => s.id === oldSourceId);
-    if (oldIdx >= 0) {
-      this.sources[oldIdx].status = 'superseded';
-      this.sources[oldIdx].effectiveTo = new Date().toISOString();
+    const oldSource = this.sources.find((s) => s.id === oldSourceId);
+    if (!oldSource) {
+      throw new Error(`Old source ${oldSourceId} not found`);
     }
+    oldSource.status = 'superseded';
+    oldSource.effectiveTo = new Date().toISOString();
+
+    newSource.status = 'active';
     this.sources.push(newSource);
     this.saveToDisk();
-    return {
-      old: this.sources[oldIdx],
-      current: newSource,
-    };
+
+    return { old: oldSource, current: newSource };
   }
 
   deleteSource(id: string): boolean {
-    const initialLen = this.sources.length;
-    this.sources = this.sources.filter((s) => s.id !== id);
-    if (this.sources.length !== initialLen) {
+    const idx = this.sources.findIndex((s) => s.id === id);
+    if (idx >= 0) {
+      this.sources.splice(idx, 1);
       this.saveToDisk();
       return true;
     }
     return false;
   }
 
-  // --- Outcome methods ---
+  // --- Outcomes ---
   getOutcomes(): CurriculumOutcome[] {
     return [...this.outcomes];
   }
 
   getConfirmedOutcomes(subject: string, grade: number): CurriculumOutcome[] {
     return this.outcomes.filter(
-      (o) => o.confirmed && o.subject.toLowerCase() === subject.toLowerCase() && o.grade === grade
+      (o) => o.subject === subject && o.grade === grade && o.confirmed
     );
   }
 
   saveOutcomes(outcomes: CurriculumOutcome[]): void {
-    for (const outcome of outcomes) {
-      const idx = this.outcomes.findIndex((o) => o.code === outcome.code);
+    for (const o of outcomes) {
+      const idx = this.outcomes.findIndex((existing) => existing.code === o.code);
       if (idx >= 0) {
-        this.outcomes[idx] = outcome;
+        this.outcomes[idx] = o;
       } else {
-        this.outcomes.push(outcome);
+        this.outcomes.push(o);
       }
     }
     this.saveToDisk();
   }
 
   confirmOutcome(code: string, confirmed: boolean): boolean {
-    const item = this.outcomes.find((o) => o.code === code);
-    if (item) {
-      item.confirmed = confirmed;
+    const outcome = this.outcomes.find((o) => o.code === code);
+    if (outcome) {
+      outcome.confirmed = confirmed;
       this.saveToDisk();
       return true;
     }
@@ -456,16 +454,16 @@ export class JsonFileRepository implements IRepository {
   }
 
   deleteOutcome(code: string): boolean {
-    const initialLen = this.outcomes.length;
-    this.outcomes = this.outcomes.filter((o) => o.code !== code);
-    if (this.outcomes.length !== initialLen) {
+    const idx = this.outcomes.findIndex((o) => o.code === code);
+    if (idx >= 0) {
+      this.outcomes.splice(idx, 1);
       this.saveToDisk();
       return true;
     }
     return false;
   }
 
-  // --- Rule methods ---
+  // --- Rules ---
   getRules(): MethodRule[] {
     return [...this.rules];
   }
@@ -496,16 +494,16 @@ export class JsonFileRepository implements IRepository {
   }
 
   deleteRule(id: string): boolean {
-    const initialLen = this.rules.length;
-    this.rules = this.rules.filter((r) => r.id !== id);
-    if (this.rules.length !== initialLen) {
+    const idx = this.rules.findIndex((r) => r.id === id);
+    if (idx >= 0) {
+      this.rules.splice(idx, 1);
       this.saveToDisk();
       return true;
     }
     return false;
   }
 
-  // --- Assessment methods ---
+  // --- Assessments ---
   getAssessments(): Assessment[] {
     return [...this.assessments];
   }
@@ -519,16 +517,16 @@ export class JsonFileRepository implements IRepository {
     if (idx >= 0) {
       this.assessments[idx] = assessment;
     } else {
-      this.assessments.push(assessment);
+      this.assessments.unshift(assessment);
     }
     this.saveToDisk();
     return assessment;
   }
 
   updateAssessmentStatus(id: string, status: Assessment['status']): boolean {
-    const a = this.assessments.find((item) => item.id === id);
-    if (a) {
-      a.status = status;
+    const asm = this.assessments.find((a) => a.id === id);
+    if (asm) {
+      asm.status = status;
       this.saveToDisk();
       return true;
     }
@@ -536,9 +534,9 @@ export class JsonFileRepository implements IRepository {
   }
 
   deleteAssessment(id: string): boolean {
-    const initialLen = this.assessments.length;
-    this.assessments = this.assessments.filter((a) => a.id !== id);
-    if (this.assessments.length !== initialLen) {
+    const idx = this.assessments.findIndex((a) => a.id === id);
+    if (idx >= 0) {
+      this.assessments.splice(idx, 1);
       this.saveToDisk();
       return true;
     }
@@ -555,16 +553,16 @@ export class JsonFileRepository implements IRepository {
     if (idx >= 0) {
       this.validationReports[idx] = report;
     } else {
-      this.validationReports.push(report);
+      this.validationReports.unshift(report);
     }
     this.saveToDisk();
     return report;
   }
 
   deleteValidationReport(id: string): boolean {
-    const initialLen = this.validationReports.length;
-    this.validationReports = this.validationReports.filter((r) => r.id !== id);
-    if (this.validationReports.length !== initialLen) {
+    const idx = this.validationReports.findIndex((r) => r.id === id);
+    if (idx >= 0) {
+      this.validationReports.splice(idx, 1);
       this.saveToDisk();
       return true;
     }
@@ -588,9 +586,9 @@ export class JsonFileRepository implements IRepository {
   }
 
   deleteFrozenTask(id: string): boolean {
-    const initialLen = this.frozenTasks.length;
-    this.frozenTasks = this.frozenTasks.filter((t) => t.id !== id);
-    if (this.frozenTasks.length !== initialLen) {
+    const idx = this.frozenTasks.findIndex((t) => t.id === id);
+    if (idx >= 0) {
+      this.frozenTasks.splice(idx, 1);
       this.saveToDisk();
       return true;
     }
@@ -602,7 +600,10 @@ export class JsonFileRepository implements IRepository {
   }
 
   saveRegressionRun(run: RegressionRun): RegressionRun {
-    this.regressionRuns.push(run);
+    this.regressionRuns.unshift(run);
+    if (this.regressionRuns.length > 50) {
+      this.regressionRuns = this.regressionRuns.slice(0, 50);
+    }
     this.saveToDisk();
     return run;
   }
@@ -613,9 +614,397 @@ export class JsonFileRepository implements IRepository {
   }
 
   saveSideBySideReport(report: SideBySideReport): SideBySideReport {
-    this.sideBySideReports.push(report);
+    this.sideBySideReports.unshift(report);
+    if (this.sideBySideReports.length > 50) {
+      this.sideBySideReports = this.sideBySideReports.slice(0, 50);
+    }
     this.saveToDisk();
     return report;
+  }
+
+  // --- Thematic Plans ---
+  getThematicPlans(schoolId?: string, subject?: string, grade?: number): ThematicPlan[] {
+    return this.thematicPlans.filter((p) => {
+      if (schoolId && p.schoolId !== schoolId) return false;
+      if (subject && p.subject !== subject) return false;
+      if (grade !== undefined && p.grade !== grade) return false;
+      return true;
+    });
+  }
+
+  getThematicPlan(id: string): ThematicPlan | undefined {
+    return this.thematicPlans.find((p) => p.id === id);
+  }
+
+  saveThematicPlan(plan: ThematicPlan): ThematicPlan {
+    const idx = this.thematicPlans.findIndex((p) => p.id === plan.id);
+    if (idx >= 0) {
+      this.thematicPlans[idx] = plan;
+    } else {
+      this.thematicPlans.unshift(plan);
+    }
+    this.saveToDisk();
+    return plan;
+  }
+
+  updateThematicPlanRow(planId: string, rowId: string, update: Partial<ThematicPlanRow>): ThematicPlan | undefined {
+    const plan = this.thematicPlans.find((p) => p.id === planId);
+    if (!plan) return undefined;
+    const row = plan.rows.find((r) => r.id === rowId);
+    if (!row) return undefined;
+
+    Object.assign(row, update);
+    plan.updatedAt = new Date().toISOString();
+    this.saveToDisk();
+    return plan;
+  }
+
+  deleteThematicPlan(id: string): boolean {
+    const idx = this.thematicPlans.findIndex((p) => p.id === id);
+    if (idx >= 0) {
+      this.thematicPlans.splice(idx, 1);
+      this.saveToDisk();
+      return true;
+    }
+    return false;
+  }
+
+  // --- Lesson Plans ---
+  getLessonPlans(thematicPlanId?: string): LessonPlan[] {
+    if (thematicPlanId) {
+      return this.lessonPlans.filter((p) => p.thematicPlanId === thematicPlanId);
+    }
+    return [...this.lessonPlans];
+  }
+
+  getLessonPlan(id: string): LessonPlan | undefined {
+    return this.lessonPlans.find((p) => p.id === id);
+  }
+
+  saveLessonPlan(plan: LessonPlan): LessonPlan {
+    const idx = this.lessonPlans.findIndex((p) => p.id === plan.id);
+    if (idx >= 0) {
+      this.lessonPlans[idx] = plan;
+    } else {
+      this.lessonPlans.unshift(plan);
+    }
+    this.saveToDisk();
+    return plan;
+  }
+
+  deleteLessonPlan(id: string): boolean {
+    const idx = this.lessonPlans.findIndex((p) => p.id === id);
+    if (idx >= 0) {
+      this.lessonPlans.splice(idx, 1);
+      this.saveToDisk();
+      return true;
+    }
+    return false;
+  }
+
+  // --- Report Templates ---
+  getReportTemplates(): ReportTemplate[] {
+    return [...this.reportTemplates];
+  }
+
+  getReportTemplate(id: string): ReportTemplate | undefined {
+    return this.reportTemplates.find((t) => t.id === id);
+  }
+
+  saveReportTemplate(template: ReportTemplate): ReportTemplate {
+    const idx = this.reportTemplates.findIndex((t) => t.id === template.id);
+    if (idx >= 0) {
+      this.reportTemplates[idx] = template;
+    } else {
+      this.reportTemplates.push(template);
+    }
+    this.saveToDisk();
+    return template;
+  }
+
+  deleteReportTemplate(id: string): boolean {
+    const idx = this.reportTemplates.findIndex((t) => t.id === id);
+    if (idx >= 0) {
+      this.reportTemplates.splice(idx, 1);
+      this.saveToDisk();
+      return true;
+    }
+    return false;
+  }
+
+  // --- Reports ---
+  getReports(filters?: {
+    schoolId?: string;
+    authorRole?: string;
+    period?: string;
+    status?: string;
+    templateId?: string;
+    subject?: string;
+    grade?: number;
+  }): ReportInstance[] {
+    return this.reports.filter((r) => {
+      if (filters?.schoolId && r.schoolId !== filters.schoolId) return false;
+      if (filters?.authorRole && r.authorRole !== filters.authorRole) return false;
+      if (filters?.period && r.period !== filters.period) return false;
+      if (filters?.status && r.status !== filters.status) return false;
+      if (filters?.templateId && r.templateId !== filters.templateId) return false;
+      if (filters?.subject && r.subject !== filters.subject) return false;
+      if (filters?.grade !== undefined && r.grade !== filters.grade) return false;
+      return true;
+    });
+  }
+
+  getReport(id: string): ReportInstance | undefined {
+    return this.reports.find((r) => r.id === id);
+  }
+
+  saveReport(report: ReportInstance): ReportInstance {
+    const idx = this.reports.findIndex((r) => r.id === report.id);
+    if (idx >= 0) {
+      this.reports[idx] = report;
+    } else {
+      this.reports.unshift(report);
+    }
+
+    // Check if child report changed, mark parent as stale
+    if (report.parentReportId) {
+      const parent = this.reports.find((p) => p.id === report.parentReportId);
+      if (parent) {
+        parent.isStale = true;
+      }
+    }
+
+    this.saveToDisk();
+    return report;
+  }
+
+  updateReportStatus(
+    id: string,
+    status: ReportInstance['status'],
+    comment?: { fieldKey: string; text: string; author: string; role: string }
+  ): ReportInstance | undefined {
+    const rep = this.reports.find((r) => r.id === id);
+    if (!rep) return undefined;
+
+    rep.status = status;
+    rep.updatedAt = new Date().toISOString();
+
+    if (comment) {
+      rep.comments.push({
+        id: `comm-${Date.now()}`,
+        fieldKey: comment.fieldKey,
+        text: comment.text,
+        author: comment.author,
+        role: comment.role,
+        date: new Date().toISOString(),
+      });
+    }
+
+    rep.timeline.push({
+      action: status,
+      actor: comment?.author || 'Օգտատեր',
+      timestamp: new Date().toISOString(),
+      note: comment?.text,
+    });
+
+    this.saveToDisk();
+    return rep;
+  }
+
+  consolidateSchoolReport(
+    templateId: string,
+    schoolId: string,
+    academicYear: string,
+    period: string,
+    subjectGroup: string
+  ): ReportInstance {
+    const school = DEMO_SCHOOLS.find((s) => s.id === schoolId) || DEMO_SCHOOLS[0];
+    const template = this.getReportTemplate(templateId) || this.getReportTemplates()[2];
+
+    // Find accepted child reports from this school
+    const childReports = this.reports.filter(
+      (r) =>
+        r.schoolId === schoolId &&
+        r.academicYear === academicYear &&
+        (r.status === 'accepted_by_director' || r.status === 'included_in_school_report')
+    );
+
+    const totalPlannedHours = childReports.reduce((acc, c) => acc + Number(c.data.plannedHours || 0), 0);
+    const totalActualHours = childReports.reduce((acc, c) => acc + Number(c.data.actualHours || 0), 0);
+    const teachersCount = childReports.length || 1;
+    const averageCompletion =
+      totalPlannedHours > 0 ? Math.round((totalActualHours / totalPlannedHours) * 100) : 100;
+
+    const reportId = `rep-school-${schoolId}-${Date.now().toString(36)}`;
+    const consolidated: ReportInstance = {
+      id: reportId,
+      templateId: template.id,
+      templateVersion: template.version,
+      title: `${school.name} — Ամփոփ հաշվետվություն (${subjectGroup})`,
+      schoolId: school.id,
+      schoolName: school.name,
+      authorRole: 'director',
+      authorName: `Տնօրեն / Փոխտնօրեն (${school.name})`,
+      subject: subjectGroup,
+      grade: 7,
+      period: period as any,
+      academicYear,
+      status: 'submitted_to_reviewer',
+      childReportIds: childReports.map((c) => c.id),
+      data: {
+        subjectGroup,
+        teachersCount,
+        totalPlannedHours,
+        totalActualHours,
+        averageCompletion,
+        methodologicalWorkSummary: `Հաշվետվությունն ավտոմատ ագրեգացվել է ${teachersCount} ուսուցիչների կողմից ներկայացված և հաստատված տվյալներից:`,
+        identifiedDifficulties: 'Ոչ էական շեղումներ:',
+        recommendations: 'Շարունակել ծրագրային ժամանակացույցի պահպանումը:',
+      },
+      comments: [],
+      timeline: [
+        {
+          action: 'consolidated',
+          actor: 'Տնօրեն',
+          timestamp: new Date().toISOString(),
+          note: `Ամփոփված է ${teachersCount} հաշվետվություն`,
+        },
+      ],
+      dataSnapshotHash: `hash-consol-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Mark children as included
+    for (const child of childReports) {
+      child.status = 'included_in_school_report';
+      child.parentReportId = consolidated.id;
+    }
+
+    this.saveReport(consolidated);
+    return consolidated;
+  }
+
+  deleteReport(id: string): boolean {
+    const idx = this.reports.findIndex((r) => r.id === id);
+    if (idx >= 0) {
+      this.reports.splice(idx, 1);
+      this.saveToDisk();
+      return true;
+    }
+    return false;
+  }
+
+  // --- Answer Sheets ---
+  getAnswerSheets(assessmentId?: string): AnswerSheetSubmission[] {
+    if (assessmentId) {
+      return this.answerSheets.filter((s) => s.assessmentId === assessmentId);
+    }
+    return [...this.answerSheets];
+  }
+
+  getAnswerSheet(id: string): AnswerSheetSubmission | undefined {
+    return this.answerSheets.find((s) => s.id === id);
+  }
+
+  saveAnswerSheet(sheet: AnswerSheetSubmission): AnswerSheetSubmission {
+    const idx = this.answerSheets.findIndex((s) => s.id === sheet.id);
+    if (idx >= 0) {
+      this.answerSheets[idx] = sheet;
+    } else {
+      this.answerSheets.unshift(sheet);
+    }
+    this.saveToDisk();
+    return sheet;
+  }
+
+  confirmAnswerSheet(id: string): AnswerSheetSubmission | undefined {
+    const sheet = this.answerSheets.find((s) => s.id === id);
+    if (!sheet) return undefined;
+
+    sheet.status = 'confirmed';
+    // Zero-retention: delete original image immediately upon confirmation
+    delete sheet.imageUrl;
+    this.saveToDisk();
+    return sheet;
+  }
+
+  deleteAnswerSheet(id: string): boolean {
+    const idx = this.answerSheets.findIndex((s) => s.id === id);
+    if (idx >= 0) {
+      this.answerSheets.splice(idx, 1);
+      this.saveToDisk();
+      return true;
+    }
+    return false;
+  }
+
+  // --- Glossary ---
+  getGlossary(subject?: string, grade?: number): TerminologyGlossaryItem[] {
+    return this.glossary.filter((item) => {
+      if (subject && item.subject !== subject) return false;
+      if (grade !== undefined && !item.grades.includes(grade)) return false;
+      return true;
+    });
+  }
+
+  saveGlossaryItem(item: TerminologyGlossaryItem): TerminologyGlossaryItem {
+    const idx = this.glossary.findIndex((g) => g.id === item.id);
+    if (idx >= 0) {
+      this.glossary[idx] = item;
+    } else {
+      this.glossary.unshift(item);
+    }
+    this.saveToDisk();
+    return item;
+  }
+
+  deleteGlossaryItem(id: string): boolean {
+    const idx = this.glossary.findIndex((g) => g.id === id);
+    if (idx >= 0) {
+      this.glossary.splice(idx, 1);
+      this.saveToDisk();
+      return true;
+    }
+    return false;
+  }
+
+  // --- Armenian Eval ---
+  getArmenianEvalTasks(): ArmenianEvalTask[] {
+    return [...this.armenianEvalTasks];
+  }
+
+  saveArmenianEvalTask(task: ArmenianEvalTask): ArmenianEvalTask {
+    const idx = this.armenianEvalTasks.findIndex((t) => t.id === task.id);
+    if (idx >= 0) {
+      this.armenianEvalTasks[idx] = task;
+    } else {
+      this.armenianEvalTasks.push(task);
+    }
+    this.saveToDisk();
+    return task;
+  }
+
+  getArmenianEvalResults(): ArmenianEvalResult[] {
+    return [...this.armenianEvalResults];
+  }
+
+  saveArmenianEvalResult(res: ArmenianEvalResult): ArmenianEvalResult {
+    this.armenianEvalResults.unshift(res);
+    if (this.armenianEvalResults.length > 50) {
+      this.armenianEvalResults = this.armenianEvalResults.slice(0, 50);
+    }
+    this.saveToDisk();
+    return res;
+  }
+
+  // --- Schools & Teachers ---
+  getSchools(): SchoolInfo[] {
+    return DEMO_SCHOOLS;
+  }
+
+  getTeachers(): typeof DEMO_TEACHERS {
+    return DEMO_TEACHERS;
   }
 
   // --- Audit Logs ---
@@ -626,7 +1015,6 @@ export class JsonFileRepository implements IRepository {
       timestamp: new Date().toISOString(),
     };
     this.auditLogs.unshift(fullLog);
-    // Keep max 200 logs
     if (this.auditLogs.length > 200) {
       this.auditLogs = this.auditLogs.slice(0, 200);
     }
@@ -643,7 +1031,7 @@ export class JsonFileRepository implements IRepository {
     this.saveToDisk();
   }
 
-  // --- Export & Wipe ---
+  // --- Export & Wipe & Reset ---
   exportAllData(): Record<string, unknown> {
     return {
       exportedAt: new Date().toISOString(),
@@ -652,6 +1040,12 @@ export class JsonFileRepository implements IRepository {
       outcomes: this.outcomes,
       rules: this.rules,
       assessments: this.assessments,
+      thematicPlans: this.thematicPlans,
+      lessonPlans: this.lessonPlans,
+      reportTemplates: this.reportTemplates,
+      reports: this.reports,
+      answerSheets: this.answerSheets,
+      glossary: this.glossary,
       validationReports: this.validationReports,
       frozenTasks: this.frozenTasks,
       regressionRuns: this.regressionRuns,
@@ -667,6 +1061,21 @@ export class JsonFileRepository implements IRepository {
     this.regressionRuns = [];
     this.sideBySideReports = [];
     this.auditLogs = [];
+    this.saveToDisk();
+  }
+
+  clearDemoData(): void {
+    this.thematicPlans = [];
+    this.lessonPlans = [];
+    this.reports = [];
+    this.answerSheets = [];
+    this.assessments = [];
+    this.validationReports = [];
+    this.saveToDisk();
+  }
+
+  resetDemoData(): void {
+    this.seedInitialData();
     this.saveToDisk();
   }
 }
