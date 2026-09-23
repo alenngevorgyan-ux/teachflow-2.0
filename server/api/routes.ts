@@ -37,6 +37,7 @@ import { checkPrivacy } from '../pipeline/privacyGuard.js';
 import { emisAdapter } from '../pipeline/emisAdapter.js';
 import { runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
 import { ingestSourceFile } from '../pipeline/sourceIngestion.js';
+import { parseWorkspaceIntent } from '../pipeline/workspaceIntent.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -706,6 +707,36 @@ export function createApiRouter(): Router {
     const plan = repository.getThematicPlan(req.params.id);
     if (!plan) return res.status(404).json({ error: 'Thematic plan not found' });
     res.json({ plan });
+  });
+
+  // Workspace chat: structured intent parse (no keyword routing). The result
+  // is only a proposal — the client shows it as confirmation chips (source
+  // title + version) and the teacher must confirm before any of the actual
+  // generation endpoints below are called.
+  router.post('/workspace/parse-intent', async (req: Request, res: Response) => {
+    try {
+      const { message, subject, grade, providerId, modelId } = req.body;
+      if (!message || typeof message !== 'string' || !message.trim()) {
+        return res.status(400).json({ error: 'Missing message' });
+      }
+      if (!subject || grade === undefined) {
+        return res.status(400).json({ error: 'Missing pinned subject/grade context' });
+      }
+
+      const provider = getProvider(providerId);
+      const result = await parseWorkspaceIntent({
+        message,
+        pinnedSubject: subject,
+        pinnedGrade: Number(grade),
+        provider,
+        modelId,
+      });
+
+      res.json(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
   });
 
   router.post('/thematic-plans', async (req: Request, res: Response) => {

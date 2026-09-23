@@ -96,6 +96,20 @@ export const EquivalenceJudgeSchema = z.object({
 
 export type EquivalenceJudgeOutput = z.infer<typeof EquivalenceJudgeSchema>;
 
+export const WorkspaceIntentSchema = z.object({
+  intent: z.enum(['generate_thematic_plan', 'generate_lesson_plan', 'load_report', 'unclear']),
+  subject: z.string().optional().describe('Subject name if the teacher named one, else omit (use the pinned/default subject)'),
+  grade: z.number().int().optional().describe('Grade number if the teacher named one, else omit'),
+  topic: z.string().optional().describe('For generate_lesson_plan: the topic/theme the teacher wants a lesson plan for'),
+  sourceHints: z.array(z.string()).optional().describe('Any source titles, textbook names, or keywords the teacher mentioned about which material to use'),
+  clarifyingQuestion: z
+    .string()
+    .optional()
+    .describe('Required when intent is "unclear": a short Armenian question asking the teacher what they want'),
+});
+
+export type WorkspaceIntentOutput = z.infer<typeof WorkspaceIntentSchema>;
+
 export const ThematicPlanTopicSchema = z.object({
   topic: z.string().describe('Topic title in Armenian, grounded in the confirmed outcomes / FACT chunks'),
   outcomeCodes: z

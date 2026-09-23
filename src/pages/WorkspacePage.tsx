@@ -17,13 +17,28 @@ import {
 } from 'lucide-react';
 import { Language, PinnedContext, Role, ThematicPlan, LessonPlan, ReportInstance } from '../../shared/types';
 import { translations } from '../i18n/translations';
-import { Badge } from '../components/Badge';
 
 interface WorkspacePageProps {
   lang: Language;
   role: Role;
   pinnedContext: PinnedContext;
   onNavigateTab: (tab: string) => void;
+}
+
+interface MatchedSource {
+  id: string;
+  title: string;
+  version: string;
+  role: string;
+}
+
+interface PendingIntent {
+  intent: 'generate_thematic_plan' | 'generate_lesson_plan' | 'load_report';
+  resolvedSubject: string;
+  resolvedGrade: number;
+  topic?: string;
+  matchedSources: MatchedSource[];
+  resolved?: boolean;
 }
 
 interface ChatMessage {
@@ -35,6 +50,11 @@ interface ChatMessage {
     type: 'thematic_plan' | 'lesson_plan' | 'report' | 'assessment';
     data: any;
   };
+  pendingIntent?: PendingIntent;
+}
+
+function nowLabel(): string {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 export const WorkspacePage: React.FC<WorkspacePageProps> = ({
@@ -81,6 +101,12 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
     }
   };
 
+  const intentLabel = (intent: PendingIntent['intent']): string => {
+    if (intent === 'generate_thematic_plan') return 'ստեղծել թեմատիկ պլան';
+    if (intent === 'generate_lesson_plan') return 'ստեղծել դասի պլան';
+    return 'բեռնել հաշվետվությունը';
+  };
+
   const handleSendMessage = async (textToSend?: string) => {
     const query = textToSend || inputMessage;
     if (!query.trim()) return;
@@ -89,7 +115,7 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
       id: `msg-${Date.now()}`,
       sender: 'user',
       text: query,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: nowLabel(),
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -97,46 +123,108 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
     setIsLoading(true);
 
     try {
-      // Analyze user prompt and trigger appropriate pipeline action
-      const lower = query.toLowerCase();
+      // Structured intent parse — no keyword matching. The model decides what
+      // the teacher wants; we only ever act after they confirm it below.
+      const res = await fetch('/api/workspace/parse-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: query,
+          subject: pinnedContext.subject,
+          grade: pinnedContext.grade,
+        }),
+      });
+      const data = await res.json();
 
-      if (lower.includes('դասի պլան') || lower.includes('lesson plan')) {
-        // Generate lesson plan from first row of active thematic plan
-        if (activeThematicPlan && activeThematicPlan.rows.length > 0) {
-          const row = activeThematicPlan.rows[0];
-          const res = await fetch('/api/lesson-plans/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              thematicPlanId: activeThematicPlan.id,
-              rowId: row.id,
-              durationMinutes: 45,
-            }),
-          });
-          const resData = await res.json();
-          if (resData.lessonPlan) {
-            setActiveLessonPlan(resData.lessonPlan);
-            setActiveArtifactType('lesson_plan');
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `res-${Date.now()}`,
-                sender: 'assistant',
-                text: `Պատրաստ է: «${row.topic}» թեմայով 45 րոպեանոց դասի պլանը հաջողությամբ գեներացվել է՝ համաձայն ԽԻԿ մեթոդաբանության և պաշտոնական FACT դասագրքի մեջբերումներով: Դիտեք աջ վահանակում:`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                actionArtifact: { type: 'lesson_plan', data: resData.lessonPlan },
-              },
-            ]);
-          }
-        }
-      } else if (lower.includes('թեմատիկ պլան') || lower.includes('thematic plan')) {
-        // Scaffold or load thematic plan
+      if (!res.ok) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `res-${Date.now()}`,
+            sender: 'assistant',
+            text: `Հարցումը մշակել չհաջողվեց. ${data.error || 'անհայտ սխալ'}`,
+            timestamp: nowLabel(),
+          },
+        ]);
+        return;
+      }
+
+      if (data.intent === 'unclear') {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `res-${Date.now()}`,
+            sender: 'assistant',
+            text: data.clarifyingQuestion || 'Կարո՞ղ եք ճշտել, թե ինչ եք ցանկանում անել:',
+            timestamp: nowLabel(),
+          },
+        ]);
+        return;
+      }
+
+      const pendingIntent: PendingIntent = {
+        intent: data.intent,
+        resolvedSubject: data.resolvedSubject,
+        resolvedGrade: data.resolvedGrade,
+        topic: data.topic,
+        matchedSources: data.matchedSources || [],
+      };
+
+      const topicNote = pendingIntent.topic ? ` («${pendingIntent.topic}» թեմայով)` : '';
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `res-${Date.now()}`,
+          sender: 'assistant',
+          text: `Հասկացա. ցանկանում եք ${intentLabel(pendingIntent.intent)}${topicNote}՝ ${pendingIntent.resolvedSubject}, ${pendingIntent.resolvedGrade}-րդ դասարան: ${
+            pendingIntent.matchedSources.length > 0
+              ? 'Ստորև՝ գրանցամատյանի աղբյուրները, որոնց վրա հիմնված կլինի արդյունքը: Հաստատեք, որ շարունակենք:'
+              : 'Գրանցամատյանում այս առարկայի/դասարանի համար ՓԱՍՏԱՑԻ աղբյուր չգտա. գեներացումը կարող է մերժվել: Հաստատեք միայն, եթե համոզված եք:'
+          }`,
+          timestamp: nowLabel(),
+          pendingIntent,
+        },
+      ]);
+    } catch (err) {
+      console.error(err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `res-${Date.now()}`,
+          sender: 'assistant',
+          text: 'Ցանցային սխալ: Փորձեք կրկին:',
+          timestamp: nowLabel(),
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCancelIntent = (msgId: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId && m.pendingIntent ? { ...m, pendingIntent: { ...m.pendingIntent, resolved: true } } : m
+      )
+    );
+  };
+
+  const handleConfirmIntent = async (msgId: string, pendingIntent: PendingIntent) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId && m.pendingIntent ? { ...m, pendingIntent: { ...m.pendingIntent, resolved: true } } : m
+      )
+    );
+    setIsLoading(true);
+
+    try {
+      if (pendingIntent.intent === 'generate_thematic_plan') {
         const res = await fetch('/api/thematic-plans', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            subject: pinnedContext.subject,
-            grade: pinnedContext.grade,
+            subject: pendingIntent.resolvedSubject,
+            grade: pendingIntent.resolvedGrade,
             programVersion: pinnedContext.programVersion,
             academicYear: pinnedContext.academicYear,
             schoolId: pinnedContext.schoolId,
@@ -145,7 +233,7 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
           }),
         });
         const resData = await res.json();
-        if (resData.plan) {
+        if (res.ok && resData.plan) {
           setActiveThematicPlan(resData.plan);
           setActiveArtifactType('thematic_plan');
           setMessages((prev) => [
@@ -153,14 +241,89 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
             {
               id: `res-${Date.now()}`,
               sender: 'assistant',
-              text: `Ստեղծվել է ${pinnedContext.subject} ${pinnedContext.grade}-րդ դասարանի տարեկան թեմատիկ պլանը (68 ժամ, 34 շաբաթ): Բոլոր պարտադիր չափորոշչային վերջնարդյունքները ընդգրկված են: Դիտեք աջ վահանակում:`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              text: `Ստեղծվել է ${pendingIntent.resolvedSubject} ${pendingIntent.resolvedGrade}-րդ դասարանի տարեկան թեմատիկ պլանը: Դիտեք աջ վահանակում:`,
+              timestamp: nowLabel(),
               actionArtifact: { type: 'thematic_plan', data: resData.plan },
             },
           ]);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            { id: `res-${Date.now()}`, sender: 'assistant', text: `Ձախողվեց. ${resData.error || ''}`, timestamp: nowLabel() },
+          ]);
         }
-      } else if (lower.includes('հաշվետվություն') || lower.includes('report')) {
-        // Load report
+      } else if (pendingIntent.intent === 'generate_lesson_plan') {
+        // Same API as ThematicPlansPage: resolve/load the thematic plan for
+        // the resolved subject/grade, then find the row matching the parsed
+        // topic (never just "the first row").
+        let plan = activeThematicPlan;
+        if (!plan || plan.subject !== pendingIntent.resolvedSubject || plan.grade !== pendingIntent.resolvedGrade) {
+          const planRes = await fetch(
+            `/api/thematic-plans?subject=${encodeURIComponent(pendingIntent.resolvedSubject)}&grade=${pendingIntent.resolvedGrade}`
+          );
+          const planData = await planRes.json();
+          plan = planData.plans?.[0] || null;
+        }
+
+        if (!plan) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `res-${Date.now()}`,
+              sender: 'assistant',
+              text: `${pendingIntent.resolvedSubject}, ${pendingIntent.resolvedGrade}-րդ դասարանի համար թեմատիկ պլան դեռ չկա: Նախ ստեղծեք թեմատիկ պլան:`,
+              timestamp: nowLabel(),
+            },
+          ]);
+          return;
+        }
+
+        const normalizedTopic = (pendingIntent.topic || '').trim().toLowerCase();
+        const matchedRow =
+          (normalizedTopic &&
+            plan.rows.find((r) => r.topic.toLowerCase().includes(normalizedTopic))) ||
+          plan.rows.find((r) => !r.taught) ||
+          plan.rows[0];
+
+        if (!matchedRow) {
+          setMessages((prev) => [
+            ...prev,
+            { id: `res-${Date.now()}`, sender: 'assistant', text: 'Թեմատիկ պլանում տողեր չկան:', timestamp: nowLabel() },
+          ]);
+          return;
+        }
+
+        const res = await fetch('/api/lesson-plans/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ thematicPlanId: plan.id, rowId: matchedRow.id, durationMinutes: 45 }),
+        });
+        const resData = await res.json();
+        if (res.ok && resData.lessonPlan) {
+          setActiveThematicPlan(plan);
+          setActiveLessonPlan(resData.lessonPlan);
+          setActiveArtifactType('lesson_plan');
+          const topicMatchNote =
+            normalizedTopic && !matchedRow.topic.toLowerCase().includes(normalizedTopic)
+              ? ` (Ուշադրություն. ձեր նշած թեման ուղիղ չհամընկավ, ընտրվեց ամենամոտ չանցած թեման)`
+              : '';
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `res-${Date.now()}`,
+              sender: 'assistant',
+              text: `Պատրաստ է. «${matchedRow.topic}» թեմայով 45 րոպեանոց դասի պլանը գեներացվել է${topicMatchNote}: Դիտեք աջ վահանակում:`,
+              timestamp: nowLabel(),
+              actionArtifact: { type: 'lesson_plan', data: resData.lessonPlan },
+            },
+          ]);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            { id: `res-${Date.now()}`, sender: 'assistant', text: `Ձախողվեց. ${resData.error || ''}`, timestamp: nowLabel() },
+          ]);
+        }
+      } else if (pendingIntent.intent === 'load_report') {
         const repRes = await fetch(`/api/reports?schoolId=${pinnedContext.schoolId}`);
         const repData = await repRes.json();
         if (repData.reports && repData.reports.length > 0) {
@@ -171,25 +334,17 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
             {
               id: `res-${Date.now()}`,
               sender: 'assistant',
-              text: `Բեռնվեց «${repData.reports[0].title}» հաշվետվությունը: Տվյալները համադրված են թեմատիկ պլանի և գրանցամատյանի հետ: Դիտեք աջ վահանակում:`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              text: `Բեռնվեց «${repData.reports[0].title}» հաշվետվությունը: Դիտեք աջ վահանակում:`,
+              timestamp: nowLabel(),
               actionArtifact: { type: 'report', data: repData.reports[0] },
             },
           ]);
-        }
-      } else {
-        // Helpful educational guidance response
-        setTimeout(() => {
+        } else {
           setMessages((prev) => [
             ...prev,
-            {
-              id: `res-${Date.now()}`,
-              sender: 'assistant',
-              text: `Ձեր հարցումը ընդունված է: TeachFlow 3.0-ում կարող եք.\n1. Կազմել և խմբագրել թեմատիկ պլաններ\n2. Մեկ սեղմումով գեներացնել դասի պլաններ (ԽԻԿ փուլերով)\n3. Տպել անանուն բլանկներ և իրականացնել ավտոստուգում\n4. Ստեղծել ծրագրի կատարման էլեկտրոնային հաշվետվություններ\n\nԸնտրեք արագ գործողություններից մեկը ստորև:`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            },
+            { id: `res-${Date.now()}`, sender: 'assistant', text: 'Հասանելի հաշվետվություն չգտնվեց:', timestamp: nowLabel() },
           ]);
-        }, 500);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -295,9 +450,6 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
               <Sparkles className="w-4 h-4 text-indigo-600" />
               TeachFlow Chat
             </div>
-            <Badge variant="simulated" size="sm" title={t.common.simulatedNotice}>
-              {t.common.simulatedBadge}
-            </Badge>
           </div>
 
           {/* Chat Messages */}
@@ -316,6 +468,39 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
                 >
                   {m.text}
                 </div>
+
+                {m.pendingIntent && !m.pendingIntent.resolved && (
+                  <div className="max-w-[90%] mt-2 p-2.5 bg-white border border-indigo-200 rounded-lg space-y-2">
+                    {m.pendingIntent.matchedSources.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {m.pendingIntent.matchedSources.map((s) => (
+                          <span
+                            key={s.id}
+                            className="px-2 py-1 bg-indigo-50 border border-indigo-200 rounded-full text-[10px] font-medium text-indigo-800"
+                            title={`${s.role} · v${s.version}`}
+                          >
+                            {s.title} · v{s.version}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleConfirmIntent(m.id, m.pendingIntent!)}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-semibold"
+                      >
+                        {t.common.confirm}
+                      </button>
+                      <button
+                        onClick={() => handleCancelIntent(m.id)}
+                        className="px-3 py-1.5 border border-gray-300 hover:bg-gray-50 rounded-lg text-[11px] font-medium text-gray-700"
+                      >
+                        {t.common.cancel}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <span className="text-[10px] text-gray-700 mt-1 px-1">{m.timestamp}</span>
               </div>
             ))}

@@ -18,7 +18,7 @@ Already merged into this base (from the interrupted AI Studio session): default 
 
 - [x] **T7. Retrieval.** Top-K (12 FACT / 4 METHOD); Gemini embeddings (verify the current embedding model id) stored per chunk at upload; hybrid score with keywords; coverage gate uses a similarity threshold.
 - [x] **T8. Upload.** PDF (per page, real page numbers; scanned pages → Gemini OCR, `ocr: true`), DOCX, TXT; sha256 over file bytes.
-- [ ] **T9. Workspace chat.** Structured Gemini parse → `{intent, subject, grade, topic, sourceHints}`; resolve against registry; confirmation chips (source title + program version) before any action; no keyword routing; same API functions as other screens.
+- [x] **T9. Workspace chat.** Structured Gemini parse → `{intent, subject, grade, topic, sourceHints}`; resolve against registry; confirmation chips (source title + program version) before any action; no keyword routing; same API functions as other screens.
 - [ ] **T10. Lesson plan** through the existing pipeline (FACT chunks, citations, validator, trace).
 - [ ] **T11. Answer-sheet reading.** Gemini vision → `{testId, variant, studentCode, answers[{itemIndex, mark, confidence}]}`; QR decode server-side if feasible; low-confidence fields highlighted; images deleted after confirmation.
 - [ ] **T12. MCP.** Official SDK `StreamableHTTPServerTransport` at `/mcp` (keep SSE at `/sse`); tools include policyVersion and source versions.
