@@ -142,9 +142,7 @@ The main modules in `server/pipeline/`:
 - **All data is synthetic** (`DEMO DATA`): sources, outcome codes (prefixed `DEMO-`), schools, reports, glossary entries.
 - **Report templates are drafts**, not forms confirmed by schools or authorities. EMIS export is plain CSV in a format we chose; the real EMIS formats are unknown.
 - **Dashboards page** shows hand-written illustrative numbers. It is labelled DEMO DATA and is not computed from the store.
-- **Report review** (`reportReviewer`):
-  - Only two template rules are actually evaluated (the total-hours and hours-deviation rules), and the total-hours rule accepts only 68/34/32 hours.
-  - Any other rule, including every `llm_judged` rule, is currently marked as passed without being evaluated. **This is a known bug; do not rely on those checks.**
+- **Report review** (`reportReviewer`) evaluates the rules of the bundled draft templates deterministically. Any other rule, and every `llm_judged` rule, is reported as **not evaluated** and needs manual review, and a missing value is never treated as 0. The rules themselves come from draft templates, including the reading of «15% or 4 hours» (exceeding either one fails), and need confirmation by real schools.
 - **Compare / eval quality depends on the model.** The comparison and the eval are only as good as the configured model and judge, and there are no published benchmark results yet.
 
 - **`policyVersion` covers only part of the prompts.** It includes 6 of the 14 prompt files, through a hardcoded list (see Architecture).

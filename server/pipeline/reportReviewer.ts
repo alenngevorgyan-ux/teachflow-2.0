@@ -1,5 +1,124 @@
-import { ReportInstance, ReportReviewResult, ReportTemplate } from '../../shared/types.js';
+import { ReportInstance, ReportReviewResult, ReportRule, ReportTemplate } from '../../shared/types.js';
 import { repository } from '../store/repository.js';
+import { collectStrings } from './privacyGuard.js';
+
+/** A number from report data, or null when missing — never a default 0. */
+function num(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export interface RuleOutcome {
+  status: 'pass' | 'fail' | 'not_evaluated';
+  detail: string;
+}
+
+const pass = (detail: string): RuleOutcome => ({ status: 'pass', detail });
+const fail = (detail: string): RuleOutcome => ({ status: 'fail', detail });
+const notEvaluated = (detail: string): RuleOutcome => ({
+  status: 'not_evaluated',
+  detail: `${detail} Պահանջվում է ձեռքով ստուգում:`,
+});
+const missingData = (...keys: string[]) =>
+  notEvaluated(`Կանոնը չի ստուգվել՝ բացակայում են տվյալները (${keys.join(', ')}):`);
+
+type RuleEvaluator = (report: ReportInstance) => RuleOutcome;
+
+// Deterministic evaluators for the rules of the draft templates. A rule
+// without an evaluator here is NOT evaluated (and never reported as passed).
+const RULE_EVALUATORS: Record<string, RuleEvaluator> = {
+  // Report total hours must equal the program's annual hours from the
+  // teacher's thematic plan (not a hardcoded 68/34/32).
+  'rule-hours-sum': (report) => {
+    const total = num(report.data.totalHours);
+    if (total === null) return missingData('totalHours');
+    const plan = repository.getThematicPlans(report.schoolId, report.subject, report.grade)[0];
+    const programHours = num(plan?.programTargetHours);
+    if (programHours === null) return notEvaluated('Կանոնը չի ստուգվել՝ ծրագրի տարեկան ժամաքանակը հայտնի չէ (թեմատիկ պլան չկա):');
+    return total === programHours
+      ? pass(`Տարեկան ժամաքանակը (${total}) հավասար է ծրագրի ժամաքանակին (${programHours}):`)
+      : fail(`Տարեկան ժամաքանակը (${total}) հավասար չէ ծրագրի ժամաքանակին (${programHours}):`);
+  },
+  'rule-mandatory-outcomes': (report) => {
+    const covered = num(report.data.coveredOutcomesCount);
+    const mandatory = num(report.data.mandatoryOutcomesCount);
+    if (covered === null || mandatory === null) return missingData('coveredOutcomesCount', 'mandatoryOutcomesCount');
+    return covered >= mandatory
+      ? pass(`Ծածկված են ${covered} / ${mandatory} պարտադիր վերջնարդյունք:`)
+      : fail(`Ծածկված են միայն ${covered} / ${mandatory} պարտադիր վերջնարդյունք:`);
+  },
+  // Scans every value in the report for outcome codes of the same subject
+  // but another grade (as recorded in the registry).
+  'rule-grade-consistency': (report) => {
+    const otherGrade = repository
+      .getOutcomes()
+      .filter((o) => o.subject === report.subject && o.grade !== report.grade);
+    const text = collectStrings(report.data).join('\n');
+    const found = otherGrade.filter((o) => text.includes(o.code)).map((o) => `${o.code} (${o.grade})`);
+    return found.length === 0
+      ? pass('Այլ դասարանի վերջնարդյունքների կոդեր չեն հայտնաբերվել:')
+      : fail(`Հայտնաբերվել են այլ դասարանի կոդեր՝ ${found.join(', ')}:`);
+  },
+  // Draft wording: «must not exceed 15% or 4 hours». Read strictly: exceeding
+  // either limit fails, so the report goes to a human rather than passing.
+  'rule-hours-deviation': (report) => {
+    const planned = num(report.data.plannedHours);
+    const actual = num(report.data.actualHours);
+    if (planned === null || actual === null) return missingData('plannedHours', 'actualHours');
+    const diff = Math.abs(planned - actual);
+    const pct = planned > 0 ? (diff / planned) * 100 : diff > 0 ? Infinity : 0;
+    const pctText = Number.isFinite(pct) ? `${pct.toFixed(1)}%` : 'n/a';
+    return diff <= 4 && pct <= 15
+      ? pass(`Շեղումը թույլատրելի է՝ ${diff} ժամ (${pctText}), պլան՝ ${planned}, փաստացի՝ ${actual}:`)
+      : fail(`Շեղումը գերազանցում է 4 ժամը կամ 15%-ը՝ ${diff} ժամ (${pctText}), պլան՝ ${planned}, փաստացի՝ ${actual}:`);
+  },
+  'rule-lag-warning': (report) => {
+    const lag = num(report.data.lagWeeks);
+    if (lag === null) return missingData('lagWeeks');
+    if (lag <= 2) return pass(`Ուշացումը ${lag} շաբաթ է (≤ 2):`);
+    const reflection = typeof report.data.teacherReflection === 'string' ? report.data.teacherReflection.trim() : '';
+    return reflection
+      ? pass(`Ուշացումը ${lag} շաբաթ է, բացատրությունը ներկայացված է:`)
+      : fail(`Ուշացումը ${lag} շաբաթ է (> 2), սակայն բացատրություն (teacherReflection) չկա:`);
+  },
+  'rule-mu-teachers': (report) => {
+    const teachers = num(report.data.teachersCount);
+    if (teachers === null) return missingData('teachersCount');
+    return teachers >= 1 ? pass(`Ուսուցիչների թիվը՝ ${teachers}:`) : fail(`Ուսուցիչների թիվը՝ ${teachers} (< 1):`);
+  },
+  'rule-mu-cross-check': (report) => {
+    const ids = report.childReportIds ?? [];
+    if (ids.length === 0) return notEvaluated('Կանոնը չի ստուգվել՝ ենթակա հաշվետվություններ կապված չեն:');
+    const children = ids.map((id) => repository.getReport(id));
+    const total = num(report.data.totalActualHours);
+    const hours = children.map((c) => num(c?.data.actualHours));
+    if (total === null || hours.some((h) => h === null)) return missingData('totalActualHours', 'actualHours (ենթակա)');
+    const sum = (hours as number[]).reduce((a, h) => a + h, 0);
+    return total === sum
+      ? pass(`Ընդհանուր ժամերը (${total}) հավասար են ենթակա հաշվետվությունների գումարին:`)
+      : fail(`Ընդհանուր ժամերը (${total}) հավասար չեն ենթակա հաշվետվությունների գումարին (${sum}):`);
+  },
+  'rule-students-count': (report) => {
+    const n = num(report.data.studentsParticipatedCount);
+    if (n === null) return missingData('studentsParticipatedCount');
+    return n > 0 ? pass(`Մասնակիցների թիվը՝ ${n}:`) : fail(`Մասնակիցների թիվը դրական չէ (${n}):`);
+  },
+  'rule-avg-bounds': (report) => {
+    const avg = num(report.data.averageScorePercent);
+    if (avg === null) return missingData('averageScorePercent');
+    return avg >= 0 && avg <= 100 ? pass(`Միջին տոկոսը՝ ${avg}%:`) : fail(`Միջին տոկոսը դուրս է 0–100 միջակայքից (${avg}):`);
+  },
+};
+
+export function evaluateTemplateRule(rule: ReportRule, report: ReportInstance): RuleOutcome {
+  if (rule.kind === 'llm_judged') {
+    return notEvaluated('LLM-ով գնահատվող կանոնները հաշվետվության ավտոմատ ստուգման ժամանակ չեն կատարվում:');
+  }
+  const evaluator = RULE_EVALUATORS[rule.id];
+  if (!evaluator) return notEvaluated('Այս կանոնի համար ավտոմատ ստուգիչ չկա:');
+  return evaluator(report);
+}
 
 export function runReportReview(
   report: ReportInstance,
@@ -30,39 +149,25 @@ export function runReportReview(
     }
   }
 
-  // Check 2: Deterministic rules from template
+  // Check 2: Template rules. Only rules with a known deterministic evaluator
+  // are run; everything else (incl. llm_judged) is reported as not evaluated
+  // and needs a human — never as passed.
+  let rulesEvaluated = 0;
+  let rulesNotEvaluated = 0;
   if (tpl && tpl.validationRules) {
     for (const rule of tpl.validationRules) {
-      let passed = true;
-      let detail = `Կանոնը հաջողությամբ ստուգվել է:`;
-
-      if (rule.expression === 'sum(rows.hours) == program.totalHours') {
-        const plannedHours = Number(report.data.totalHours || report.data.plannedHours || 0);
-        if (plannedHours !== 68 && plannedHours !== 34 && plannedHours !== 32) {
-          // If mismatch
-          passed = plannedHours > 0;
-          detail = `Տարեկան/կիսամյակային ժամերի համադրում ծրագրի հետ. Փաստացի արձանագրված է ${plannedHours} ժամ:`;
-        }
-      } else if (rule.id === 'rule-hours-deviation') {
-        const planned = Number(report.data.plannedHours || 0);
-        const actual = Number(report.data.actualHours || 0);
-        const diff = Math.abs(planned - actual);
-        if (diff > 4) {
-          passed = false;
-          detail = `Փաստացի և պլանավորված ժամերի շեղումը կազմում է ${diff} ժամ (պլան՝ ${planned}, փաստացի՝ ${actual}):`;
-        } else {
-          detail = `Ժամերի շեղումը թույլատրելի սահմաններում է (շեղում՝ ${diff} ժամ):`;
-        }
-      }
-
+      const outcome = evaluateTemplateRule(rule, report);
+      if (outcome.status === 'not_evaluated') rulesNotEvaluated++;
+      else rulesEvaluated++;
+      const passed = outcome.status === 'pass';
       checks.push({
         id: `rule-${rule.id}`,
         name: `Կանոն՝ ${rule.description.substring(0, 45)}...`,
         category: 'deterministic',
         passed,
-        severity: passed ? 'info' : rule.severity,
-        detail,
-        confidence: 1.0,
+        severity: passed ? 'info' : outcome.status === 'fail' ? rule.severity : 'warning',
+        detail: outcome.detail,
+        ...(outcome.status === 'not_evaluated' ? {} : { confidence: 1.0 }),
       });
     }
   }
@@ -148,9 +253,19 @@ export function runReportReview(
   if (relatedPlans.length > 0) {
     const activePlan = relatedPlans[0];
     const planTaughtHours = activePlan.rows.filter((r) => r.taught).reduce((acc, r) => acc + (r.actualHours || 0), 0);
-    const repActualHours = Number(report.data.actualHours || 0);
+    const repActualHours = num(report.data.actualHours);
 
-    const match = repActualHours === 0 || repActualHours === planTaughtHours || Math.abs(repActualHours - planTaughtHours) <= 2;
+    if (repActualHours === null) {
+      checks.push({
+        id: 'src-plan-hours-match',
+        name: 'Համապատասխանություն ուսուցչի էլեկտրոնային թեմատիկ պլանին',
+        category: 'source_data',
+        passed: false,
+        severity: 'warning',
+        detail: `Ստուգումը հնարավոր չէ՝ հաշվետվությունում փաստացի ժամերը նշված չեն (թեմատիկ պլանում՝ ${planTaughtHours} ժամ): Պահանջվում է ձեռքով ստուգում:`,
+      });
+    } else {
+    const match = Math.abs(repActualHours - planTaughtHours) <= 2;
     checks.push({
       id: 'src-plan-hours-match',
       name: 'Համապատասխանություն ուսուցչի էլեկտրոնային թեմատիկ պլանին',
@@ -158,18 +273,32 @@ export function runReportReview(
       passed: match,
       severity: match ? 'info' : 'warning',
       detail: match
-        ? `Հաշվետվության փաստացի ժամերը (${repActualHours} ժամ) համընկնում են թեմատիկ պլանում նշված անցած դասաժամերի հետ (${planTaughtHours} ժամ):`
+        ? `Հաշվետվության փաստացի ժամերը (${repActualHours} ժամ) համընկնում են թեմատիկ պլանում նշված անցած դասաժամերի հետ (${planTaughtHours} ժամ, թույլատրելի շեղում՝ ±2):`
         : `Անհամապատասխանություն. Հաշվետվության ժամերը (${repActualHours}) չեն համընկնում թեմատիկ պլանում նշված անցած ժամերի հետ (${planTaughtHours}):`,
       confidence: 1.0,
     });
+    }
   }
 
   // Check 5: Cross-Report Consistency (for consolidated reports)
   if (report.childReportIds && report.childReportIds.length > 0) {
     const childReports = report.childReportIds.map((id) => repository.getReport(id)).filter((r): r is ReportInstance => !!r);
-    const sumChildActual = childReports.reduce((acc, c) => acc + Number(c.data.actualHours || 0), 0);
-    const repTotalActual = Number(report.data.totalActualHours || 0);
+    const childActual = childReports.map((c) => num(c.data.actualHours));
+    const repTotalActual = num(report.data.totalActualHours);
+    const missing =
+      childReports.length !== report.childReportIds.length || repTotalActual === null || childActual.some((h) => h === null);
 
+    if (missing) {
+      checks.push({
+        id: 'cross-child-reports-sum',
+        name: 'Ենթակա հաշվետվությունների թվաբանական համադրում',
+        category: 'cross_report',
+        passed: false,
+        severity: 'warning',
+        detail: 'Ստուգումը հնարավոր չէ՝ ամփոփ կամ ենթակա հաշվետվություններից մեկում փաստացի ժամերը նշված չեն (կամ հաշվետվությունը չի գտնվել): Պահանջվում է ձեռքով ստուգում:',
+      });
+    } else {
+    const sumChildActual = (childActual as number[]).reduce((acc, h) => acc + h, 0);
     const matchesSum = repTotalActual === sumChildActual;
     checks.push({
       id: 'cross-child-reports-sum',
@@ -182,6 +311,7 @@ export function runReportReview(
         : `Թվաբանական անհամապատասխանություն. Ամփոփ հաշվետվությունում նշված է ${repTotalActual} ժամ, սակայն ուսուցիչների հաշվետվությունների գումարը ${sumChildActual} ժամ է:`,
       confidence: 1.0,
     });
+    }
   }
 
   // Check 6: Anomalies (neutral, objective wording about data)
@@ -215,13 +345,16 @@ export function runReportReview(
 
   const checkedAspects: string[] = [];
   if (tpl) checkedAspects.push('պարտադիր դաշտերի լրացվածություն');
-  if (tpl?.validationRules?.length) checkedAspects.push('ժամաքանակների կանոններ');
+  if (rulesEvaluated > 0) checkedAspects.push(`ձևանմուշի կանոններ (${rulesEvaluated})`);
   if (validCodesForGrade.size > 0) checkedAspects.push('չափորոշչային կոդերի առկայություն');
   if (relatedPlans.length > 0) checkedAspects.push('համադրում թեմատիկ պլանի հետ');
   if (report.childReportIds?.length) checkedAspects.push('ենթակա հաշվետվությունների թվաբանություն');
   if (report.data.lagWeeks !== undefined) checkedAspects.push('ժամանակացույցի շեղումներ');
 
   let summaryArmenian = `Հաշվետվության ավտոմատ ստուգումն ավարտվել է: Ստուգվել են՝ ${checkedAspects.join(', ')}: `;
+  if (rulesNotEvaluated > 0) {
+    summaryArmenian += `Ավտոմատ չեն ստուգվել ${rulesNotEvaluated} կանոն(ներ)՝ պահանջվում է ձեռքով ստուգում: `;
+  }
   if (status === 'ready') {
     summaryArmenian += `Ստուգված բոլոր կանոններն ու պարտադիր դաշտերը համապատասխանում են սահմանված պահանջներին: `;
     if (allFieldsHaveProvenance) {

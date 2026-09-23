@@ -41,7 +41,7 @@ The core bet: generation is a commodity. TeachFlow is only valuable if it can **
 
 ## Honest status — full version in README.md ("Honest status")
 Real: P0–P2 tasks T0–T16 in TASKS.md (registry + upload/OCR, top-K hybrid retrieval, coverage gate, generation + per-item validation, material validation, fair compare, thematic/lesson plans via structured calls, chat with confirmation chips, answer-sheet vision + QR + grading, legacy import with verbatim quotes, strict Armenian eval, MCP Streamable HTTP, privacy guard).
-Demo / partial / known gaps: all data synthetic; report templates and EMIS CSV are drafts; Dashboards page is hand-written numbers (labelled DEMO DATA); reportReviewer evaluates only two template rules and marks all others (incl. llm_judged) as passed — known bug; policyVersion hardcodes 6 of 14 prompt versions; no auth (role switcher is UI only); JSON store is not persistent on Vercel.
+Demo / partial / known gaps: all data synthetic; report templates and EMIS CSV are drafts; Dashboards page is hand-written numbers (labelled DEMO DATA); reportReviewer evaluates only rules it has an evaluator for (others incl. llm_judged → not evaluated / manual); policyVersion hardcodes 6 of 14 prompt versions; no auth (role switcher is UI only); JSON store is not persistent on Vercel.
 
 ## How to work in this repo
 - Read TASKS.md first; work top-down; one task per commit with a clear message.
