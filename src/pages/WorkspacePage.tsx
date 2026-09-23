@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Language, PinnedContext, Role, ThematicPlan, LessonPlan, ReportInstance } from '../../shared/types';
 import { translations } from '../i18n/translations';
+import { Badge } from '../components/Badge';
 
 interface WorkspacePageProps {
   lang: Language;
@@ -718,9 +719,23 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
                 {/* Header */}
                 <div className="border-b border-gray-200 pb-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
-                      Դասի պլան (45 րոպե)
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+                        Դասի պլան ({activeLessonPlan.durationMinutes} րոպե)
+                      </span>
+                      <Badge
+                        variant={
+                          activeLessonPlan.trace.status === 'PASS'
+                            ? 'pass'
+                            : activeLessonPlan.trace.status === 'WARN'
+                            ? 'warn'
+                            : 'fail'
+                        }
+                        size="sm"
+                      >
+                        {activeLessonPlan.trace.status}
+                      </Badge>
+                    </div>
                     <button
                       onClick={() => setActiveArtifactType('thematic_plan')}
                       className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
@@ -780,12 +795,32 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
                     {t.lessonPlan.citations}
                   </h3>
                   <div className="space-y-2">
-                    {activeLessonPlan.factCitations.map((cit, i) => (
-                      <div key={i} className="p-3 bg-amber-50/60 border border-amber-200 rounded-lg text-xs space-y-1">
-                        <span className="font-semibold text-amber-900 block">{cit.sourceTitle}</span>
-                        <p className="italic text-gray-800">«{cit.quote}»</p>
-                      </div>
-                    ))}
+                    {activeLessonPlan.factCitations.map((cit, i) => {
+                      const citationChecks = activeLessonPlan.trace.checks.filter((c) =>
+                        c.label.includes(cit.chunkId)
+                      );
+                      const failed = citationChecks.some((c) => c.result === 'fail');
+                      return (
+                        <div
+                          key={i}
+                          className={`p-3 rounded-lg text-xs space-y-1 border ${
+                            failed ? 'bg-rose-50/60 border-rose-200' : 'bg-amber-50/60 border-amber-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className={`font-semibold block ${failed ? 'text-rose-900' : 'text-amber-900'}`}>
+                              {cit.sourceTitle}
+                            </span>
+                            {failed && (
+                              <Badge variant="fail" size="sm">
+                                {t.common.fail}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="italic text-gray-800">«{cit.quote}»</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 

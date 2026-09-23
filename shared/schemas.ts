@@ -110,6 +110,35 @@ export const WorkspaceIntentSchema = z.object({
 
 export type WorkspaceIntentOutput = z.infer<typeof WorkspaceIntentSchema>;
 
+export const LessonPlanStageSchema = z.object({
+  title: z.string(),
+  durationMinutes: z.number().int().positive(),
+  teacherActivity: z.string(),
+  studentActivity: z.string(),
+  formativeCheck: z.string(),
+});
+
+export const LessonPlanCitationSchema = z.object({
+  chunkId: z.string().describe('The exact chunk id from the FACT chunks block'),
+  quote: z.string().describe('A verbatim quote extracted directly from that chunk text'),
+});
+
+export const LessonPlanGenerationOutputSchema = z.object({
+  objectives: z.array(z.string()).min(1).describe('Lesson objectives tied to the confirmed outcome codes'),
+  requiredMaterials: z.array(z.string()).min(1),
+  stages: z
+    .array(LessonPlanStageSchema)
+    .min(1)
+    .describe('The ԽԻԿ (Խթանում/Իմաստի ընկալում/Կշռադատում) stages, durations summing to the lesson duration'),
+  homework: z.string(),
+  citations: z
+    .array(LessonPlanCitationSchema)
+    .min(1)
+    .describe('At least one citation to a FACT chunk grounding the lesson content, with an exact verbatim quote'),
+});
+
+export type LessonPlanGenerationOutput = z.infer<typeof LessonPlanGenerationOutputSchema>;
+
 export const ThematicPlanTopicSchema = z.object({
   topic: z.string().describe('Topic title in Armenian, grounded in the confirmed outcomes / FACT chunks'),
   outcomeCodes: z

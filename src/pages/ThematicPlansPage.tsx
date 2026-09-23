@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { Language, PinnedContext, Role, ThematicPlan } from '../../shared/types';
 import { translations } from '../i18n/translations';
-import { Badge } from '../components/Badge';
 
 interface ThematicPlansPageProps {
   lang: Language;
@@ -306,30 +305,29 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
                           </button>
                         </td>
                         <td className="p-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Badge variant="simulated" size="sm" title={t.common.simulatedNotice}>
-                              {t.common.simulatedBadge}
-                            </Badge>
-                            <button
-                              onClick={async () => {
-                                const res = await fetch('/api/lesson-plans/generate', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    thematicPlanId: selectedPlan.id,
-                                    rowId: row.id,
-                                  }),
-                                });
-                                const data = await res.json();
-                                if (data.lessonPlan) {
-                                  alert(`Դասի պլանը ստեղծված է «${row.topic}» թեմայով:`);
-                                }
-                              }}
-                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded text-[11px] transition-colors"
-                            >
-                              {t.thematicPlan.createLessonPlanBtn}
-                            </button>
-                          </div>
+                          <button
+                            onClick={async () => {
+                              const res = await fetch('/api/lesson-plans/generate', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  thematicPlanId: selectedPlan.id,
+                                  rowId: row.id,
+                                }),
+                              });
+                              const data = await res.json();
+                              if (res.ok && data.lessonPlan) {
+                                alert(
+                                  `Դասի պլանը ստեղծված է «${row.topic}» թեմայով (ստուգման կարգավիճակ՝ ${data.lessonPlan.trace.status}):`
+                                );
+                              } else {
+                                alert(`Ձախողվեց. ${data.error || 'անհայտ սխալ'}`);
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded text-[11px] transition-colors"
+                          >
+                            {t.thematicPlan.createLessonPlanBtn}
+                          </button>
                         </td>
                       </tr>
                     ))}

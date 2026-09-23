@@ -1,5 +1,11 @@
-import { LessonPlan } from '../../shared/types.js';
-import { IModelProvider } from '../providers/modelProvider.js';
+import fs from 'fs';
+import path from 'path';
+import { LessonPlanGenerationOutputSchema } from '../../shared/schemas.js';
+import { LessonPlan, LessonPlanCheck } from '../../shared/types.js';
+import { IModelProvider, getProvider } from '../providers/modelProvider.js';
+import { IJudgeProvider, getJudgeProvider } from '../providers/judgeProvider.js';
+import { isQuoteVerbatimInChunk } from './normalization.js';
+import { checkCoverageGate } from './coverage.js';
 import { retrieveChunks } from './retrieval.js';
 import { repository } from '../store/repository.js';
 
@@ -9,6 +15,7 @@ export interface GenerateLessonPlanParams {
   durationMinutes?: number;
   provider?: IModelProvider;
   modelId?: string;
+  judgeProvider?: IJudgeProvider;
 }
 
 export async function generateLessonPlanFromRow(
@@ -24,67 +31,124 @@ export async function generateLessonPlanFromRow(
     throw new Error(`Row not found: ${params.rowId}`);
   }
 
-  // Retrieve FACT chunks for this subject, grade, and topic
+  const durationMinutes = params.durationMinutes || 45;
+  const provider = params.provider || getProvider();
+  const judge = params.judgeProvider || getJudgeProvider('gemini');
+  const policyVersion = repository.computePolicyVersion();
+
+  // Retrieve FACT chunks for this subject, grade, and topic (real hybrid
+  // retrieval — see server/pipeline/retrieval.ts).
   const { factChunks } = await retrieveChunks(plan.subject, plan.grade, row.topic);
 
-  const durationMinutes = params.durationMinutes || 45;
-  const lessonPlanId = `lp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  // Same coverage gate the assessment pipeline uses: refuse rather than
+  // fabricate a lesson plan for a topic the registered sources don't
+  // actually cover.
+  const coverage = await checkCoverageGate(provider, plan.subject, plan.grade, row.topic, factChunks, {
+    modelId: params.modelId,
+  });
+  if (!coverage.topicCovered) {
+    throw new Error(
+      coverage.refusalReasonArmenian ||
+        `«${row.topic}» թեման բավարար չափով ներկայացված չէ ընտրված փաստացի աղբյուրներում: Դասի պլանի գեներացումը մերժված է:`
+    );
+  }
 
-  // Citations from retrieved FACT sources
-  const citations = factChunks.slice(0, 3).map((f) => ({
-    chunkId: f.chunk.id,
-    quote: f.chunk.text.substring(0, 160) + '...',
-    sourceTitle: f.sourceTitle,
-  }));
+  const factChunksFormatted = factChunks
+    .map(
+      (c) =>
+        `CHUNK ID: ${c.chunk.id} (Source: ${c.sourceTitle}, v${c.version})\nTEXT:\n"${c.chunk.text}"`
+    )
+    .join('\n\n');
 
-  // Structured stages according to Armenian pedagogical methodology (ԽԻԿ - Խթանում, Իմաստի ընկալում, Կշռադատում)
-  const stages = [
-    {
-      title: 'Կազմակերպչական մաս և Խթանում (Խ-փուլ)',
-      durationMinutes: 7,
-      teacherActivity: `Ողջույն, նախորդ թեմայի արագ հարցում, մտագրոհ «${row.topic}» թեմայի հիմնաբառերով: Հարցադրում. «Ի՞նչ պատմական նշանակություն ունեցավ այս իրադարձությունը»:`,
-      studentActivity: 'Աշակերտները պատասխանում են հարցերին, ձևակերպում են սեփական վարկածները, գրատախտակին նշում առանցքային բառերը:',
-      formativeCheck: 'Բանավոր հետադարձ կապ, աշակերտների նախնական գիտելիքների բացահայտում:',
-    },
-    {
-      title: 'Իմաստի ընկալում (Ի-փուլ) — Նոր նյութի ուսումնասիրություն',
-      durationMinutes: 20,
-      teacherActivity: `Թեմայի առանցքային փաստերի շարադրանք ըստ հաստատված դասագրքի (${plan.subject} ${plan.grade}-րդ դասարան): Քարտեզի և սկզբնաղբյուրների ցուցադրություն: Վերջնարդյունքներ՝ ${row.outcomeCodes.join(', ')}:`,
-      studentActivity: 'Աշխատանք դասագրքի տեքստի և քարտեզի հետ: Կարևոր տարեթվերի, հասկացությունների գրանցում տետրերում:',
-      formativeCheck: 'Զույգերով կարճ հարցում, փոխադարձ պարզաբանում:',
-    },
-    {
-      title: 'Կշռադատում (Կ-փուլ) — Գիտելիքի ամրապնդում',
-      durationMinutes: 12,
-      teacherActivity: 'Առաջադրանքների բաշխում (աղյուսակի լրացում, պատճառահետևանքային կապերի որոշում): Քննարկման համակարգում:',
-      studentActivity: 'Առաջադրանքների անհատական և խմբային կատարում: Արդյունքների ներկայացում:',
-      formativeCheck: 'Ինքնագնահատման թերթիկ կամ կարճ թեստային առաջադրանք (3 հարց):',
-    },
-    {
-      title: 'Անդրադարձ և տնային հանձնարարություն',
-      durationMinutes: 6,
-      teacherActivity: 'Դասի ամփոփում, ելքի քարտերի (Exit tickets) հավաքագրում: Տնային աշխատանքի հանձնարարում և ուղղորդում:',
-      studentActivity: 'Ելքի քարտի լրացում («Ի՞նչ սովորեցի այսօր», «Ի՞նչը մնաց անհասկանալի»): Տնային առաջադրանքի գրանցում:',
-      formativeCheck: 'Ելքի քարտերի միջոցով վերջնարդյունքների յուրացման գնահատում:',
-    },
-  ];
+  const promptTemplatePath = path.resolve(process.cwd(), 'server/prompts/lesson_plan.v1.txt');
+  let prompt = fs.readFileSync(promptTemplatePath, 'utf-8');
+  prompt = prompt
+    .replace('{{subject}}', plan.subject)
+    .replace('{{grade}}', String(plan.grade))
+    .replace('{{topic}}', row.topic)
+    .replace('{{durationMinutes}}', String(durationMinutes))
+    .replace('{{outcomeCodes}}', row.outcomeCodes.join(', ') || '(n/a)')
+    .replace('{{factChunks}}', factChunksFormatted);
 
-  const objectives = [
-    `Ապահովել առարկայական չափորոշչի ${row.outcomeCodes.join(', ')} վերջնարդյունքների յուրացումը:`,
-    `Զարգացնել տեքստային և քարտեզային աղբյուրների հետ ինքնուրույն աշխատանքի հմտությունները:`,
-    `Խթանել պատճառահետևանքային կապերի վերլուծության կարողությունը:`,
-  ];
+  const res = await provider.generateStructured(prompt, LessonPlanGenerationOutputSchema, {
+    modelId: params.modelId,
+    temperature: 0.2,
+    actionName: 'generateLessonPlan',
+  });
 
-  const requiredMaterials = [
-    `${plan.subject} ${plan.grade}-րդ դասարանի դասագիրք`,
-    'Պատմական կամ բնագիտական ուսումնական քարտեզ/ատլաս',
-    'Աշխատանքային տետրեր և ելքի քարտեր',
-  ];
+  // Validate every citation deterministically (chunk exists as a retrieved
+  // FACT chunk, quote is verbatim) and, when verbatim, with the judge
+  // (claim_supported) — the same "worst wins across every citation" pattern
+  // used by the assessment validator (T2).
+  const checks: LessonPlanCheck[] = [];
+  const factSourcesRef: { sourceId: string; version: string; chunkId: string; page?: number }[] = [];
 
-  const homework = `Կարդալ դասագրքի համապատասխան պարագրաֆը «${row.topic}» թեմայով, պատասխանել վերջում տրված հարցերին և կազմել ժամանակագրական/հասկացութային աղյուսակ:`;
+  for (const cit of res.output.citations) {
+    const found = factChunks.find((f) => f.chunk.id === cit.chunkId);
+    if (!found) {
+      checks.push({
+        checkId: 'citation_exists',
+        label: 'Մեջբերման առկայություն (Citation exists)',
+        kind: 'deterministic',
+        result: 'fail',
+        detail: `Հղված «${cit.chunkId}» հատվածը առկա չէ ներկայացված ՓԱՍՏԱՑԻ հատվածների շարքում:`,
+      });
+      continue;
+    }
+
+    factSourcesRef.push({
+      sourceId: found.sourceId,
+      version: found.version,
+      chunkId: found.chunk.id,
+      page: found.chunk.page,
+    });
+
+    const verbatim = isQuoteVerbatimInChunk(cit.quote, found.chunk.text);
+    checks.push({
+      checkId: 'quote_verbatim',
+      label: `Բառացի մեջբերման ստուգում (${found.chunk.id})`,
+      kind: 'deterministic',
+      result: verbatim ? 'pass' : 'fail',
+      detail: verbatim
+        ? 'Մեջբերումը 100% բառացիորեն համապատասխանում է աղբյուրի տեքստին:'
+        : `Մեջբերված տեքստը («${cit.quote}») բառացիորեն չի գտնվել համապատասխան հատվածում:`,
+    });
+
+    if (!verbatim) continue;
+
+    try {
+      const verification = await judge.verifyClaim(
+        `${row.topic}: ${cit.quote}`,
+        found.chunk.text,
+        { stem: row.topic }
+      );
+      const resultForVerdict = { supported: 'pass', partially_supported: 'warn', not_supported: 'fail' } as const;
+      checks.push({
+        checkId: 'claim_supported',
+        label: `Փաստացի հիմնավորվածություն (${found.chunk.id})`,
+        kind: 'llm_judged',
+        result: resultForVerdict[verification.verdict],
+        detail: verification.reason || '',
+        confidence: verification.confidence,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      checks.push({
+        checkId: 'claim_supported',
+        label: `Փաստացի հիմնավորվածություն (Judge Error, ${found.chunk.id})`,
+        kind: 'llm_judged',
+        result: 'fail',
+        detail: `Դատավորի ստուգման խափանում: ${msg}`,
+      });
+    }
+  }
+
+  let status: 'PASS' | 'WARN' | 'FAIL' = 'PASS';
+  if (checks.some((c) => c.result === 'fail')) status = 'FAIL';
+  else if (checks.some((c) => c.result === 'warn')) status = 'WARN';
 
   const lessonPlan: LessonPlan = {
-    id: lessonPlanId,
+    id: `lp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     thematicPlanId: plan.id,
     rowId: row.id,
     subject: plan.subject,
@@ -92,12 +156,26 @@ export async function generateLessonPlanFromRow(
     topic: row.topic,
     durationMinutes,
     outcomeCodes: row.outcomeCodes,
-    objectives,
-    requiredMaterials,
-    stages,
-    factCitations: citations,
-    homework,
+    objectives: res.output.objectives,
+    requiredMaterials: res.output.requiredMaterials,
+    stages: res.output.stages,
+    factCitations: res.output.citations.map((c) => {
+      const found = factChunks.find((f) => f.chunk.id === c.chunkId);
+      return { chunkId: c.chunkId, quote: c.quote, sourceTitle: found?.sourceTitle || 'n/a' };
+    }),
+    homework: res.output.homework,
     createdAt: new Date().toISOString(),
+    trace: {
+      factSources: factSourcesRef,
+      providerId: res.providerId,
+      modelId: res.modelId,
+      judgeProviderId: judge.providerId,
+      judgeModelId: judge.modelId,
+      policyVersion,
+      generatedAt: new Date().toISOString(),
+      checks,
+      status,
+    },
   };
 
   return repository.saveLessonPlan(lessonPlan);

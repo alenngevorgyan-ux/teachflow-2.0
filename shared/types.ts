@@ -321,6 +321,28 @@ export interface LessonPlan {
   factCitations: { chunkId: string; quote: string; sourceTitle: string }[];
   homework: string;
   createdAt: string;
+  trace: LessonPlanTrace;
+}
+
+export interface LessonPlanCheck {
+  checkId: string;
+  label: string;
+  kind: 'deterministic' | 'llm_judged';
+  result: 'pass' | 'warn' | 'fail';
+  detail: string;
+  confidence?: number;
+}
+
+export interface LessonPlanTrace {
+  factSources: { sourceId: string; version: string; chunkId: string; page?: number }[];
+  providerId: string;
+  modelId: string;
+  judgeProviderId?: string;
+  judgeModelId?: string;
+  policyVersion: string;
+  generatedAt: string;
+  checks: LessonPlanCheck[];
+  status: 'PASS' | 'WARN' | 'FAIL';
 }
 
 export interface AnswerSheetSubmission {
