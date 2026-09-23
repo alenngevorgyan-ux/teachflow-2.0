@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { Request, Response, Router } from 'express';
 import { z } from 'zod';
 import { getProvider } from '../providers/modelProvider.js';
@@ -19,6 +20,25 @@ import { importLegacyReport } from '../pipeline/legacyReportImporter.js';
 import { emisAdapter } from '../pipeline/emisAdapter.js';
 import { runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
 
+// Every tool response carries the current policyVersion (the hash of active
+// sources + method rules at call time) so an MCP client can tell whether the
+// content it just got is still current the next time it checks. Never a tool
+// concern to remember to add — one place, applied uniformly.
+function withPolicyVersion<T extends Record<string, unknown>>(payload: T): T & { policyVersion: string } {
+  return { policyVersion: repository.computePolicyVersion(), ...payload };
+}
+
+function toolResult(payload: unknown) {
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2),
+      },
+    ],
+  };
+}
+
 export function createMcpServer(): McpServer {
   const server = new McpServer({
     name: 'TeachFlow Curriculum Connector',
@@ -36,30 +56,29 @@ export function createMcpServer(): McpServer {
     },
     async ({ subject, grade, query }) => {
       const outcomes = repository.getConfirmedOutcomes(subject, grade);
+      const sources = repository.getSources();
       const normQ = normalizeArmenianText(query);
-      const filtered = outcomes.filter(
-        (o) =>
-          normalizeArmenianText(o.text).includes(normQ) ||
-          normalizeArmenianText(o.code).includes(normQ)
-      );
-      const policyVersion = repository.computePolicyVersion();
+      const filtered = outcomes
+        .filter(
+          (o) =>
+            normalizeArmenianText(o.text).includes(normQ) ||
+            normalizeArmenianText(o.code).includes(normQ)
+        )
+        .map((o) => ({
+          ...o,
+          // The outcome's own standardVersion is teacher/methodologist-entered
+          // metadata; sourceVersion is the actual current version of that
+          // source record in the registry — surfaced explicitly so a client
+          // can detect drift between the two.
+          sourceVersion: sources.find((s) => s.id === o.sourceId)?.version,
+        }));
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                policyVersion,
-                totalOutcomes: filtered.length,
-                outcomes: filtered,
-              },
-              null,
-              2
-            ),
-          },
-        ],
-      };
+      return toolResult(
+        withPolicyVersion({
+          totalOutcomes: filtered.length,
+          outcomes: filtered,
+        })
+      );
     }
   );
 
@@ -74,7 +93,6 @@ export function createMcpServer(): McpServer {
     },
     async ({ subject, grade, query }) => {
       const { factChunks } = await retrieveChunks(subject, grade, query);
-      const policyVersion = repository.computePolicyVersion();
       const topFragments = factChunks.slice(0, 5).map((f) => ({
         chunkId: f.chunk.id,
         sourceId: f.sourceId,
@@ -84,21 +102,7 @@ export function createMcpServer(): McpServer {
         text: f.chunk.text,
       }));
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                policyVersion,
-                fragments: topFragments,
-              },
-              null,
-              2
-            ),
-          },
-        ],
-      };
+      return toolResult(withPolicyVersion({ fragments: topFragments }));
     }
   );
 
@@ -122,14 +126,9 @@ export function createMcpServer(): McpServer {
         provider,
       });
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(assessment, null, 2),
-          },
-        ],
-      };
+      // assessment.policyVersion and each item trace's factSources[].version
+      // are already real (T1/T2) — no wrapping needed here.
+      return toolResult(assessment);
     }
   );
 
@@ -146,22 +145,15 @@ export function createMcpServer(): McpServer {
     async ({ subject, grade, text, sourceIds }) => {
       const provider = getProvider();
       const report = await validateExternalMaterial(provider, subject, grade, text, sourceIds);
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(report, null, 2),
-          },
-        ],
-      };
+      // report.policyVersion is already real.
+      return toolResult(report);
     }
   );
 
   // Tool 5: thematic_plan_generate
   server.tool(
     'thematic_plan_generate',
-    'Generate or scaffold a deterministic curriculum-aligned annual thematic plan with hours and outcomes',
+    'Generate a curriculum-aligned annual thematic plan grounded in confirmed outcomes and FACT sources',
     {
       subject: z.string(),
       grade: z.number(),
@@ -183,14 +175,7 @@ export function createMcpServer(): McpServer {
         totalAnnualHours,
       });
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(plan, null, 2),
-          },
-        ],
-      };
+      return toolResult(withPolicyVersion({ plan }));
     }
   );
 
@@ -207,21 +192,14 @@ export function createMcpServer(): McpServer {
       const outcomes = repository.getConfirmedOutcomes(plan.subject, plan.grade);
       const errors = validateThematicPlanDeterministically(plan, outcomes);
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ planId, valid: errors.length === 0, errors }, null, 2),
-          },
-        ],
-      };
+      return toolResult(withPolicyVersion({ planId, valid: errors.length === 0, errors }));
     }
   );
 
   // Tool 7: lesson_plan_generate
   server.tool(
     'lesson_plan_generate',
-    'Generate a 45-minute lesson plan from a thematic plan row, grounded in FACT sources with citations',
+    'Generate a 45-minute lesson plan from a thematic plan row, grounded in FACT sources with citations and a validation trace',
     {
       thematicPlanId: z.string(),
       rowId: z.string(),
@@ -234,14 +212,8 @@ export function createMcpServer(): McpServer {
         durationMinutes,
       });
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(lessonPlan, null, 2),
-          },
-        ],
-      };
+      // lessonPlan.trace.policyVersion and .factSources[].version are real (T10).
+      return toolResult(lessonPlan);
     }
   );
 
@@ -272,19 +244,12 @@ export function createMcpServer(): McpServer {
         timestamp: new Date().toISOString(),
         status: 'scanned_pending_review',
         confidenceOverall: undefined,
-        answers: answers.map((a: any) => ({ ...a, confidence: a.confidence, isLowConfidence: false })),
+        answers: answers.map((a) => ({ ...a, isLowConfidence: false })),
       });
 
       repository.saveAnswerSheet(graded);
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(graded, null, 2),
-          },
-        ],
-      };
+      return toolResult(withPolicyVersion({ answerSheet: graded }));
     }
   );
 
@@ -300,14 +265,13 @@ export function createMcpServer(): McpServer {
       if (!report) throw new Error(`Report not found: ${reportId}`);
       const reviewResult = runReportReview(report);
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(reviewResult, null, 2),
-          },
-        ],
-      };
+      return toolResult(
+        withPolicyVersion({
+          reportId,
+          templateVersion: report.templateVersion,
+          review: reviewResult,
+        })
+      );
     }
   );
 
@@ -331,14 +295,8 @@ export function createMcpServer(): McpServer {
         authorName: 'Ուսուցիչ (ներմուծված)',
       });
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(report, null, 2),
-          },
-        ],
-      };
+      // report.templateVersion is already real.
+      return toolResult(withPolicyVersion({ report }));
     }
   );
 
@@ -352,29 +310,26 @@ export function createMcpServer(): McpServer {
     },
     async ({ exportType, targetId }) => {
       let csv = '';
+      let sourceVersion: string | undefined;
       if (exportType === 'grades') {
         const assessment = repository.getAssessment(targetId);
         if (!assessment) throw new Error('Assessment not found');
         const sheets = repository.getAnswerSheets(targetId);
         csv = emisAdapter.exportGradesCsv(assessment.topic, sheets);
+        sourceVersion = assessment.policyVersion;
       } else if (exportType === 'thematic_plan') {
         const plan = repository.getThematicPlan(targetId);
         if (!plan) throw new Error('Plan not found');
         csv = emisAdapter.exportThematicPlanCsv(plan);
+        sourceVersion = plan.programVersion;
       } else {
         const report = repository.getReport(targetId);
         if (!report) throw new Error('Report not found');
         csv = emisAdapter.exportReportCsv(report);
+        sourceVersion = report.templateVersion;
       }
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: csv,
-          },
-        ],
-      };
+      return toolResult(withPolicyVersion({ exportType, targetId, sourceVersion, csv }));
     }
   );
 
@@ -390,14 +345,7 @@ export function createMcpServer(): McpServer {
       const provider = getProvider(providerId || undefined);
       const res = await runArmenianEvaluation(provider, modelId);
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(res, null, 2),
-          },
-        ],
-      };
+      return toolResult(withPolicyVersion({ result: res }));
     }
   );
 
@@ -406,19 +354,57 @@ export function createMcpServer(): McpServer {
 
 export function createMcpRouter(): Router {
   const router = Router();
-  const mcpServer = createMcpServer();
 
-  // SSE Transport connection map for Streamable HTTP at /mcp
-  let transport: SSEServerTransport | null = null;
-
-  router.get('/mcp/sse', async (req: Request, res: Response) => {
-    transport = new SSEServerTransport('/mcp/messages', res);
-    await mcpServer.connect(transport);
+  // --- Primary transport: Streamable HTTP at /mcp (official SDK transport) ---
+  // Stateless: this deployment can run on serverless (Vercel), where nothing
+  // guarantees the same instance handles two requests from one client, so a
+  // server-held session would silently break. A fresh server + transport is
+  // created per request instead of trying to persist one across calls.
+  router.post('/mcp', async (req: Request, res: Response) => {
+    try {
+      const server = createMcpServer();
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      res.on('close', () => {
+        transport.close();
+        server.close();
+      });
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch (err: unknown) {
+      console.error('MCP StreamableHTTP request failed:', err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: err instanceof Error ? err.message : 'Internal server error' },
+          id: null,
+        });
+      }
+    }
   });
 
-  router.post('/mcp/messages', async (req: Request, res: Response) => {
-    if (transport) {
-      await transport.handlePostMessage(req, res);
+  // GET/DELETE are part of the Streamable HTTP spec for server-initiated
+  // notifications and session termination — neither applies in stateless
+  // mode (no session to stream into or tear down), so they're rejected
+  // explicitly rather than silently accepted and doing nothing.
+  router.get('/mcp', (_req: Request, res: Response) => {
+    res.status(405).json({ error: 'This MCP server is stateless: no server-initiated GET stream. Use POST.' });
+  });
+  router.delete('/mcp', (_req: Request, res: Response) => {
+    res.status(405).json({ error: 'This MCP server is stateless: no session to terminate.' });
+  });
+
+  // --- Legacy transport: SSE at /sse, kept for older MCP clients ---
+  const mcpServerForSse = createMcpServer();
+  let sseTransport: SSEServerTransport | null = null;
+
+  router.get('/sse', async (_req: Request, res: Response) => {
+    sseTransport = new SSEServerTransport('/sse/messages', res);
+    await mcpServerForSse.connect(sseTransport);
+  });
+
+  router.post('/sse/messages', async (req: Request, res: Response) => {
+    if (sseTransport) {
+      await sseTransport.handlePostMessage(req, res);
     } else {
       res.status(400).json({ error: 'SSE connection not established' });
     }

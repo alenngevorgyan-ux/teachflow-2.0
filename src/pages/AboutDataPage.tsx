@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Shield, Trash2, Download, CheckCircle2, Terminal, Info } from 'lucide-react';
 import { Language } from '../../shared/types';
 import { translations } from '../i18n/translations';
-import { Badge } from '../components/Badge';
 
 interface AboutDataPageProps {
   lang: Language;
@@ -93,20 +92,26 @@ export const AboutDataPage: React.FC<AboutDataPageProps> = ({ lang }) => {
         <div className="flex items-center gap-2 text-indigo-950 font-bold text-sm">
           <Terminal className="w-5 h-5 text-indigo-600" />
           <span>Model Context Protocol (MCP) ինտեգրում</span>
-          <Badge variant="simulated" size="sm" title={t.common.simulatedNotice}>
-            SSE (ոչ պաշտոնական Streamable HTTP)
-          </Badge>
         </div>
         <p className="leading-relaxed text-gray-800">
-          TeachFlow-ը հանդիսանում է նաև MCP սերվեր, ներկայումս՝ SSE փոխադրման միջոցով (<code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-indigo-700">/mcp/sse</code> + <code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-indigo-700">/mcp/messages</code>), ոչ թե պաշտոնական Streamable HTTP-ով: Կազմակերպության կամ դպրոցի ադմինիստրատորը կարող է միացնել այն ChatGPT Edu կամ ցանկացած այլ MCP-համատեղելի միջավայրին, բայց հին SSE տրանսպորտով:
+          TeachFlow-ը հանդիսանում է նաև MCP սերվեր՝ պաշտոնական SDK-ի Streamable HTTP փոխադրմամբ (<code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-indigo-700">POST /mcp</code>, առանց սեսիայի պահպանման՝ ծառայության անվիճակ գործարկման համար): Հին MCP հաճախորդների համար հասանելի է նաև SSE փոխադրումը (<code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-indigo-700">GET /sse</code> + <code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-indigo-700">POST /sse/messages</code>): Կազմակերպության կամ դպրոցի ադմինիստրատորը կարող է միացնել այն ChatGPT Edu կամ ցանկացած այլ MCP-համատեղելի միջավայրին:
         </p>
 
         <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 font-mono text-[11px] space-y-1">
-          <div className="text-gray-700 font-semibold">Հասանելի գործիքներ (MCP Tools)՝</div>
+          <div className="text-gray-700 font-semibold">Հասանելի գործիքներ (MCP Tools, 12)՝</div>
           <p>&bull; <code>search_curriculum(subject, grade, query)</code></p>
           <p>&bull; <code>get_source_fragment(subject, grade, query)</code></p>
           <p>&bull; <code>generate_assessment_with_trace(subject, grade, topic, sourceIds)</code></p>
           <p>&bull; <code>validate_material(subject, grade, text, sourceIds)</code></p>
+          <p>&bull; <code>thematic_plan_generate(subject, grade, academicYear, schoolId, weeklyHours, totalAnnualHours)</code></p>
+          <p>&bull; <code>thematic_plan_validate(planId)</code></p>
+          <p>&bull; <code>lesson_plan_generate(thematicPlanId, rowId, durationMinutes)</code></p>
+          <p>&bull; <code>answer_sheet_grade(assessmentId, variant, studentCode, answers)</code></p>
+          <p>&bull; <code>report_review(reportId)</code></p>
+          <p>&bull; <code>legacy_report_extract(rawText, fileName, templateId, schoolId)</code></p>
+          <p>&bull; <code>emis_export(exportType, targetId)</code></p>
+          <p>&bull; <code>armenian_eval_run(providerId, modelId)</code></p>
+          <p className="text-gray-500 pt-1">Յուրաքանչյուր գործիքի պատասխան ներառում է ընթացիկ policyVersion-ը և հղված աղբյուրների իրական տարբերակները:</p>
         </div>
       </div>
 
