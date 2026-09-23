@@ -159,7 +159,7 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
           <div className="space-y-1">
             <span className="font-bold">
               {validationResult.valid
-                ? 'Պլանը լիովին համապատասխանում է ՀՀ ԿԳՄՍՆ պետական չափորոշիչներին:'
+                ? 'Պլանն անցել է բոլոր դետերմինիստիկ ստուգումները՝ գրանցամատյանի հաստատված վերջնարդյունքների նկատմամբ:'
                 : 'Հայտնաբերվել են չափորոշչային անհամապատասխանություններ:'}
             </span>
             {validationResult.errors.length > 0 && (

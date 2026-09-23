@@ -36,8 +36,8 @@ export function App() {
   const [pinnedContext, setPinnedContext] = useState<PinnedContext>({
     subject: 'Հայոց պատմություն',
     grade: 7,
-    programVersion: '2025-v1',
-    academicYear: '2025-2026',
+    programVersion: 'demo-v1',
+    academicYear: '2026-2027',
     schoolId: 'sch-1',
     term: 1,
   });

@@ -158,7 +158,7 @@ export function createMcpServer(): McpServer {
     {
       subject: z.string(),
       grade: z.number(),
-      academicYear: z.string().default('2025-2026'),
+      academicYear: z.string().default('2026-2027'),
       schoolId: z.string().default('sch-1'),
       weeklyHours: z.number().default(2),
       totalAnnualHours: z.number().default(68),
@@ -167,10 +167,10 @@ export function createMcpServer(): McpServer {
       const plan = await generateThematicPlan({
         subject,
         grade,
-        programVersion: '2025-v1',
+        programVersion: 'demo-v1',
         academicYear,
         schoolId,
-        schoolName: 'Դպրոց Ա (Երևան, հ. 120 հիմնական դպրոց)',
+        schoolName: 'Դպրոց Ա (ցուցադրական, Երևան)',
         teacherName: 'Ուսուցիչ Ա',
         weeklyHours,
         totalAnnualHours,

@@ -105,15 +105,43 @@ export function runReportReview(
     }
   }
 
-  checks.push({
-    id: 'reg-program-version',
-    name: 'Առարկայական ծրագրի տարբերակի համապատասխանություն',
-    category: 'registry',
-    passed: true,
-    severity: 'info',
-    detail: `Օգտագործված է ՀՀ ԿԳՄՍՆ հաստատված 2025-v1 ծրագիրը:`,
-    confidence: 1.0,
-  });
+  // Program version: the thematic plan behind this report must use a version
+  // that exists among the active registry sources for this subject/grade.
+  // No plan or no active sources -> the check cannot run; say so, never pass.
+  const versionPlans = repository.getThematicPlans(report.schoolId, report.subject, report.grade);
+  const activeVersions = new Set(
+    repository
+      .getSources()
+      .filter((s) => s.status === 'active' && s.subject === report.subject && s.grades.includes(report.grade))
+      .map((s) => s.version)
+  );
+  if (versionPlans.length === 0 || activeVersions.size === 0) {
+    checks.push({
+      id: 'reg-program-version',
+      name: 'Առարկայական ծրագրի տարբերակի համապատասխանություն',
+      category: 'registry',
+      passed: false,
+      severity: 'warning',
+      detail:
+        versionPlans.length === 0
+          ? 'Ստուգումը հնարավոր չէ՝ այս առարկայի/դասարանի թեմատիկ պլան չկա: Պահանջվում է ձեռքով հաստատում:'
+          : 'Ստուգումը հնարավոր չէ՝ գրանցամատյանում այս առարկայի/դասարանի ակտիվ աղբյուր չկա: Պահանջվում է ձեռքով հաստատում:',
+    });
+  } else {
+    const planVersion = versionPlans[0].programVersion;
+    const matches = activeVersions.has(planVersion);
+    checks.push({
+      id: 'reg-program-version',
+      name: 'Առարկայական ծրագրի տարբերակի համապատասխանություն',
+      category: 'registry',
+      passed: matches,
+      severity: matches ? 'info' : 'error',
+      detail: matches
+        ? `Թեմատիկ պլանի ծրագրի տարբերակը (${planVersion}) համընկնում է գրանցամատյանի ակտիվ աղբյուրի տարբերակի հետ:`
+        : `Թեմատիկ պլանի ծրագրի տարբերակը (${planVersion}) չկա գրանցամատյանի ակտիվ աղբյուրներում (${[...activeVersions].join(', ')}):`,
+      confidence: 1.0,
+    });
+  }
 
   // Check 4: Consistency with Source Data (Thematic plans / Progress / Assessments)
   const relatedPlans = repository.getThematicPlans(report.schoolId, report.subject, report.grade);

@@ -209,7 +209,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onChange={(e) => onContextChange({ schoolId: e.target.value })}
                 className="bg-transparent font-medium text-gray-900 focus:outline-hidden text-xs cursor-pointer max-w-[200px] truncate"
               >
-                <option value="sch-1">Դպրոց Ա (Երևան, հ. 120)</option>
+                <option value="sch-1">Դպրոց Ա (ցուցադրական, Երևան)</option>
                 <option value="sch-2">Դպրոց Բ (Գյումրի, հ. 15)</option>
                 <option value="sch-3">Դպրոց Գ (Վանաձոր, հ. 8)</option>
               </select>

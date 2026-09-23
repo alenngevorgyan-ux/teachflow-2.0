@@ -7,3 +7,6 @@ coverage/
 .env*
 !.env.example
 .vercel
+
+# Runtime JSON store (seeded from server/store/demoData.ts on first start)
+data/teachflow_store.json

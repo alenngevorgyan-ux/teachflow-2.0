@@ -473,7 +473,7 @@ export const AutoGradingPage: React.FC<AutoGradingPageProps> = ({
             <div className="flex items-start justify-between border-b-2 border-black pb-4">
               <div>
                 <h3 className="font-extrabold text-base text-black uppercase tracking-wider">
-                  ՀՀ ԿԳՄՍՆ ՊԱՏԱՍԽԱՆՆԵՐԻ ՊԱՇՏՈՆԱԿԱՆ ՁԵՎԱԹՈՒՂԹ
+                  ՊԱՏԱՍԽԱՆՆԵՐԻ ՁԵՎԱԹՈՒՂԹ (TeachFlow)
                 </h3>
                 <p className="text-xs text-gray-800 font-medium">
                   {pinnedContext.subject} | {pinnedContext.grade}-րդ դասարան | ՏԱՐԲԵՐԱԿ {printVariant}

@@ -338,7 +338,7 @@ export class JsonFileRepository implements IRepository {
       },
       {
         id: 'rule-armenian-terminology',
-        title: 'ՀՀ ԿԳՄՍՆ հաստատված տերմինաբանության կիրառում',
+        title: 'Տերմինացանկով հաստատված տերմինաբանության կիրառում',
         description: 'Առաջադրանքներում արգելվում են օտարաբանությունները կամ չհաստատված տերմինները:',
         kind: 'llm_judged',
         params: { dictionary: 'official_armenian' },

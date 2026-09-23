@@ -102,7 +102,7 @@ export const GlossaryPage: React.FC<GlossaryPageProps> = ({
             <h1 className="text-xl font-bold text-gray-900">{t.nav.glossary}</h1>
           </div>
           <p className="text-xs text-gray-700 mt-1">
-            ՀՀ ԿԳՄՍՆ պետական չափորոշիչներով նախատեսված պաշտոնական տերմինացանկ
+            Առարկայական տերմինացանկ. յուրաքանչյուր տերմին պետք է ունենա հաստատված աղբյուր (ցուցադրական տերմինները նշված են DEMO DATA)
           </p>
         </div>
 

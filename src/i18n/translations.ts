@@ -89,7 +89,7 @@ export const translations = {
     },
     thematicPlan: {
       title: 'Թեմատիկ պլանավորում և առաջընթաց',
-      subtitle: 'ՀՀ ԿԳՄՍՆ հաստատված առարկայական չափորոշիչների հիման վրա դետերմինիստիկ բաշխում',
+      subtitle: 'Գրանցամատյանի հաստատված վերջնարդյունքների հիման վրա դետերմինիստիկ բաշխում',
       generatePlan: 'Ստեղծել նոր թեմատիկ պլան',
       validatePlan: 'Ստուգել չափորոշչային համապատասխանությունը',
       weeklyHours: 'Շաբաթական ժամաքանակ',
@@ -162,6 +162,7 @@ export const translations = {
     },
     dashboards: {
       title: 'Վերլուծական ամփոփ վահանակ',
+      demoNotice: 'Այս վահանակի բոլոր թվերը ցուցադրական են (ձեռքով գրված), ոչ թե հաշվարկված իրական տվյալներից:',
       subtitle: 'Առարկայական ծրագրերի կատարողական և դժվար յուրացվող վերջնարդյունքներ (ԱՌԱՆՑ ուսուցիչների վարկանիշավորման)',
       programProgressCard: 'Ծրագրի միջին կատարողական',
       onTrackSchools: 'Ծրագրին համապատասխան ընթացող դպրոցներ',
@@ -445,6 +446,7 @@ export const translations = {
     },
     dashboards: {
       title: 'Аналитическая панель',
+      demoNotice: 'Все цифры на этой панели демонстрационные (заданы вручную), а не рассчитаны по реальным данным.',
       subtitle: 'Выполнение программ и проблемные результаты (БЕЗ рейтингов учителей)',
       programProgressCard: 'Среднее выполнение программы',
       onTrackSchools: 'Школы, идущие по графику',
@@ -728,6 +730,7 @@ export const translations = {
     },
     dashboards: {
       title: 'Aggregated Dashboards',
+      demoNotice: 'Every figure on this dashboard is illustrative (hand-written), not computed from real data.',
       subtitle: 'Program progress & difficult outcomes (NO teacher rankings)',
       programProgressCard: 'Average Program Completion',
       onTrackSchools: 'Schools on Track',

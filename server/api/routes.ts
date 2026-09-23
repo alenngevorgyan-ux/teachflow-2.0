@@ -757,8 +757,8 @@ export function createApiRouter(): Router {
       const {
         subject = 'Հայոց պատմություն',
         grade = 7,
-        programVersion = '2025-v1',
-        academicYear = '2025-2026',
+        programVersion = 'demo-v1',
+        academicYear = '2026-2027',
         schoolId = 'sch-1',
         schoolName = 'Դպրոց Ա',
         teacherName = 'Ուսուցիչ Ա',
@@ -1007,7 +1007,7 @@ export function createApiRouter(): Router {
       const {
         templateId = 'tpl-method-unit',
         schoolId = 'sch-1',
-        academicYear = '2025-2026',
+        academicYear = '2026-2027',
         period = 'half_year',
         subjectGroup = 'Հումանիտար և բնագիտական առարկաներ',
       } = req.body;
