@@ -65,14 +65,25 @@ export function gradeSubmissionDeterministically(
     let points = 0;
     let aiRubricReasoning = ans.aiRubricReasoning;
 
-    if (item.type === 'single_choice' || item.type === 'multiple_choice') {
-      const correctKey = Array.isArray(item.answerKey) ? item.answerKey.join(',') : String(item.answerKey);
-      isCorrect = ans.studentAnswer.trim().toUpperCase() === correctKey.trim().toUpperCase();
+    if (item.type === 'single_choice') {
+      const correctKey = String(item.answerKey).trim().toUpperCase();
+      const studentVal = ans.studentAnswer.trim().toUpperCase();
+      isCorrect = studentVal !== '' && studentVal === correctKey;
+      points = isCorrect ? 1 : 0;
+    } else if (item.type === 'multiple_choice') {
+      // Choices are a set: "C, A" answers the key ["A", "C"]
+      const toSet = (v: string | string[]) =>
+        [...new Set((Array.isArray(v) ? v : v.split(',')).map((c) => c.trim().toUpperCase()).filter(Boolean))].sort();
+      const correctSet = toSet(item.answerKey);
+      const studentSet = toSet(ans.studentAnswer);
+      isCorrect = studentSet.length > 0 && studentSet.join(',') === correctSet.join(',');
       points = isCorrect ? 1 : 0;
     } else if (item.type === 'short_answer') {
       const correctKey = String(item.answerKey).toLowerCase().trim();
       const studentVal = ans.studentAnswer.toLowerCase().trim();
-      isCorrect = studentVal === correctKey || studentVal.includes(correctKey) || correctKey.includes(studentVal);
+      isCorrect =
+        studentVal !== '' &&
+        (studentVal === correctKey || studentVal.includes(correctKey) || correctKey.includes(studentVal));
       points = isCorrect ? 1 : 0;
     } else if (item.type === 'open') {
       // Rubric for open answers
