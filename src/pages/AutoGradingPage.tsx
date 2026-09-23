@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { Language, PinnedContext, Role, Assessment, AnswerSheetSubmission } from '../../shared/types';
 import { translations } from '../i18n/translations';
-import { Badge } from '../components/Badge';
 
 interface AutoGradingPageProps {
   lang: Language;
@@ -38,6 +37,10 @@ export const AutoGradingPage: React.FC<AutoGradingPageProps> = ({
   const [itemAnalysis, setItemAnalysis] = useState<any[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [printVariant, setPrintVariant] = useState<'A' | 'B'>('A');
+  const [scanVariant, setScanVariant] = useState<'A' | 'B'>('A');
+  const [scanNotice, setScanNotice] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchAssessments();
@@ -49,6 +52,17 @@ export const AutoGradingPage: React.FC<AutoGradingPageProps> = ({
       fetchItemAnalysis(selectedAssessmentId);
     }
   }, [selectedAssessmentId]);
+
+  useEffect(() => {
+    if (!selectedAssessmentId) {
+      setQrDataUrl(null);
+      return;
+    }
+    fetch(`/api/answer-sheets/qr?assessmentId=${encodeURIComponent(selectedAssessmentId)}&variant=${printVariant}`)
+      .then((r) => r.json())
+      .then((data) => setQrDataUrl(data.dataUrl || null))
+      .catch(() => setQrDataUrl(null));
+  }, [selectedAssessmentId, printVariant]);
 
   const fetchAssessments = async () => {
     try {
@@ -90,33 +104,41 @@ export const AutoGradingPage: React.FC<AutoGradingPageProps> = ({
     }
   };
 
-  const handleSimulateScan = async () => {
+  const handlePickScanFile = () => {
     if (!selectedAssessmentId) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleScanFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file || !selectedAssessmentId) return;
+
     setIsScanning(true);
+    setScanNotice(null);
     try {
-      // Simulate scan for anonymous student code 7B-23
-      const res = await fetch('/api/answer-sheets/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assessmentId: selectedAssessmentId,
-          variant: 'A',
-          studentCode: `7B-${Math.floor(10 + Math.random() * 89)}`,
-          answers: [
-            { itemIndex: 1, itemId: 'q1', studentAnswer: 'Բ' },
-            { itemIndex: 2, itemId: 'q2', studentAnswer: 'Գ' },
-            { itemIndex: 3, itemId: 'q3', studentAnswer: 'Տիգրանակերտը կառուցվել է Աղձնիքում որպես նոր մայրաքաղաք:' },
-          ],
-        }),
-      });
+      const form = new FormData();
+      form.append('image', file);
+      form.append('assessmentId', selectedAssessmentId);
+      form.append('variant', scanVariant);
+
+      const res = await fetch('/api/answer-sheets/scan-image', { method: 'POST', body: form });
       const data = await res.json();
-      if (data.answerSheet) {
+
+      if (res.ok && data.answerSheet) {
         setSubmissions((prev) => [data.answerSheet, ...prev]);
         setSelectedSubmission(data.answerSheet);
         fetchItemAnalysis(selectedAssessmentId);
+        const notices: string[] = [];
+        if (!data.qrDecoded) notices.push('QR-կոդը չընթերցվեց. օգտագործվեց ձեռքով ընտրված թեստը/տարբերակը:');
+        if (data.warnings?.length) notices.push(...data.warnings);
+        if (notices.length) setScanNotice(notices.join(' '));
+      } else {
+        setScanNotice(data.error || 'Սկանավորումը ձախողվեց:');
       }
     } catch (err) {
       console.error(err);
+      setScanNotice('Ցանցային սխալ սկանավորման ժամանակ:');
     } finally {
       setIsScanning(false);
     }
@@ -220,18 +242,41 @@ export const AutoGradingPage: React.FC<AutoGradingPageProps> = ({
               <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
                 Ստուգված թերթիկներ ({submissions.length})
               </span>
-              <button
-                onClick={handleSimulateScan}
-                disabled={isScanning}
-                className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-              >
-                <Upload className="w-3 h-3" />
-                + Նոր սկան
-              </button>
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={scanVariant}
+                  onChange={(e) => setScanVariant(e.target.value as 'A' | 'B')}
+                  title="Տարբերակ (եթե QR-ը չընթերցվի)"
+                  className="text-[11px] bg-gray-50 border border-gray-300 rounded-lg px-1.5 py-1"
+                >
+                  <option value="A">Ա</option>
+                  <option value="B">Բ</option>
+                </select>
+                <button
+                  onClick={handlePickScanFile}
+                  disabled={isScanning || !selectedAssessmentId}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                >
+                  <Upload className="w-3 h-3" />
+                  {isScanning ? 'Ընթերցվում է...' : '+ Նոր սկան'}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  className="hidden"
+                  onChange={handleScanFileSelected}
+                />
+              </div>
             </div>
-            <Badge variant="simulated" size="sm" title={t.common.simulatedNotice} className="w-fit">
-              {t.common.simulatedBadge}: պատկերի ընթերցում (OCR/Vision) դեռ իրականացված չէ, պատասխանները մուտքագրվում են ձեռքով
-            </Badge>
+            {scanNotice && (
+              <div className="flex items-start justify-between gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900">
+                <span>{scanNotice}</span>
+                <button onClick={() => setScanNotice(null)} className="shrink-0 font-bold text-amber-700">
+                  ✕
+                </button>
+              </div>
+            )}
 
             <div className="space-y-2 overflow-y-auto max-h-[600px]">
               {submissions.map((sub) => (
@@ -330,16 +375,30 @@ export const AutoGradingPage: React.FC<AutoGradingPageProps> = ({
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {selectedSubmission.answers.map((ans, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50/80">
+                        <tr
+                          key={idx}
+                          className={
+                            ans.isLowConfidence
+                              ? 'bg-amber-50/70 hover:bg-amber-50'
+                              : 'hover:bg-gray-50/80'
+                          }
+                        >
                           <td className="p-3 font-bold text-gray-700">№{ans.itemIndex}</td>
-                          <td className="p-3 font-medium text-gray-900">{ans.studentAnswer}</td>
+                          <td className="p-3 font-medium text-gray-900">
+                            {ans.studentAnswer || <span className="italic text-gray-500">(դատարկ)</span>}
+                            {ans.isLowConfidence && (
+                              <span className="ml-1.5 text-[10px] font-bold text-amber-700 uppercase">
+                                ⚠ ստուգել ձեռքով
+                              </span>
+                            )}
+                          </td>
                           <td className="p-3">
                             {ans.confidence !== undefined && ans.confidence !== null ? (
                               <span
                                 className={`px-2 py-0.5 rounded font-mono text-[10px] ${
-                                  ans.confidence > 0.9
+                                  !ans.isLowConfidence
                                     ? 'bg-emerald-50 text-emerald-700'
-                                    : 'bg-amber-50 text-amber-700 font-bold'
+                                    : 'bg-amber-100 text-amber-800 font-bold'
                                 }`}
                               >
                                 {Math.round(ans.confidence * 100)}%
@@ -435,9 +494,12 @@ export const AutoGradingPage: React.FC<AutoGradingPageProps> = ({
                   </div>
                 </div>
 
-                <div className="w-16 h-16 border-2 border-black flex flex-col items-center justify-center p-1 bg-white">
-                  <QrCode className="w-10 h-10 text-black" />
-                  <span className="text-[8px] font-mono">TF3-A7</span>
+                <div className="w-16 h-16 border-2 border-black flex flex-col items-center justify-center p-0.5 bg-white">
+                  {qrDataUrl ? (
+                    <img src={qrDataUrl} alt="QR" className="w-full h-full object-contain" />
+                  ) : (
+                    <QrCode className="w-10 h-10 text-gray-400" />
+                  )}
                 </div>
               </div>
             </div>

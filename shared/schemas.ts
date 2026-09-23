@@ -139,6 +139,28 @@ export const LessonPlanGenerationOutputSchema = z.object({
 
 export type LessonPlanGenerationOutput = z.infer<typeof LessonPlanGenerationOutputSchema>;
 
+export const AnswerSheetVisionAnswerSchema = z.object({
+  itemIndex: z.number().int().min(1).describe('1-indexed item number as printed on the sheet'),
+  mark: z
+    .string()
+    .describe('The selected option letter, or handwritten response, exactly as marked — empty string if left blank'),
+  confidence: z.number().min(0).max(1).describe('How legible/certain this specific reading is'),
+});
+
+export const AnswerSheetVisionSchema = z.object({
+  studentCode: z
+    .string()
+    .optional()
+    .describe('The anonymous student code handwritten in the code box, if legible — never a real name'),
+  answers: z.array(AnswerSheetVisionAnswerSchema),
+  unreadableNote: z
+    .string()
+    .optional()
+    .describe('Brief note if the photo quality prevented reading some/all fields'),
+});
+
+export type AnswerSheetVisionOutput = z.infer<typeof AnswerSheetVisionSchema>;
+
 export const ThematicPlanTopicSchema = z.object({
   topic: z.string().describe('Topic title in Armenian, grounded in the confirmed outcomes / FACT chunks'),
   outcomeCodes: z

@@ -38,6 +38,8 @@ import { emisAdapter } from '../pipeline/emisAdapter.js';
 import { runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
 import { ingestSourceFile } from '../pipeline/sourceIngestion.js';
 import { parseWorkspaceIntent } from '../pipeline/workspaceIntent.js';
+import { scanAnswerSheet } from '../pipeline/answerSheetScanner.js';
+import { generateAnswerSheetQrDataUrl } from '../pipeline/answerSheetQr.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
@@ -872,6 +874,49 @@ export function createApiRouter(): Router {
 
       const saved = repository.saveAnswerSheet(graded);
       res.json({ answerSheet: saved });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // Real photo-based answer-sheet reading: server-side QR decode (assessment
+  // id + variant) with Gemini vision for student code + marks/confidence.
+  router.post('/answer-sheets/scan-image', upload.single('image'), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Պատկեր չի ուղարկվել (multipart field name՝ "image")' });
+      }
+
+      const { assessmentId, variant, studentCode } = req.body;
+      const result = await scanAnswerSheet({
+        imageBuffer: req.file.buffer,
+        mimeType: req.file.mimetype,
+        assessmentId,
+        variant: variant === 'A' || variant === 'B' ? variant : undefined,
+        studentCodeOverride: studentCode || undefined,
+      });
+
+      res.json({ answerSheet: result.submission, qrDecoded: result.qrDecoded, warnings: result.warnings });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // Generates a real QR code (assessmentId + variant encoded) for the
+  // printable blank answer-sheet template.
+  router.get('/answer-sheets/qr', async (req: Request, res: Response) => {
+    try {
+      const { assessmentId, variant } = req.query;
+      if (!assessmentId || (variant !== 'A' && variant !== 'B')) {
+        return res.status(400).json({ error: 'Missing assessmentId or variant (A|B)' });
+      }
+      const dataUrl = await generateAnswerSheetQrDataUrl({
+        assessmentId: String(assessmentId),
+        variant: variant as 'A' | 'B',
+      });
+      res.json({ dataUrl });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: msg });
