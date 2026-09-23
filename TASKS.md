@@ -12,7 +12,7 @@ Already merged into this base (from the interrupted AI Studio session): default 
 - [x] **T3. Server-side status enforcement.** `ready_for_classroom` only if all items PASS, or WARN with explicit `acceptedWarnings`; clients cannot set `validated`.
 - [x] **T4. Legacy import: surface model failure.** If the extraction call fails, return a visible error state for the import (not a silent all-null report).
 - [x] **T5. SIMULATED badges.** Every module that runs without a real model call shows `SIMULATED` until its task below is done.
-- [ ] **T6. Honest thematic plan.** Remove the hardcoded history-7 topics and the "Թեմա N" placeholder generator. Generate grouping/sequence with a structured Gemini call using only confirmed outcomes and FACT chunks; refuse when no confirmed outcomes exist. Remove the last-row hours adjustment. Implement the real holiday check. Move demo "taught" marks into demo seeding. Tests for each deterministic check, including that a wrong total fails.
+- [x] **T6. Honest thematic plan.** Remove the hardcoded history-7 topics and the "Թեմա N" placeholder generator. Generate grouping/sequence with a structured Gemini call using only confirmed outcomes and FACT chunks; refuse when no confirmed outcomes exist. Remove the last-row hours adjustment. Implement the real holiday check. Move demo "taught" marks into demo seeding. Tests for each deterministic check, including that a wrong total fails.
 
 ## P1 — Make the core real
 

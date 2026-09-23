@@ -96,6 +96,23 @@ export const EquivalenceJudgeSchema = z.object({
 
 export type EquivalenceJudgeOutput = z.infer<typeof EquivalenceJudgeSchema>;
 
+export const ThematicPlanTopicSchema = z.object({
+  topic: z.string().describe('Topic title in Armenian, grounded in the confirmed outcomes / FACT chunks'),
+  outcomeCodes: z
+    .array(z.string())
+    .min(1)
+    .describe('Confirmed outcome codes this topic covers — must exactly match codes from the provided list, never invented'),
+  plannedHours: z.number().int().positive().describe('Hours allocated to this topic'),
+  hasAssessment: z.boolean(),
+  assessmentType: z.enum(['diagnostic', 'formative', 'summative']).optional(),
+});
+
+export const ThematicPlanGenerationOutputSchema = z.object({
+  topics: z.array(ThematicPlanTopicSchema).min(1),
+});
+
+export type ThematicPlanGenerationOutput = z.infer<typeof ThematicPlanGenerationOutputSchema>;
+
 export const ExtractedClaimsSchema = z.object({
   claims: z.array(
     z.object({

@@ -119,9 +119,6 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
               <Calendar className="w-5 h-5" />
             </span>
             <h1 className="text-xl font-bold text-gray-900">{t.thematicPlan.title}</h1>
-            <Badge variant="simulated" title={t.common.simulatedNotice}>
-              {t.common.simulatedBadge}
-            </Badge>
           </div>
           <p className="text-xs text-gray-700 mt-1">{t.thematicPlan.subtitle}</p>
         </div>

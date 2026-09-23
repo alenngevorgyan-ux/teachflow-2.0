@@ -1,6 +1,8 @@
-import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { ThematicPlanGenerationOutputSchema } from '../../shared/schemas.js';
 import { CurriculumOutcome, ThematicPlan, ThematicPlanRow } from '../../shared/types.js';
-import { IModelProvider } from '../providers/modelProvider.js';
+import { IModelProvider, getProvider } from '../providers/modelProvider.js';
 import { repository } from '../store/repository.js';
 
 export interface GenerateThematicPlanParams {
@@ -47,7 +49,7 @@ export function validateThematicPlanDeterministically(
     );
   }
 
-  // 3. No outcome from another grade
+  // 3. No outcome from another grade, and no fully invented code
   const allOutcomes = repository.getOutcomes();
   const otherGradeMap = new Map<string, number>();
   for (const o of allOutcomes) {
@@ -55,6 +57,7 @@ export function validateThematicPlanDeterministically(
       otherGradeMap.set(o.code, o.grade);
     }
   }
+  const allKnownCodes = new Set(allOutcomes.map((o) => o.code));
 
   for (const row of plan.rows) {
     for (const code of row.outcomeCodes || []) {
@@ -62,19 +65,42 @@ export function validateThematicPlanDeterministically(
         errors.push(
           `Այլ դասարանի վերջնարդյունքի կոդ. Թեմա «${row.topic}» պարունակում է ${otherGradeMap.get(code)}-րդ դասարանի կոդ («${code}»): Թույլատրվում են միայն ${plan.grade}-րդ դասարանի կոդերը:`
         );
+      } else if (!allKnownCodes.has(code)) {
+        errors.push(
+          `Անհայտ վերջնարդյունքի կոդ. Թեմա «${row.topic}» պարունակում է համակարգում գրանցված չգտնվող կոդ («${code}»): Կոդերը թույլատրվում է վերցնել միայն պաշտոնական ցանկից, երբեք չհորինել:`
+        );
       }
     }
   }
 
-  // 4. Calendar & Holiday check
-  const holidays = plan.calendar?.holidays || [];
+  // 4. Calendar & holiday check — bounds are driven by THIS plan's own calendar
+  // (term1Weeks + term2Weeks, which already net out holiday weeks per the RA
+  // school calendar convention), never a hardcoded constant. A schedule that
+  // overflows past the real number of teaching weeks fails here.
+  const totalTeachingWeeks = plan.calendar.term1Weeks + plan.calendar.term2Weeks;
   for (const row of plan.rows) {
-    if (!row.plannedDates || row.weekNumber < 1 || row.weekNumber > 36) {
-      errors.push(`Անվավեր շաբաթ/ժամկետ «${row.topic}» թեմայի համար (շաբաթ #${row.weekNumber}):`);
+    if (!row.plannedDates || row.weekNumber < 1 || row.weekNumber > totalTeachingWeeks) {
+      errors.push(
+        `Անվավեր շաբաթ «${row.topic}» թեմայի համար (շաբաթ #${row.weekNumber}): մատչելի է միայն 1-${totalTeachingWeeks} միջակայքը (${plan.calendar.term1Weeks} + ${plan.calendar.term2Weeks} ուսումնական շաբաթ, արձակուրդներից հետո):`
+      );
     }
   }
 
   return errors;
+}
+
+function getFactChunksForSubjectGrade(subject: string, grade: number) {
+  const sources = repository.getSources();
+  const eligible = sources.filter(
+    (s) =>
+      s.role === 'FACT' &&
+      s.status === 'active' &&
+      s.grades.includes(grade) &&
+      s.subject.toLowerCase() === subject.toLowerCase()
+  );
+  return eligible.flatMap((s) =>
+    s.chunks.map((c) => ({ chunk: c, sourceTitle: s.title, version: s.version }))
+  );
 }
 
 export async function generateThematicPlan(params: GenerateThematicPlanParams): Promise<ThematicPlan> {
@@ -92,7 +118,42 @@ export async function generateThematicPlan(params: GenerateThematicPlanParams): 
   const targetHours = params.totalAnnualHours || weeklyHours * 34; // 34 study weeks in RA schools
   const outcomes = repository.getConfirmedOutcomes(subject, grade);
 
-  const planId = `plan-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  // SPEC: refuse rather than fabricate a plan grounded in nothing.
+  if (outcomes.length === 0) {
+    throw new Error(
+      `«${subject}» առարկայի ${grade}-րդ դասարանի համար հաստատված վերջնարդյունքներ չկան: Թեմատիկ պլանի գեներացումը մերժված է. նախ պետք է հաստատել վերջնարդյունքները Registry բաժնում:`
+    );
+  }
+
+  const provider = params.provider || getProvider();
+  const factChunks = getFactChunksForSubjectGrade(subject, grade);
+
+  const outcomesFormatted = outcomes.map((o) => `[${o.code}] ${o.text}`).join('\n');
+  const factChunksFormatted =
+    factChunks.length > 0
+      ? factChunks
+          .map(
+            (f) =>
+              `CHUNK ID: ${f.chunk.id} (Source: ${f.sourceTitle}, v${f.version})\nTEXT:\n"${f.chunk.text}"`
+          )
+          .join('\n\n')
+      : '(Փաստացի աղբյուրների հատվածներ առկա չեն. հիմնվեք բացառապես հաստատված վերջնարդյունքների վրա)';
+
+  const promptTemplatePath = path.resolve(process.cwd(), 'server/prompts/thematic_plan.v1.txt');
+  let prompt = fs.readFileSync(promptTemplatePath, 'utf-8');
+  prompt = prompt
+    .replace('{{subject}}', subject)
+    .replace('{{grade}}', String(grade))
+    .replace('{{targetHours}}', String(targetHours))
+    .replace('{{weeklyHours}}', String(weeklyHours))
+    .replace('{{outcomes}}', outcomesFormatted)
+    .replace('{{factChunks}}', factChunksFormatted);
+
+  const res = await provider.generateStructured(prompt, ThematicPlanGenerationOutputSchema, {
+    modelId: params.modelId,
+    temperature: 0.2,
+    actionName: 'generateThematicPlan',
+  });
 
   // Default standard calendar for RA schools (1-st semester 16 weeks, 2-nd semester 18 weeks)
   const calendar = {
@@ -105,92 +166,35 @@ export async function generateThematicPlan(params: GenerateThematicPlanParams): 
     ],
   };
 
-  // Structured topic rows that cover all confirmed outcomes and sum up to targetHours
-  let rows: ThematicPlanRow[] = [];
+  // Deterministic scheduling from the model's proposed topics. Hours are taken
+  // exactly as the model returned them — never patched to force-match
+  // targetHours; a real mismatch is caught (and can fail) by
+  // validateThematicPlanDeterministically below.
+  let currentWeek = 1;
+  const rows: ThematicPlanRow[] = res.output.topics.map((t, idx) => {
+    const weeksForTopic = Math.max(1, Math.round(t.plannedHours / weeklyHours));
+    const startWeek = currentWeek;
+    const endWeek = currentWeek + weeksForTopic - 1;
+    currentWeek = endWeek + 1;
 
-  if (subject === 'Հայոց պատմություն' && grade === 7) {
-    const topicTemplates = [
-      { topic: 'Արտաշեսյան թագավորության վերելքը: Տիգրան Բ Մեծի գահակալությունը', hours: 4, outcomes: ['ՀՊ-7-1'], assessment: false },
-      { topic: 'Հայ-պոնտական դաշինքը և Կապադովկիայի ազատագրումը', hours: 4, outcomes: ['ՀՊ-7-1'], assessment: false },
-      { topic: 'Հայկական աշխարհակալ տերության ստեղծումը: Ասորիքի միացումը', hours: 6, outcomes: ['ՀՊ-7-1', 'ՀՊ-7-4'], assessment: true, type: 'formative' as const },
-      { topic: 'Տիգրանակերտ նոր մայրաքաղաքի հիմնադրումը և մշակույթը', hours: 6, outcomes: ['ՀՊ-7-2'], assessment: false },
-      { topic: 'Հայ-հռոմեական պատերազմը: Լուկուլլոսի արշավանքը և Արածանիի ճակատամարտը', hours: 6, outcomes: ['ՀՊ-7-3'], assessment: false },
-      { topic: 'Արտաշատի հաշտության պայմանագիրը (մ.թ.ա. 66 թ.) և դրա նշանակությունը', hours: 6, outcomes: ['ՀՊ-7-3', 'ՀՊ-7-4'], assessment: true, type: 'summative' as const },
-      { topic: 'Արտավազդ Բ: Հայաստանը հռոմեա-պարթևական հակամարտության շրջանում', hours: 6, outcomes: ['ՀՊ-7-4'], assessment: false },
-      { topic: 'Արտաշեսյան թագավորության անկումը: Տիգրան Դ և Էրատո', hours: 6, outcomes: ['ՀՊ-7-4'], assessment: true, type: 'formative' as const },
-      { topic: 'Հին Հայաստանի տնտեսությունը, հասարակական կյանքը և կառավարման համակարգը', hours: 8, outcomes: ['ՀՊ-7-2', 'ՀՊ-7-4'], assessment: false },
-      { topic: 'Հին Հայաստանի մշակույթը: Հելլենիզմը Հայաստանում', hours: 8, outcomes: ['ՀՊ-7-2'], assessment: false },
-      { topic: 'Արշակունյաց արքայատոհմի հաստատումը: Տրդատ Ա և Հռանդեայի ճակատամարտը', hours: 6, outcomes: ['ՀՊ-7-1'], assessment: false },
-      { topic: 'Կիսամյակային և տարեկան ամփոփիչ կրկնություն', hours: 4, outcomes: ['ՀՊ-7-1', 'ՀՊ-7-2', 'ՀՊ-7-3', 'ՀՊ-7-4'], assessment: true, type: 'summative' as const },
-    ];
-
-    let currentWeek = 1;
-    let accumulatedHours = 0;
-
-    rows = topicTemplates.map((t, idx) => {
-      const weeksForTopic = Math.max(1, Math.round(t.hours / weeklyHours));
-      const startWeek = currentWeek;
-      const endWeek = currentWeek + weeksForTopic - 1;
-      currentWeek = endWeek + 1;
-      accumulatedHours += t.hours;
-
-      return {
-        id: `row-${idx + 1}`,
-        topic: t.topic,
-        outcomeCodes: t.outcomes,
-        plannedHours: t.hours,
-        weekNumber: startWeek,
-        plannedDates: `Շաբաթ ${startWeek}-${endWeek} (Ուս. տարի)`,
-        hasAssessment: t.assessment,
-        assessmentType: t.type,
-        taught: idx < 3, // first 3 taught in demo
-        actualHours: idx < 3 ? t.hours : 0,
-        taughtDate: idx < 3 ? `2025-09-${10 + idx * 7}` : undefined,
-      };
-    });
-
-    // Adjust last row so sum is exactly targetHours
-    const currentSum = rows.reduce((acc, r) => acc + r.plannedHours, 0);
-    if (currentSum !== targetHours && rows.length > 0) {
-      rows[rows.length - 1].plannedHours += targetHours - currentSum;
-    }
-  } else {
-    // Generic generator for other subjects / grades
-    const codes = outcomes.map((o) => o.code);
-    const numTopics = Math.min(10, Math.max(4, Math.floor(targetHours / 6)));
-    const hoursPerTopic = Math.floor(targetHours / numTopics);
-    let remaining = targetHours;
-
-    rows = [];
-    let currentWeek = 1;
-    for (let i = 0; i < numTopics; i++) {
-      const isLast = i === numTopics - 1;
-      const h = isLast ? remaining : hoursPerTopic;
-      remaining -= h;
-
-      const assignedCodes = codes.length > 0 ? [codes[i % codes.length]] : [];
-      const isSummative = (i + 1) % 3 === 0 || isLast;
-
-      rows.push({
-        id: `row-${i + 1}`,
-        topic: `Թեմա ${i + 1}. ${subject} (${grade}-րդ դասարան, ուսուցողական բաժին ${i + 1})`,
-        outcomeCodes: assignedCodes,
-        plannedHours: h,
-        weekNumber: currentWeek,
-        plannedDates: `Շաբաթ ${currentWeek}-${currentWeek + Math.max(1, Math.round(h / weeklyHours)) - 1}`,
-        hasAssessment: isSummative,
-        assessmentType: isSummative ? 'summative' : undefined,
-        taught: i === 0,
-        actualHours: i === 0 ? h : 0,
-        taughtDate: i === 0 ? '2025-09-12' : undefined,
-      });
-
-      currentWeek += Math.max(1, Math.round(h / weeklyHours));
-    }
-  }
+    return {
+      id: `row-${idx + 1}`,
+      topic: t.topic,
+      outcomeCodes: t.outcomeCodes,
+      plannedHours: t.plannedHours,
+      weekNumber: startWeek,
+      plannedDates: `Շաբաթ ${startWeek}-${endWeek}`,
+      hasAssessment: t.hasAssessment,
+      assessmentType: t.assessmentType,
+      // A freshly generated plan has nothing taught yet — no fabricated
+      // "already taught" state. Demo history lives only in demo seeding.
+      taught: false,
+      actualHours: 0,
+    };
+  });
 
   const plan: ThematicPlan = {
-    id: planId,
+    id: `plan-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     title: `${subject} ${grade}-րդ դասարան — Տարեկան թեմատիկ պլան`,
     subject,
     grade,
