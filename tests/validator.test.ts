@@ -480,3 +480,38 @@ describe('seeded method rules through the real caller path (validateAllItems)', 
     expect(trace.methodRulesNotEvaluated).toEqual(['rule-min-options']);
   });
 });
+
+
+describe('independent review R3: LLM rule trace honesty', () => {
+  it('a failed rule-judge call is not applied: it is in notEvaluated, and the error stays visible', async () => {
+    store.rules = getDemoRules();
+    const { trace } = await validateSingleItem(item(), 'history', 7, providerThrowingFor('ruleJudge:'), { judgeProvider: supported });
+    const llmRules = store.rules.filter((r) => r.active && r.kind === 'llm_judged').map((r) => r.id);
+    expect(llmRules.length).toBeGreaterThan(0);
+    for (const id of llmRules) {
+      expect(trace.checks.find((c) => c.checkId === id)!.detail).toContain('boom');
+      expect(trace.methodRulesApplied).not.toContain(id);
+      expect(trace.methodRulesNotEvaluated).toContain(id);
+    }
+  });
+
+  it('a successful rule-judge verdict of fail still counts as applied (evaluated is not passed)', async () => {
+    store.rules = getDemoRules();
+    const failing: IModelProvider = {
+      ...provider,
+      generateStructured: vi.fn(async (_p: string, _s: unknown, o?: { actionName?: string }) => ({
+        output: o?.actionName?.startsWith('ruleJudge:') ? { result: 'fail', detail: 'violates rule' } : { hasIssues: false, issues: [] },
+        providerId: 'fake',
+        modelId: 'fake-model',
+        latencyMs: 0,
+        requestId: 'r',
+      })) as unknown as IModelProvider['generateStructured'],
+    };
+    const { trace } = await validateSingleItem(item(), 'history', 7, failing, { judgeProvider: supported });
+    for (const id of store.rules.filter((r) => r.active && r.kind === 'llm_judged').map((r) => r.id)) {
+      expect(trace.checks.find((c) => c.checkId === id)!.result).toBe('fail');
+      expect(trace.methodRulesApplied).toContain(id);
+      expect(trace.methodRulesNotEvaluated).not.toContain(id);
+    }
+  });
+});

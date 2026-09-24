@@ -502,9 +502,13 @@ export async function validateSingleItem(
         result: rRes.output.result,
         detail: rRes.output.detail,
       });
+      // A validated verdict (pass or fail) means the rule was evaluated.
+      rulesEvaluated.push(rule.id);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`Rule judge failed for ${rule.id}:`, msg);
+      // The call failed: the rule was not evaluated (the error stays visible below).
+      rulesNotEvaluated.push(rule.id);
       // SPEC: A failed judge call must produce a visible check, not a silent skip.
       checks.push({
         checkId: rule.id,
@@ -531,7 +535,10 @@ export async function validateSingleItem(
     itemId: item.id,
     factSources: factSourcesRef,
     // Only rules that were actually evaluated (deterministic here, llm_judged by the rule judge).
-    methodRulesApplied: [...rulesEvaluated, ...activeRules.filter((r) => r.kind === 'llm_judged').map((r) => r.id)],
+    // Only rules that produced a result: deterministic evaluators and LLM
+    // rules whose judge returned a validated verdict. Failed calls are in
+    // methodRulesNotEvaluated.
+    methodRulesApplied: rulesEvaluated,
     methodRulesNotEvaluated: rulesNotEvaluated,
     providerId: provider.providerId,
     modelId: options?.generationModelId || options?.modelId || provider.defaultModelId || 'n/a',
