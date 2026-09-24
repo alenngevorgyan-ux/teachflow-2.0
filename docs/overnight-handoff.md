@@ -239,3 +239,44 @@ Four of these fail on `963fb4b`.
 Checks: `tsc --noEmit` clean; `npm test` 37 files / **430** passing; `vite build` OK; fixture E2E passes (single key-line change, only `word/document.xml` differs).
 
 Unchanged gates: no real sources, no real teacher DOCX, no Word layout check, no Armenian linguistic QA, no live-model content checks. **The pilot is not ready.**
+
+## Pilot Readiness Sprint
+
+Branch `claude/pilot-readiness-harness`, from `6fc0159`. Full handoff:
+`docs/pilot-readiness-handoff.md`. How to run a case: `docs/pilot-runbook.md`.
+Invariants and how they are enforced: `docs/engineering-invariants.md`.
+
+- **Harness.** `npm run pilot -- init|preflight|run|serve|evidence|status`
+  runs one teacher scenario through the application's own code in a
+  per-case store (`pilot-private/`, git-ignored, with no demo content).
+  It stops with explicit states at every human step and writes immutable
+  evidence bundles:
+  - provenance and audited calls;
+  - hashes instead of text;
+  - a deterministic export with DOCX diagnostics;
+  - the human QA sheets;
+  - a secret scan and `SHA256SUMS`.
+- **Bugs fixed, each with a regression test:**
+  - late split overwriting teacher structure work (`f6f4754`);
+  - FIXTURE mode calling Gemini embeddings;
+  - truncation errors without token usage;
+  - demo data seeded into pilot stores;
+  - preflight repeating detected personal data;
+  - premature `EXPORT_FAILED` at human steps.
+- **Real-model smoke (synthetic):** `MODEL_FAILED`. Segmentation was cut
+  off at 8192 tokens, 7862 of them reasoning, with
+  `google/gemini-3.5-flash`. This must be resolved before a real pilot.
+- **Checks:**
+  - `tsc` clean;
+  - `npm test` 41 files / **484** passing;
+  - `vite build` OK;
+  - fixture E2E `E2E OK`;
+  - synthetic pilot CLI run `TECHNICAL_RUN_COMPLETE`.
+- The frozen benchmark SHA `c3d4abb7…` is not in this repository and was
+  not touched. This branch is the current pilot candidate, not the
+  benchmark build.
+
+Unchanged gates: no real sources, no real teacher DOCX, no Word layout
+check, no Armenian linguistic QA, no successful real-model run.
+**NOT DEPLOYED TO PRODUCTION.** The pilot is not ready. The harness to run
+it is.
