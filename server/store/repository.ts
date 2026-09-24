@@ -235,6 +235,15 @@ export class JsonFileRepository implements IRepository {
 
   constructor() {
     this.loadFromDisk();
+    // Pilot case stores (scripts/pilot.ts) hold no demo content: only the
+    // method rules, which the material checks read, are seeded, once.
+    if (process.env.TEACHFLOW_STORE_SEED === 'rules-only') {
+      if (!fs.existsSync(STORE_FILE)) {
+        this.rules = getDemoRules();
+        this.saveToDisk();
+      }
+      return;
+    }
     if (this.sources.length === 0 || this.reportTemplates.length === 0) {
       this.seedInitialData();
       this.saveToDisk();
