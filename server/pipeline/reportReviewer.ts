@@ -67,6 +67,7 @@ function readAll(
  * teacherName equals the report author; otherwise it is ambiguous.
  */
 export function planForReport(report: ReportInstance): { plan: ThematicPlan } | { reason: string } {
+  if (report.grade === null) return { reason: 'հաշվետվությունը չի վերաբերում մեկ դասարանի' };
   const plans = repository
     .getThematicPlans(report.schoolId, report.subject, report.grade)
     .filter((p) => p.academicYear === report.academicYear);
@@ -336,6 +337,7 @@ export function runReportReview(
           s.status === 'active' &&
           (s.docType === 'subject_program' || s.docType === 'standard') &&
           s.subject === report.subject &&
+          report.grade !== null &&
           s.grades.includes(report.grade)
       )
       .map((s) => s.version)

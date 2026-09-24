@@ -435,7 +435,7 @@ export interface ReportInstance {
   authorRole: 'teacher' | 'methodological_unit_head' | 'director';
   authorName: string;
   subject: string;
-  grade: number;
+  grade: number | null; // null for school-level reports spanning several grades
   period: 'term' | 'half_year' | 'year' | 'on_demand';
   academicYear: string;
   status:

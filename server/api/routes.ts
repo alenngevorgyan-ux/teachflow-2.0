@@ -33,6 +33,7 @@ import { computeItemAnalysis, gradeSubmissionDeterministically } from '../pipeli
 import { runReportReview } from '../pipeline/reportReviewer.js';
 import { importLegacyReport } from '../pipeline/legacyReportImporter.js';
 import { extractOutcomes } from '../pipeline/outcomeExtractor.js';
+import { UserInputError } from '../pipeline/errors.js';
 import {
   PrivacyViolationError,
   assertNoPii,
@@ -51,6 +52,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 
 // Privacy violations are client errors (422) with the findings attached so the
 // UI can show exactly what was blocked; everything else stays a 500.
 function sendError(res: Response, err: unknown) {
+  if (err instanceof UserInputError) {
+    return res.status(400).json({ error: err.message });
+  }
   if (err instanceof PrivacyViolationError) {
     return res.status(422).json({
       error: err.message,
@@ -995,7 +999,7 @@ export function createApiRouter(): Router {
         schoolId = 'sch-1',
         academicYear = '2026-2027',
         period = 'half_year',
-        subjectGroup = 'Հումանիտար և բնագիտական առարկաներ',
+        subjectGroup,
       } = req.body;
 
       const consolidated = repository.consolidateSchoolReport(

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { UserInputError } from '../pipeline/errors.js';
 import {
   AnswerSheetSubmission,
   ArmenianEvalResult,
@@ -131,7 +132,7 @@ export interface IRepository {
     schoolId: string,
     academicYear: string,
     period: string,
-    subjectGroup: string
+    subjectGroup?: string
   ): ReportInstance;
   deleteReport(id: string): boolean;
 
@@ -843,40 +844,56 @@ export class JsonFileRepository implements IRepository {
     schoolId: string,
     academicYear: string,
     period: string,
-    subjectGroup: string
+    subjectGroup?: string
   ): ReportInstance {
-    const school = DEMO_SCHOOLS.find((s) => s.id === schoolId) || DEMO_SCHOOLS[0];
-    const template = this.getReportTemplate(templateId) || this.getReportTemplates()[2];
+    const school = DEMO_SCHOOLS.find((s) => s.id === schoolId);
+    if (!school) throw new UserInputError(`Unknown school: ${schoolId}`);
+    const template = this.getReportTemplate(templateId);
+    if (!template) throw new UserInputError(`Unknown report template: ${templateId}`);
 
-    // Find accepted child reports from this school
+    // Accepted child reports from this school and year
     const childReports = this.reports.filter(
       (r) =>
         r.schoolId === schoolId &&
         r.academicYear === academicYear &&
         (r.status === 'accepted_by_director' || r.status === 'included_in_school_report')
     );
+    if (childReports.length === 0) {
+      throw new UserInputError(`No accepted reports for ${school.name}, ${academicYear} — nothing to consolidate.`);
+    }
 
-    const totalPlannedHours = childReports.reduce((acc, c) => acc + Number(c.data.plannedHours || 0), 0);
-    const totalActualHours = childReports.reduce((acc, c) => acc + Number(c.data.actualHours || 0), 0);
-    const teachersCount = childReports.length || 1;
+    // Totals only when every child has a real number; otherwise the fields
+    // stay empty and the review routes them to manual confirmation.
+    const hours = (key: string) => {
+      const values = childReports.map((c) => c.data[key]);
+      if (values.some((v) => typeof v !== 'number' || !Number.isFinite(v) || v < 0)) return undefined;
+      return (values as number[]).reduce((a, v) => a + v, 0);
+    };
+    const totalPlannedHours = hours('plannedHours');
+    const totalActualHours = hours('actualHours');
     const averageCompletion =
-      totalPlannedHours > 0 ? Math.round((totalActualHours / totalPlannedHours) * 100) : 100;
+      totalPlannedHours !== undefined && totalActualHours !== undefined && totalPlannedHours > 0
+        ? Math.round((totalActualHours / totalPlannedHours) * 100)
+        : undefined;
+    const teachersCount = childReports.length;
+    const now = new Date().toISOString();
 
     const reportId = `rep-school-${schoolId}-${Date.now().toString(36)}`;
     const consolidated: ReportInstance = {
       id: reportId,
       templateId: template.id,
       templateVersion: template.version,
-      title: `${school.name} — Ամփոփ հաշվետվություն (${subjectGroup})`,
+      title: `${school.name} — Ամփոփ հաշվետվություն${subjectGroup ? ` (${subjectGroup})` : ''}`,
       schoolId: school.id,
       schoolName: school.name,
       authorRole: 'director',
       authorName: `Տնօրեն / Փոխտնօրեն (${school.name})`,
-      subject: subjectGroup,
-      grade: 7,
-      period: period as any,
+      subject: subjectGroup ?? '',
+      grade: null, // spans several grades
+      period: period as ReportInstance['period'],
       academicYear,
-      status: 'submitted_to_reviewer',
+      // A draft: the director reviews and submits it (nothing is auto-submitted).
+      status: 'draft',
       childReportIds: childReports.map((c) => c.id),
       data: {
         subjectGroup,
@@ -884,22 +901,24 @@ export class JsonFileRepository implements IRepository {
         totalPlannedHours,
         totalActualHours,
         averageCompletion,
-        methodologicalWorkSummary: `Հաշվետվությունն ավտոմատ ագրեգացվել է ${teachersCount} ուսուցիչների կողմից ներկայացված և հաստատված տվյալներից:`,
-        identifiedDifficulties: 'Ոչ էական շեղումներ:',
-        recommendations: 'Շարունակել ծրագրային ժամանակացույցի պահպանումը:',
+        methodologicalWorkSummary: `Հաշվետվությունն ագրեգացվել է ${teachersCount} ուսուցիչների կողմից ներկայացված և հաստատված տվյալներից:`,
+        // identifiedDifficulties / recommendations are written by people.
       },
       comments: [],
       timeline: [
         {
           action: 'consolidated',
           actor: 'Տնօրեն',
-          timestamp: new Date().toISOString(),
+          timestamp: now,
           note: `Ամփոփված է ${teachersCount} հաշվետվություն`,
         },
       ],
-      dataSnapshotHash: `hash-consol-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      dataSnapshotHash: crypto
+        .createHash('sha256')
+        .update(JSON.stringify(childReports.map((c) => ({ id: c.id, data: c.data }))))
+        .digest('hex'),
+      createdAt: now,
+      updatedAt: now,
     };
 
     // Mark children as included
