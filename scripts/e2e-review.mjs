@@ -139,11 +139,34 @@ step(`selected finding highlights: ${JSON.stringify(marks)}`);
 if (!marks.includes('2-գ')) fail('the key entry of question 2 is not highlighted');
 await shot('05-findings-1440');
 
+// Keyboard only: select a finding with Enter, jump to the document, focus lands on the question.
+await page.evaluate(() => document.querySelectorAll('.tf-finding-title').forEach((b) => b.getAttribute('aria-pressed') === 'true' && b.click()));
+await sleep(200);
+const q2Title = await page.evaluateHandle(() => [...document.querySelectorAll('.tf-finding-title')].find((b) => b.textContent.includes('Հարց 2')));
+await q2Title.focus();
+await page.keyboard.press('Enter');
+await sleep(200);
+const pressed = await page.evaluate(() => [...document.querySelectorAll('.tf-finding-title')].find((b) => b.textContent.includes('Հարց 2')).getAttribute('aria-pressed'));
+await page.keyboard.press('Tab'); // -> "Փաստաթուղթ" (show in document)
+await page.keyboard.press('Enter');
+await sleep(300);
+const focused = await page.evaluate(() => ({ cls: document.activeElement?.className, active: document.activeElement?.getAttribute('data-active'), text: document.activeElement?.textContent?.slice(0, 40) }));
+step(`keyboard: Enter on finding -> aria-pressed=${pressed}; Tab+Enter on "show in document" -> focus ${JSON.stringify(focused)}`);
+if (pressed !== 'true' || focused.active !== 'true') fail('keyboard selection / document jump did not work');
+const focusStyle = await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle);
+step(`focused block outline style: ${focusStyle}`);
+
 // 6. Suggest, reject (finding stays failed), suggest again, accept (linked key edit), re-check
 await clickButton('Առաջարկել ուղղումներ');
 await waitIdle();
 await waitText('Առաջարկվող ուղղում');
 await shot('06-proposal-1440');
+// Keyboard reachability of the decision buttons.
+await page.focus('.tf-finding .tf-btn--primary');
+const acceptFocused = await page.evaluate(() => document.activeElement?.textContent?.trim());
+await page.keyboard.press('Tab');
+const nextFocused = await page.evaluate(() => document.activeElement?.textContent?.trim());
+step(`keyboard: accept button focusable («${acceptFocused}»), Tab -> «${nextFocused}»`);
 await clickButton('Մերժել առաջարկը');
 await waitIdle();
 const afterReject = await (await fetch(`${BASE}/api/materials/${materialId}`)).json();
