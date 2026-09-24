@@ -8,8 +8,15 @@ export const EMBEDDING_MODEL_ID = 'gemini-embedding-001';
 // per-chunk storage in our JSON file store reasonable.
 const OUTPUT_DIMENSIONALITY = 768;
 
+// The fixture environment makes no external calls at all: embeddings are
+// disabled there (retrieval degrades visibly to keyword-only), even when a
+// Gemini key happens to be present in the shell or .env.
+function embeddingsDisabledByFixture(): boolean {
+  return process.env.TEACHFLOW_FIXTURE_MODE === '1' || process.env.MODEL_PROVIDER?.trim() === 'fixture';
+}
+
 export function isEmbeddingProviderConfigured(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY?.trim());
+  return !embeddingsDisabledByFixture() && Boolean(process.env.GEMINI_API_KEY?.trim());
 }
 
 function getClient(): GoogleGenAI {
@@ -34,6 +41,8 @@ function getClient(): GoogleGenAI {
 // already carry an embedding make no call and produce no entry.
 export async function embedTexts(texts: string[], purpose = 'embed'): Promise<number[][]> {
   if (texts.length === 0) return [];
+  // No call is attempted, so there is nothing to audit.
+  if (embeddingsDisabledByFixture()) throw new Error('Embedding Provider: disabled in FIXTURE mode (no external calls); keyword-only retrieval.');
   const start = Date.now();
   const input = `${texts.length} text(s), ${texts.reduce((n, t) => n + t.length, 0)} chars (text not logged); usage: unknown`;
   const audit = (action: string, output: string) =>

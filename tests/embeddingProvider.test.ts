@@ -128,3 +128,28 @@ describe('embedding audit: every real call once, no text, no double counting', (
     expect(logSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('fixture mode (pilot audit)', () => {
+  const saved = { ...process.env };
+  afterEach(() => {
+    process.env = { ...saved };
+    embedMock.mockReset();
+  });
+
+  it('never sends text to the embedding API in the fixture environment, even when a key is set', async () => {
+    process.env.GEMINI_API_KEY = 'test-key';
+    process.env.TEACHFLOW_FIXTURE_MODE = '1';
+    process.env.TEACHFLOW_DATA_DIR = '/tmp/fixture-store';
+    process.env.MODEL_PROVIDER = 'fixture';
+    logSpy.mockReset();
+    embedMock.mockResolvedValue({ embeddings: [{ values: [1, 2, 3] }] });
+    await expect(embedQuery('synthetic text')).rejects.toThrow(/fixture/i);
+    const chunks = [{ id: 'c1', text: 'synthetic text' }];
+    const r = await embedChunksInPlace(chunks);
+    expect(r.embedded).toBe(0);
+    expect(r.warning).toMatch(/fixture/i);
+    expect(embedMock).not.toHaveBeenCalled();
+    expect(logSpy).not.toHaveBeenCalledWith(expect.objectContaining({ providerId: 'gemini' }));
+    expect(isEmbeddingProviderConfigured()).toBe(false);
+  });
+});
