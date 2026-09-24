@@ -1,6 +1,8 @@
 import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { embeddingIdentity } from '../providers/embeddingProvider.js';
+import { reasoningPolicy, reasoningPolicyId } from '../providers/reasoningPolicy.js';
 import { extractorVersions, sha256 } from './preflight.js';
 
 // "What exactly produced this output?" — application, configuration and
@@ -64,7 +66,15 @@ export function promptHashes(): Record<string, string> {
 }
 
 export function fullProvenance() {
-  return { git: gitProvenance(), app: appProvenance(), model: modelConfiguration(), prompts: promptHashes(), extractors: extractorVersions() };
+  return {
+    git: gitProvenance(),
+    app: appProvenance(),
+    model: modelConfiguration(),
+    reasoning: { id: reasoningPolicyId(), perOperation: reasoningPolicy(), other: 'provider default' },
+    retrieval: { EMBEDDING_PROVIDER: process.env.EMBEDDING_PROVIDER?.trim() || '(unset: gemini)', embedding: embeddingIdentity() ?? 'none: keyword search only' },
+    prompts: promptHashes(),
+    extractors: extractorVersions(),
+  };
 }
 
 const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|COOKIE|AUTH|CREDENTIAL|PRIVATE)/i;

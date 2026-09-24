@@ -10,6 +10,7 @@ import { getDefaultProviderId, getProvider, isProviderConfigured } from '../prov
 import { repository } from '../store/repository.js';
 import { PilotManifest, readManifest } from './manifest.js';
 import { PreflightLock, PreflightReport, sha256, writeJson } from './preflight.js';
+import { configuredRetrieval, observedRetrieval } from './retrievalState.js';
 import { HUMAN_STEP_INSTRUCTIONS, PilotState } from './states.js';
 
 // Runs one pilot case through the REAL application code (source ingestion,
@@ -136,6 +137,8 @@ export async function runPilotCase(caseDir: string): Promise<RunState> {
   const avail = modelAvailability(manifest.modelMode);
   if (!avail.ok) return done(stop(rs, 'model', manifest.modelMode === 'real' ? 'REAL_MODEL_NOT_AVAILABLE' : 'MODEL_MODE_MISMATCH', avail.detail));
   ok(rs, 'model', avail.detail);
+  const plannedRetrieval = configuredRetrieval();
+  ok(rs, 'retrieval', `SEMANTIC_RETRIEVAL = ${plannedRetrieval.state}${plannedRetrieval.embedding ? ` (${plannedRetrieval.embedding})` : ' (no embedding route configured: keyword search only)'}`);
   const deps = { provider: getProvider(), judge: getJudgeProvider('gemini') };
 
   // 3. Sources through the real upload path.
@@ -235,7 +238,8 @@ export async function runPilotCase(caseDir: string): Promise<RunState> {
   if (segRun?.status === 'obsolete') return done(stop(rs, 'segment', 'RUN_OBSOLETE', segRun.error ?? 'split obsolete'));
   if (!review.segmentation) return done(stop(rs, 'segment', 'MODEL_FAILED', segRun?.error ?? 'no structure'));
   if (review.segmentation.status !== 'confirmed') {
-    if (manifest.synthetic && manifest.syntheticAutomation?.autoConfirmStructure) {
+    // Automation never confirms a structure with rejected parts: those need a person.
+    if (manifest.synthetic && manifest.syntheticAutomation?.autoConfirmStructure && review.segmentation.problems.length === 0) {
       review = await confirmSegmentation(review.id, review.revision);
       ok(rs, 'structure', 'SYNTHETIC auto-confirmation (synthetic case only)');
     } else {
@@ -254,6 +258,8 @@ export async function runPilotCase(caseDir: string): Promise<RunState> {
   let st = reviewStatus(review);
   if (st.counts.executionErrors) return done(stop(rs, 'checks', 'MODEL_FAILED', `${st.counts.executionErrors} check call(s) failed (not evaluated); run pilot:run again to retry`));
   ok(rs, 'checks', `pass ${st.counts.pass}, fail ${st.counts.fail}, needs_review ${st.counts.needs_review}, not_evaluated ${st.counts.not_evaluated}`);
+  const seen = observedRetrieval(review);
+  ok(rs, 'retrieval', `SEMANTIC_RETRIEVAL = ${seen.state} (checks: semantic ${seen.checks.semantic}, keyword ${seen.checks.keyword}, mixed ${seen.checks.mixed}${seen.embeddings.length ? `; ${seen.embeddings.join(', ')}` : ''})`);
 
   // 9. Fix proposals: made once; decisions are human (synthetic cases may auto-accept).
   if (st.counts.fail + st.counts.needs_review > 0 && review.suggestions.length === 0) {

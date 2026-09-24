@@ -69,6 +69,14 @@ describe('pilot run: synthetic fixture case end to end', () => {
     const runJson = JSON.parse(files['run.json']);
     expect(runJson.auditedCalls.filter((c: { providerId: string }) => c.providerId !== 'fixture')).toEqual([]);
     expect(runJson.provenance.prompts).toBeTruthy();
+    // retrieval is stated, never hidden: fixture mode has no embeddings
+    expect(runJson.semanticRetrieval.configured).toEqual({ state: 'KEYWORD_FALLBACK', embedding: null });
+    expect(runJson.semanticRetrieval.observed.state).toBe('KEYWORD_FALLBACK');
+    expect(runJson.semanticRetrieval.observed.checks.keyword).toBeGreaterThan(0);
+    expect(files['summary.md']).toMatch(/SEMANTIC_RETRIEVAL = KEYWORD_FALLBACK/);
+    expect(rs.stages.filter((x) => x.stage === 'retrieval').map((x) => x.detail)).toEqual([expect.stringMatching(/^SEMANTIC_RETRIEVAL = KEYWORD_FALLBACK/), expect.stringMatching(/^SEMANTIC_RETRIEVAL = KEYWORD_FALLBACK/)]);
+    expect(runJson.provenance.reasoning.perOperation['material:segment']).toBe('minimal');
+    expect(files['summary.md']).toMatch(/## Model calls/);
     // the synthetic proposal was accepted, re-checked, and reached the exported file
     const checks = JSON.parse(files['check-results.json']);
     expect(checks.suggestions.map((x: { status: string; recheck: string | null }) => [x.status, x.recheck])).toEqual([['accepted', 'done']]);
@@ -274,6 +282,28 @@ describe('pilot evidence: honesty of the bundle', () => {
     const m = await modulesFor(dir);
     expect((await m.runPilotCase(dir)).finalState).toBe('TECHNICAL_RUN_COMPLETE');
     expect((await m.collectEvidence(dir)).overallState).toBe('TECHNICAL_RUN_COMPLETE');
+  }, 60_000);
+});
+
+describe('pilot run: synthetic automation never hides a structure problem', () => {
+  it('a proposed structure with rejected parts stops at STRUCTURE_REVIEW_PENDING even with autoConfirmStructure', async () => {
+    const dir = makeCase((mm) => (mm.syntheticAutomation.autoConfirmStructure = false));
+    await writePreflight(dir);
+    const m = await modulesFor(dir);
+    const a = await m.runPilotCase(dir);
+    expect(a.finalState).toBe('STRUCTURE_REVIEW_PENDING');
+    // the proposed structure carries a rejected part (as a real model produced)
+    const { repository } = await import('../../server/store/repository.js');
+    const review = repository.getMaterialReview(a.reviewId!)!;
+    review.segmentation!.problems = ['SYNTHETIC: «2.» հարց. «ա» տարբերակ չի ընդունվել'];
+    repository.saveMaterialReview(review);
+    const man = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    man.syntheticAutomation.autoConfirmStructure = true;
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(man));
+    await writePreflight(dir);
+    const b = await m.runPilotCase(dir);
+    expect(b.finalState).toBe('STRUCTURE_REVIEW_PENDING');
+    expect(b.stages.at(-1)!.detail).toMatch(/1 part\(s\) not accepted/);
   }, 60_000);
 });
 

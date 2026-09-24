@@ -11,6 +11,7 @@ import { docxDiagnostics } from './docxDiagnostics.js';
 import { readManifest, stableStringify } from './manifest.js';
 import { PreflightReport, sha256, writeJson } from './preflight.js';
 import { findSecrets, fullProvenance } from './provenance.js';
+import { configuredRetrieval, observedRetrieval } from './retrievalState.js';
 import { assertCaseStore, readRunState, verifyPreflight } from './run.js';
 import { PilotState, isFailure } from './states.js';
 
@@ -126,6 +127,31 @@ export async function collectEvidence(caseDir: string, opts: { includeExcerpts?:
     callCounts.set(k, e);
   }
   const auditedCalls = [...callCounts.values()].sort((x, y) => `${x.providerId}${x.action}`.localeCompare(`${y.providerId}${y.action}`));
+  // Every audited call, oldest first, with thinking level, tokens and cost (no prompt or output).
+  const modelCalls = [...audit].reverse().map((a) => ({
+    at: a.timestamp,
+    providerId: a.providerId,
+    modelId: a.modelId,
+    action: a.action,
+    reasoningEffort: a.reasoningEffort ?? null,
+    attempts: a.usage?.attempts ?? null,
+    promptTokens: a.usage?.promptTokens ?? null,
+    completionTokens: a.usage?.completionTokens ?? null,
+    reasoningTokens: a.usage?.reasoningTokens ?? null,
+    costUsd: a.usage?.costUsd ?? null,
+    latencyMs: a.latencyMs,
+  }));
+  const sumOf = (k: 'promptTokens' | 'completionTokens' | 'reasoningTokens' | 'costUsd') => modelCalls.reduce((n, c) => n + (c[k] ?? 0), 0);
+  const unknownCost = modelCalls.filter((c) => c.costUsd === null).length;
+  const callTotals = {
+    calls: modelCalls.length,
+    promptTokens: sumOf('promptTokens'),
+    completionTokens: sumOf('completionTokens'),
+    reasoningTokens: sumOf('reasoningTokens'),
+    costUsd: Number(sumOf('costUsd').toFixed(8)),
+    callsWithUnknownCost: unknownCost,
+  };
+  const retrieval = { configured: configuredRetrieval(), observed: observedRetrieval(review) };
   const externalInFixture = manifest.modelMode === 'fixture' ? auditedCalls.filter((c) => c.providerId !== 'fixture') : [];
   if (externalInFixture.length) problems.push(`the fixture case made external AI call attempt(s): ${externalInFixture.map((c) => `${c.providerId}/${c.modelId} ${c.action} ×${c.count}`).join(', ')}`);
 
@@ -145,6 +171,9 @@ export async function collectEvidence(caseDir: string, opts: { includeExcerpts?:
         : 'no model-produced result in this review',
     observedModels: [...new Map(models.map((m) => [`${m.providerId}|${m.modelId}|${m.promptVersion}`, { providerId: m.providerId, modelId: m.modelId, promptVersion: m.promptVersion }])).values()],
     auditedCalls,
+    modelCalls,
+    callTotals,
+    semanticRetrieval: retrieval,
     auditedCallsNote: `${audit.length >= 200 ? 'the store keeps only the latest 200 audit entries: counts may be incomplete' : 'every entry of the case store audit log'}; FIXTURE provider calls are not audit-logged (they are not model calls)`,
     runState,
     review: review
@@ -282,6 +311,8 @@ export async function collectEvidence(caseDir: string, opts: { includeExcerpts?:
     '',
     `- Model execution: **${modelExecution}** (declared ${manifest.modelMode})${modelExecution === 'fixture_deterministic' ? ' — FIXTURE rules, not a model' : ''}`,
     `- AI calls in the case store audit log: ${auditedCalls.length ? auditedCalls.map((c) => `${c.providerId}/${c.modelId} ${c.action} ×${c.count}`).join('; ') : 'none'}`,
+    `- **SEMANTIC_RETRIEVAL = ${retrieval.observed.state}** (checks: semantic ${retrieval.observed.checks.semantic}, keyword ${retrieval.observed.checks.keyword}, mixed ${retrieval.observed.checks.mixed}; configured: ${retrieval.configured.embedding ?? 'none, keyword search only'})`,
+    `- Model calls: ${callTotals.calls}; tokens in ${callTotals.promptTokens}, out ${callTotals.completionTokens} (reasoning ${callTotals.reasoningTokens}); cost $${callTotals.costUsd.toFixed(6)}${callTotals.callsWithUnknownCost ? ` + ${callTotals.callsWithUnknownCost} call(s) with cost not reported` : ''} (per call: run.json → modelCalls)`,
     `- TeachFlow commit: ${fullProvenance().git.commit} (${fullProvenance().git.branch}; tracked files modified: ${fullProvenance().git.dirtyTrackedFiles ?? 'unknown'})`,
     review ? `- Review ${review.id}, revision ${review.revision}; original sha256 ${review.fileSha256}` : '- No review yet',
     status && `- Checks: pass ${status.counts.pass}, fail ${status.counts.fail}, needs_review ${status.counts.needs_review}, not_evaluated ${status.counts.not_evaluated}; stale items ${status.counts.staleItems}; pending proposals ${status.counts.pendingSuggestions}`,
@@ -291,6 +322,18 @@ export async function collectEvidence(caseDir: string, opts: { includeExcerpts?:
     '## Stages',
     '',
     ...(runState?.stages ?? []).map((s) => `- ${s.stage}: ${s.state} — ${s.detail}`),
+    '',
+    '## Model calls',
+    '',
+    'Oldest first; tokens and cost as reported by the provider ("?" = not reported). Failed attempts are included: they are paid for.',
+    '',
+    '| # | Operation | Model | Thinking | Attempts | In | Out | of which reasoning | Cost USD | ms |',
+    '|---|---|---|---|---|---|---|---|---|---|',
+    ...modelCalls.map(
+      (c, i) =>
+        `| ${i + 1} | ${c.action} | ${c.providerId}/${c.modelId} | ${c.reasoningEffort ?? 'default'} | ${c.attempts ?? '?'} | ${c.promptTokens ?? '?'} | ${c.completionTokens ?? '?'} | ${c.reasoningTokens ?? '?'} | ${c.costUsd === null ? '?' : c.costUsd.toFixed(6)} | ${c.latencyMs} |`
+    ),
+    `| | **Total** | | | | ${callTotals.promptTokens} | ${callTotals.completionTokens} | ${callTotals.reasoningTokens} | **${callTotals.costUsd.toFixed(6)}**${callTotals.callsWithUnknownCost ? ` + ${callTotals.callsWithUnknownCost} unknown` : ''} | |`,
     '',
     '## Human verification (not automated)',
     '',
