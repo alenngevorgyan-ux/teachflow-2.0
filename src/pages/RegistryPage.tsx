@@ -13,12 +13,15 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { CurriculumOutcome, Language, Source } from '../../shared/types';
+import { CurriculumOutcome, Language, Source, SourceConfirmationState } from '../../shared/types';
 import { Badge } from '../components/Badge';
 import { translations } from '../i18n/translations';
 
 interface EnrichedSource extends Source {
   usageCount?: number;
+  contentHash?: string;
+  confirmationState?: SourceConfirmationState;
+  confirmationReason?: string;
 }
 
 interface RegistryPageProps {
@@ -172,6 +175,35 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Confirmation of one exact version for content checks. Without
+  // authentication the name is only what the person typed.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmName, setConfirmName] = useState('');
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+
+  const handleConfirmSource = async (src: EnrichedSource) => {
+    setConfirmError(null);
+    try {
+      const res = await fetch(`/api/sources/${src.id}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmedByName: confirmName, expectedVersion: src.version, expectedContentHash: src.contentHash }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      setConfirmingId(null);
+      setConfirmName('');
+      await fetchSourcesAndOutcomes();
+    } catch (err) {
+      setConfirmError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleRevokeConfirmation = async (id: string) => {
+    await fetch(`/api/sources/${id}/confirmation`, { method: 'DELETE' });
+    await fetchSourcesAndOutcomes();
   };
 
   const handleDeleteSource = async (id: string) => {
@@ -573,6 +605,9 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
                 }`}
               >
                 <div className="p-5">
+                  {confirmingId === src.id && confirmError && (
+                    <div className="mb-2 text-xs text-rose-700">{confirmError}</div>
+                  )}
                   <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                     <div className="space-y-1.5 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -597,6 +632,17 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
                         </Badge>
                         {src.ocr && (
                           <Badge variant="warn">OCR</Badge>
+                        )}
+                        {src.confirmationState && (
+                          <Badge
+                            variant={src.confirmationState === 'confirmed' ? 'pass' : src.confirmationState === 'invalidated' ? 'fail' : 'neutral'}
+                            title={src.confirmationReason}
+                          >
+                            {t.materialReview.confirmation[src.confirmationState]}
+                            {src.confirmationState === 'confirmed' && src.confirmation
+                              ? ` · ${src.confirmation.confirmedByName} (նշված անուն)`
+                              : ''}
+                          </Badge>
                         )}
                         <span className="text-xs font-mono text-gray-700">
                           v{src.version}
@@ -631,6 +677,47 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 shrink-0 pt-1">
+                      {(src.confirmationState === 'unconfirmed' || src.confirmationState === 'invalidated') &&
+                        (confirmingId === src.id ? (
+                          <span className="flex items-center gap-1 text-xs">
+                            <input
+                              value={confirmName}
+                              onChange={(e) => setConfirmName(e.target.value)}
+                              placeholder="Ձեր անունը"
+                              title="Առանց մուտքի համակարգի սա միայն նշված անուն է, ոչ ստուգված ինքնություն"
+                              className="border border-gray-300 rounded px-1.5 py-1 w-28"
+                            />
+                            <button
+                              disabled={!confirmName.trim()}
+                              onClick={() => handleConfirmSource(src)}
+                              className="px-2 py-1 rounded bg-emerald-600 text-white disabled:opacity-50"
+                            >
+                              OK
+                            </button>
+                            <button onClick={() => setConfirmingId(null)} className="px-1.5 py-1 text-gray-600">
+                              ✕
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setConfirmingId(src.id);
+                              setConfirmError(null);
+                            }}
+                            className="px-2.5 py-1.5 border border-emerald-300 rounded-lg text-xs font-medium text-emerald-800 hover:bg-emerald-50"
+                            title={`Հաստատել v${src.version} տարբերակը բովանդակային ստուգումների համար`}
+                          >
+                            Հաստատել v{src.version}
+                          </button>
+                        ))}
+                      {src.confirmationState === 'confirmed' && (
+                        <button
+                          onClick={() => handleRevokeConfirmation(src.id)}
+                          className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-100"
+                        >
+                          Չեղարկել հաստատումը
+                        </button>
+                      )}
                       {src.status === 'active' && (
                         <button
                           onClick={() => {

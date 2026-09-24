@@ -64,6 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'rules', label: t.nav.rules, icon: Sliders, roles: ['methodologist', 'admin'] },
     { id: 'glossary', label: t.nav.glossary, icon: BookMarked, roles: ['teacher', 'methodologist', 'reviewer', 'admin'] },
     { id: 'armenianEval', label: t.nav.armenianEval, icon: Cpu, roles: ['admin', 'methodologist'] },
+    { id: 'materialReview', label: t.nav.materialReview, icon: FileText, roles: ['teacher', 'methodologist', 'admin'] },
     { id: 'validateMaterial', label: 'Ստուգել նյութը', icon: Search, roles: ['teacher', 'methodologist', 'admin'] },
     { id: 'compare', label: 'AI vs TeachFlow', icon: GitCompare, roles: ['admin', 'methodologist'] },
     { id: 'regression', label: 'Ռեգրեսիա', icon: TrendingUp, roles: ['admin', 'methodologist'] },

@@ -26,15 +26,15 @@ export function sourceContentHash(s: Source): string {
 }
 
 export function sourceConfirmationState(s: Source): { state: SourceConfirmationState; reason?: string } {
-  if (s.isDemo) return { state: 'not_confirmable', reason: 'Demo data cannot be confirmed as a real source.' };
-  if (s.status !== 'active') return { state: 'not_confirmable', reason: `Source status is ${s.status}.` };
+  if (s.isDemo) return { state: 'not_confirmable', reason: 'Ցուցադրական տվյալները չեն կարող հաստատվել որպես իրական աղբյուր:' };
+  if (s.status !== 'active') return { state: 'not_confirmable', reason: `Աղբյուրի կարգավիճակը՝ ${s.status}:` };
   const c = s.confirmation;
   if (!c) return { state: 'unconfirmed' };
   if (c.version !== s.version) {
-    return { state: 'invalidated', reason: `Confirmed version ${c.version}, current version ${s.version}.` };
+    return { state: 'invalidated', reason: `Հաստատվել է ${c.version} տարբերակը, ընթացիկը՝ ${s.version}:` };
   }
   if (c.contentHash !== sourceContentHash(s)) {
-    return { state: 'invalidated', reason: 'Text or metadata changed after confirmation.' };
+    return { state: 'invalidated', reason: 'Տեքստը կամ մետատվյալները փոխվել են հաստատումից հետո:' };
   }
   return { state: 'confirmed' };
 }

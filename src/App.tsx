@@ -18,6 +18,7 @@ import { RegistryPage } from './pages/RegistryPage';
 import { RulesPage } from './pages/RulesPage';
 import { GeneratePage } from './pages/GeneratePage';
 import { ValidateMaterialPage } from './pages/ValidateMaterialPage';
+import { MaterialReviewPage } from './pages/MaterialReviewPage';
 import { AssessmentsListPage } from './pages/AssessmentsListPage';
 import { AssessmentViewPage } from './pages/AssessmentViewPage';
 import { ComparePage } from './pages/ComparePage';
@@ -176,6 +177,7 @@ export function App() {
           />
         )}
         {currentTab === 'validateMaterial' && <ValidateMaterialPage lang={lang} />}
+        {currentTab === 'materialReview' && <MaterialReviewPage lang={lang} pinnedContext={pinnedContext} />}
         {currentTab === 'assessments' && (
           <AssessmentsListPage
             lang={lang}
