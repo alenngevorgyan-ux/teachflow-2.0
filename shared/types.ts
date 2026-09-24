@@ -36,7 +36,29 @@ export interface Source {
   uploadedAt: string;
   ocr?: boolean;
   chunks: SourceChunk[];
+  /**
+   * Set when a person confirmed this source for use in content checks.
+   * Absent on every source stored before confirmation existed: those stay
+   * unconfirmed. Valid only while the version and content hash still match
+   * (see server/pipeline/sourceConfirmation.ts).
+   */
+  confirmation?: SourceConfirmation;
 }
+
+export interface SourceConfirmation {
+  /**
+   * The name the person typed when confirming. There is no authentication
+   * yet, so this is a stated name, not a verified identity.
+   */
+  confirmedByName: string;
+  confirmedAt: string;
+  /** Source version that was confirmed. */
+  version: string;
+  /** sourceContentHash() at confirmation: text and significant metadata. */
+  contentHash: string;
+}
+
+export type SourceConfirmationState = 'unconfirmed' | 'confirmed' | 'invalidated' | 'not_confirmable';
 
 export interface CurriculumOutcome {
   code: string; // outcome/standard code as written in the official document

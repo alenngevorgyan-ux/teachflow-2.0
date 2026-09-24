@@ -14,6 +14,12 @@ import {
   TerminologyGlossaryItem,
 } from '../../shared/types.js';
 import { validateExternalMaterial } from '../pipeline/materialValidator.js';
+import {
+  confirmSource,
+  revokeSourceConfirmation,
+  sourceConfirmationState,
+  sourceContentHash,
+} from '../pipeline/sourceConfirmation.js';
 import { runSideBySideComparison } from '../pipeline/compare.js';
 import { computeRegressionDiff, runRegressionSuite } from '../pipeline/regression.js';
 import { runFullGenerationPipeline } from '../pipeline/orchestrator.js';
@@ -115,10 +121,16 @@ export function createApiRouter(): Router {
       }
     }
 
-    const enriched = sources.map((s) => ({
-      ...s,
-      usageCount: sourceUsageMap[s.id] || 0,
-    }));
+    const enriched = sources.map((s) => {
+      const confirmation = sourceConfirmationState(s);
+      return {
+        ...s,
+        usageCount: sourceUsageMap[s.id] || 0,
+        contentHash: sourceContentHash(s),
+        confirmationState: confirmation.state,
+        confirmationReason: confirmation.reason,
+      };
+    });
 
     res.json({ sources: enriched });
   });
@@ -238,7 +250,7 @@ export function createApiRouter(): Router {
       }));
 
       const newSource: Source = {
-        ...oldSource,
+        ...revokeSourceConfirmation(oldSource),
         id: newSourceId,
         version: newVersion || `${oldSource.version}-next`,
         effectiveFrom: effectiveFrom || new Date().toISOString().substring(0, 10),
@@ -254,6 +266,27 @@ export function createApiRouter(): Router {
     } catch (err: unknown) {
       sendError(res, err);
     }
+  });
+
+  // Confirmation of one source version for content checks. The name is what
+  // the person typed; without authentication it is not a verified identity.
+  router.post('/sources/:id/confirm', (req: Request, res: Response) => {
+    try {
+      const source = repository.getSource(req.params.id);
+      if (!source) return res.status(404).json({ error: 'Source not found' });
+      const { confirmedByName, expectedVersion, expectedContentHash } = req.body;
+      const saved = repository.saveSource(confirmSource(source, { confirmedByName, expectedVersion, expectedContentHash }));
+      res.json({ source: saved, confirmationState: sourceConfirmationState(saved).state });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  router.delete('/sources/:id/confirmation', (req: Request, res: Response) => {
+    const source = repository.getSource(req.params.id);
+    if (!source) return res.status(404).json({ error: 'Source not found' });
+    const saved = repository.saveSource(revokeSourceConfirmation(source));
+    res.json({ source: saved, confirmationState: sourceConfirmationState(saved).state });
   });
 
   router.delete('/sources/:id', (req: Request, res: Response) => {
