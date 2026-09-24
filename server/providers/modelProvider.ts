@@ -233,6 +233,12 @@ export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions
  * explicitly (OPENROUTER_MODEL_ID or per call); there is no built-in default.
  * The model id OpenRouter reports back is what gets recorded.
  */
+/** Output token ceiling per OpenRouter request (OPENROUTER_MAX_TOKENS, default 8192). */
+export function openRouterMaxTokens(): number {
+  const v = Number(process.env.OPENROUTER_MAX_TOKENS);
+  return Number.isInteger(v) && v > 0 ? v : 8192;
+}
+
 export class OpenRouterProvider implements IModelProvider {
   public providerId = 'openrouter';
   public defaultModelId = process.env.OPENROUTER_MODEL_ID?.trim() || undefined;
@@ -262,6 +268,11 @@ export class OpenRouterProvider implements IModelProvider {
       body: JSON.stringify({
         model,
         messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: prompt }],
+        // Without max_tokens OpenRouter reserves the model's maximum output
+        // (65536 for the configured model), which a key with a spending limit
+        // cannot afford even for a small structured answer. Bounded here;
+        // a too-small limit yields invalid JSON and a visible error.
+        max_tokens: openRouterMaxTokens(),
         ...extra,
       }),
     });
