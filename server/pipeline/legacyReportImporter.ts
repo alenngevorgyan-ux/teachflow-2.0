@@ -161,11 +161,13 @@ Instructions:
       }
     }
 
-    if (!templateKeys.has(field.key)) {
+    if (templateKeys.has(field.key)) {
+      extractedData[field.key] = value;
+    } else {
       metadata[field.key] = value;
-      continue;
     }
-    extractedData[field.key] = value;
+    // Recorded for metadata too: a year kept on the report with no quote or
+    // confidence next to it could not be routed to manual confirmation.
     fieldConfidences[field.key] = confidence;
     fieldProvenance[field.key] = provenance;
   }

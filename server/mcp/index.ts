@@ -309,11 +309,12 @@ export function createMcpServer(): McpServer {
     {
       // No defaults, same as POST /reports/legacy-import: the file name,
       // form, school and author are facts about the imported document.
-      rawText: z.string().min(1),
-      fileName: z.string().min(1),
-      templateId: z.string().min(1),
-      schoolId: z.string().min(1),
-      authorName: z.string().min(1),
+      // trim() first: "   " is as missing as "", and REST rejects it too.
+      rawText: z.string().trim().min(1),
+      fileName: z.string().trim().min(1),
+      templateId: z.string().trim().min(1),
+      schoolId: z.string().trim().min(1),
+      authorName: z.string().trim().min(1),
     },
     async ({ rawText, fileName, templateId, schoolId, authorName }) => {
       const school = repository.getSchools().find((s) => s.id === schoolId);

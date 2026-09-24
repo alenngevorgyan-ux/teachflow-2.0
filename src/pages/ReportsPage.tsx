@@ -365,7 +365,15 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                     <span className="text-[10px] text-gray-700 font-mono">Չճանաչված կամ 0% դաշտերը պահանջում են հաստատում</span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {Object.entries(selectedReport.data).map(([key, val]) => {
+                    {[
+                      ...Object.entries(selectedReport.data),
+                      // Report-level metadata extracted on legacy import
+                      // (e.g. academicYear on a form without that field):
+                      // its quote and confidence are shown like any field.
+                      ...(['subject', 'grade', 'academicYear'] as const)
+                        .filter((k) => !(k in selectedReport.data) && selectedReport.fieldConfidences?.[k] !== undefined)
+                        .map((k) => [k, selectedReport[k]] as [string, unknown]),
+                    ].map(([key, val]) => {
                       const conf = selectedReport.fieldConfidences?.[key];
                       const prov = selectedReport.fieldProvenance?.[key];
                       const isUnconfirmed = conf === 0 || conf === undefined || val === null;
@@ -410,8 +418,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                     Ուսուցչի մասնագիտական դիտարկումներ և վերլուծություն.
                   </span>
                   <p className="text-gray-700 leading-relaxed">
-                    {selectedReport.data.teacherReflection ||
-                      'Ծրագիրը կատարվել է լիարժեք: Աշակերտների յուրացման մակարդակը համապատասխանում է պետական չափորոշչին:'}
+                    {selectedReport.data.teacherReflection || 'n/a'}
                   </p>
                 </div>
 

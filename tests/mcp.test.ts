@@ -175,4 +175,16 @@ describe('MCP legacy_report_extract invents no metadata', () => {
     expect(result.isError).toBe(true);
     expect((result.content as { type: string; text: string }[])[0].text).toContain('sch-nope');
   });
+
+  it('rejects whitespace-only required strings, as REST does', async () => {
+    const client = await connectedClient();
+    const result = await client.callTool({
+      name: 'legacy_report_extract',
+      arguments: { rawText: 'text', fileName: '   ', templateId: 'tpl-program-progress', schoolId: 'sch-1', authorName: ' ' },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as { type: string; text: string }[])[0].text;
+    expect(text).toContain('fileName');
+    expect(text).toContain('authorName');
+  });
 });

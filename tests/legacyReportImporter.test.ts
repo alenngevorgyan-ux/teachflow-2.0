@@ -303,4 +303,28 @@ describe('importLegacyReport invents nothing outside the document', () => {
 
     expect(report.academicYear).toBeNull();
   });
+
+  it('records quote and confidence for metadata that is not a form field', async () => {
+    store.template = getDemoReportTemplates().find((t) => t.id === 'tpl-program-progress')!;
+    const provider = providerReturning({
+      fields: [{ key: 'academicYear', value: '2024-2025', confidence: 0, sourceQuote: '2024-2025', lineNumber: 1 }],
+    });
+
+    const report = await importLegacyReport({
+      rawText: '2024-2025 ուսումնական տարի:',
+      fileName: 'f.txt',
+      templateId: 'tpl-program-progress',
+      schoolId: 'sch-1',
+      schoolName: 'Դպրոց Ա',
+      authorName: 'Ուսուցիչ',
+      provider,
+    });
+
+    // The value is kept (the quote is verbatim), but its uncertainty and
+    // source travel with it so the UI routes it to manual confirmation.
+    expect(report.academicYear).toBe('2024-2025');
+    expect(report.fieldConfidences?.academicYear).toBe(0);
+    expect(report.fieldProvenance?.academicYear).toContain('2024-2025');
+    expect('academicYear' in report.data).toBe(false);
+  });
 });
