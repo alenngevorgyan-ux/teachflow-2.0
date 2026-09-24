@@ -11,6 +11,7 @@ import {
   FrozenTask,
   LessonPlan,
   MaterialValidationReport,
+  MaterialReview,
   MethodRule,
   RegressionRun,
   ReportInstance,
@@ -74,6 +75,14 @@ export interface IRepository {
   saveAssessment(assessment: Assessment): Assessment;
   updateAssessmentStatus(id: string, status: Assessment['status'], acceptedWarnings?: string[]): boolean;
   deleteAssessment(id: string): boolean;
+
+  // Material reviews (teacher DOCX -> checks -> accepted patches)
+  getMaterialReviews(): MaterialReview[];
+  getMaterialReview(id: string): MaterialReview | undefined;
+  saveMaterialReview(review: MaterialReview): MaterialReview;
+  /** Original uploaded DOCX bytes, stored once per content hash. */
+  saveMaterialFile(sha256: string, data: Uint8Array): void;
+  getMaterialFile(sha256: string): Uint8Array | undefined;
 
   // Material Validation Reports
   getValidationReports(): MaterialValidationReport[];
@@ -201,6 +210,7 @@ export class JsonFileRepository implements IRepository {
   private rules: MethodRule[] = [];
   private assessments: Assessment[] = [];
   private validationReports: MaterialValidationReport[] = [];
+  private materialReviews: MaterialReview[] = [];
   private frozenTasks: FrozenTask[] = [];
   private regressionRuns: RegressionRun[] = [];
   private sideBySideReports: SideBySideReport[] = [];
@@ -238,6 +248,7 @@ export class JsonFileRepository implements IRepository {
         this.rules = data.rules || [];
         this.assessments = data.assessments || [];
         this.validationReports = data.validationReports || [];
+        this.materialReviews = data.materialReviews || [];
         this.frozenTasks = data.frozenTasks || [];
         this.regressionRuns = data.regressionRuns || [];
         this.sideBySideReports = data.sideBySideReports || [];
@@ -270,6 +281,7 @@ export class JsonFileRepository implements IRepository {
         rules: this.rules,
         assessments: this.assessments,
         validationReports: this.validationReports,
+        materialReviews: this.materialReviews,
         frozenTasks: this.frozenTasks,
         regressionRuns: this.regressionRuns,
         sideBySideReports: this.sideBySideReports,
@@ -574,6 +586,39 @@ export class JsonFileRepository implements IRepository {
   // --- Material Validation Reports ---
   getValidationReports(): MaterialValidationReport[] {
     return [...this.validationReports];
+  }
+
+  // --- Material reviews ---
+  getMaterialReviews(): MaterialReview[] {
+    return [...this.materialReviews];
+  }
+
+  getMaterialReview(id: string): MaterialReview | undefined {
+    return this.materialReviews.find((r) => r.id === id);
+  }
+
+  saveMaterialReview(review: MaterialReview): MaterialReview {
+    const idx = this.materialReviews.findIndex((r) => r.id === review.id);
+    if (idx >= 0) this.materialReviews[idx] = review;
+    else this.materialReviews.push(review);
+    this.saveToDisk();
+    return review;
+  }
+
+  private materialFilePath(sha256: string): string {
+    if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error(`Invalid material file hash: ${sha256}`);
+    return path.join(DATA_DIR, 'material-files', `${sha256}.docx`);
+  }
+
+  saveMaterialFile(sha256: string, data: Uint8Array): void {
+    const file = this.materialFilePath(sha256);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (!fs.existsSync(file)) fs.writeFileSync(file, data);
+  }
+
+  getMaterialFile(sha256: string): Uint8Array | undefined {
+    const file = this.materialFilePath(sha256);
+    return fs.existsSync(file) ? new Uint8Array(fs.readFileSync(file)) : undefined;
   }
 
   saveValidationReport(report: MaterialValidationReport): MaterialValidationReport {
@@ -1102,6 +1147,8 @@ export class JsonFileRepository implements IRepository {
       answerSheets: this.answerSheets,
       glossary: this.glossary,
       validationReports: this.validationReports,
+      // Review records only; the uploaded DOCX files stay in data/material-files.
+      materialReviews: this.materialReviews,
       frozenTasks: this.frozenTasks,
       regressionRuns: this.regressionRuns,
       sideBySideReports: this.sideBySideReports,
@@ -1113,6 +1160,7 @@ export class JsonFileRepository implements IRepository {
     this.sources = this.sources.filter((s) => s.isDemo);
     this.assessments = [];
     this.validationReports = [];
+    this.materialReviews = [];
     this.regressionRuns = [];
     this.sideBySideReports = [];
     this.auditLogs = [];

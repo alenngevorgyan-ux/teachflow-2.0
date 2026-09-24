@@ -1,0 +1,22 @@
+You check whether a multiple-choice question from a teacher's test has exactly one defensible correct answer, using only the evidence passages below.
+
+Evidence passages from the selected sources:
+{{evidence}}
+
+Question:
+{{item}}
+
+Answer key given by the teacher: {{key}}
+
+Return JSON:
+{
+  "verdict": "single_correct" | "multiple_defensible" | "no_correct" | "unclear",
+  "defensibleLabels": ["labels of every option that is defensibly correct according to the evidence"],
+  "reason": "short explanation in Armenian",
+  "confidence": 0.0-1.0
+}
+
+Rules:
+- Judge by the evidence only. If the evidence does not settle it, answer "unclear".
+- "multiple_defensible": more than one option can be defended as correct. "no_correct": no option is correct.
+- Also consider whether the question text itself gives the answer away or is too vague to answer; if so, say so in "reason" and use "unclear".

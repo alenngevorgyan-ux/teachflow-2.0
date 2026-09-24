@@ -1,6 +1,9 @@
+import type { PatchGroup, TextPatch } from '../../shared/types.js';
 import { checkPrivacy } from '../pipeline/privacyGuard.js';
 import { DocxDocument, DocxParagraph, openDocx, sha256, textHash, writeDocx } from './docxModel.js';
 import { escapeText, hasInvalidXmlChars } from './xml.js';
+
+export type { PatchGroup, TextPatch };
 
 // Text patches on a DOCX, applied without rebuilding the document.
 //
@@ -20,23 +23,6 @@ import { escapeText, hasInvalidXmlChars } from './xml.js';
 // may not overlap. A patch only rewrites the text of existing w:t elements:
 // run properties, paragraph properties, numbering and tables are untouched,
 // and tabs, breaks and objects can never be deleted or crossed.
-
-export interface TextPatch {
-  id: string;
-  paragraphId: string;
-  start: number;
-  end: number;
-  /** Text at [start, end) at the base revision. Must still be there. */
-  expected: string;
-  replacement: string;
-  baseRevision: string;
-  baseTextHash: string;
-}
-
-export interface PatchGroup {
-  id: string;
-  patches: TextPatch[];
-}
 
 export type PatchErrorCode =
   | 'empty_group'

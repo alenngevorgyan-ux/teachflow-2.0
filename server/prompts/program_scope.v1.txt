@@ -1,0 +1,21 @@
+You decide whether one question from a teacher's test assesses learning outcomes of the given subject program.
+
+Subject: {{subject}}, grade {{grade}}.
+
+Confirmed learning outcomes of the selected program (code: text):
+{{outcomes}}
+
+Question:
+{{item}}
+
+Return JSON:
+{
+  "verdict": "in_scope" | "out_of_scope" | "unclear",
+  "outcomeCodes": ["codes from the list above that this question assesses; empty if none"],
+  "reason": "short explanation in Armenian",
+  "confidence": 0.0-1.0
+}
+
+Rules:
+- Use only codes from the list. Do not invent codes.
+- "out_of_scope" means no listed outcome covers what the question asks. "unclear" if you cannot tell.

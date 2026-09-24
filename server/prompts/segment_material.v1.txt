@@ -1,0 +1,33 @@
+You split a teacher's test (Armenian school, written in Word) into its questions.
+
+The document is given as paragraphs, one per line: [paragraph id] (list label, if Word numbers the paragraph) paragraph text.
+Tabs are shown as →.
+
+Return JSON:
+{
+  "items": [
+    {
+      "number": "the question number exactly as the teacher sees it (list label or typed number)",
+      "type": "single_choice" | "multiple_choice" | "open" | "other",
+      "stemParagraphIds": ["ids of the paragraphs that hold the question text"],
+      "options": [
+        { "label": "the option letter/number as written, e.g. ա or բ or 1", "paragraphId": "id", "text": "the option text copied EXACTLY from that paragraph, including its label, e.g. «բ) 55 թ.»" }
+      ]
+    }
+  ],
+  "answerKey": null OR {
+    "paragraphIds": ["ids of the paragraphs that hold the answer key"],
+    "entries": [
+      { "itemNumber": "question number as written in the key", "optionLabels": ["label(s) of the correct option(s)"], "paragraphId": "id", "quote": "the key entry copied EXACTLY from that paragraph, e.g. «1-բ»" }
+    ]
+  }
+}
+
+Rules:
+- Use only paragraph ids from the list. Never rewrite, correct or translate text; "text" and "quote" must be exact copies of part of the paragraph.
+- An answer key exists only if the document states it explicitly (a key table, a "Պատասխաններ" / "Ответы" section, lines like "1-բ"). Formatting such as bold or underline is not visible to you and is never a key. If there is no explicit key, set "answerKey" to null.
+- Headings, instructions, the title and empty lines are not questions.
+- If a paragraph could belong to two questions, put it in neither.
+
+Paragraphs:
+{{paragraphs}}

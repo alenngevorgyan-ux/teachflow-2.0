@@ -546,3 +546,208 @@ export interface ArmenianEvalResult {
     notes: string;
   }[];
 }
+
+// ---------------------------------------------------------------------------
+// Material review: a teacher's own DOCX checked against selected sources,
+// fixed with targeted patches the teacher accepts or rejects.
+
+/** Text patch on a DOCX paragraph; see server/docx/patch.ts for the rules. */
+export interface TextPatch {
+  id: string;
+  paragraphId: string;
+  /** UTF-16 offsets into the paragraph's visible text at baseRevision. */
+  start: number;
+  end: number;
+  expected: string;
+  replacement: string;
+  baseRevision: string;
+  baseTextHash: string;
+}
+
+/** Applied atomically: all patches or none. */
+export interface PatchGroup {
+  id: string;
+  patches: TextPatch[];
+}
+
+export type PreservationKind =
+  | 'header_footer'
+  | 'footnotes_endnotes'
+  | 'comments'
+  | 'text_box'
+  | 'equation'
+  | 'field'
+  | 'content_control'
+  | 'tracked_changes'
+  | 'images'
+  | 'embedded_objects'
+  | 'charts_diagrams'
+  | 'alt_chunk'
+  | 'metadata'
+  | 'numbering_format'
+  | 'unknown_inline';
+
+export interface PreservationItem {
+  kind: PreservationKind;
+  count: number;
+  parts: string[];
+  /** Text of this content was read and passed the privacy check. */
+  textChecked: boolean;
+  /** Always false: kept byte-identical, never edited by TeachFlow. */
+  editable: false;
+  note: string;
+}
+
+export interface MaterialParagraph {
+  id: string;
+  index: number;
+  /** Text at the review's current revision. */
+  text: string;
+  /** List label computed for the preview; approximate, not Word's rendering. */
+  label?: string;
+  location: 'body' | 'table' | 'textbox' | 'content_control';
+  table?: { table: number; row: number; cell: number };
+  editable: boolean;
+  lockReasons: string[];
+}
+
+/** A span of one paragraph's current text. */
+export interface TextSpan {
+  paragraphId: string;
+  start: number;
+  end: number;
+}
+
+export interface MaterialItemOption extends TextSpan {
+  label: string;
+}
+
+export type MaterialItemType = 'single_choice' | 'multiple_choice' | 'open' | 'other';
+
+export interface MaterialItem {
+  id: string;
+  /** Number as it appears (list label or typed number), for display. */
+  number: string;
+  type: MaterialItemType;
+  stemParagraphIds: string[];
+  options: MaterialItemOption[];
+}
+
+export interface MaterialAnswerKeyEntry {
+  itemId: string;
+  optionLabels: string[];
+  /** 'document': an explicit key in the same file; 'teacher': set by hand. Bold text is never evidence. */
+  origin: 'document' | 'teacher';
+  /** Where the key entry is written, for 'document'. */
+  span?: TextSpan;
+}
+
+export interface ModelCallInfo {
+  providerId: string;
+  modelId: string;
+  promptVersion: string;
+  requestId?: string;
+}
+
+export interface MaterialSegmentation {
+  status: 'proposed' | 'confirmed' | 'needs_reconfirmation';
+  items: MaterialItem[];
+  /** Paragraphs that hold the document's answer key. */
+  answerKeyParagraphIds: string[];
+  /** Proposals the deterministic checks dropped, with the reason. */
+  problems: string[];
+  model: ModelCallInfo;
+  proposedAtRevision: string;
+  confirmedAt?: string;
+}
+
+export type MaterialCheckStatus = 'pass' | 'fail' | 'needs_review' | 'not_evaluated';
+
+export type MaterialCheckId =
+  | 'key_present'
+  | 'key_valid_option'
+  | 'option_count'
+  | 'program_scope'
+  | 'fact_support'
+  | 'answer_unambiguous';
+
+export interface MaterialEvidence {
+  sourceId: string;
+  sourceVersion: string;
+  chunkId: string;
+  page?: number;
+  text: string;
+}
+
+export interface MaterialCheck {
+  checkId: MaterialCheckId;
+  kind: 'deterministic' | 'llm_judged';
+  status: MaterialCheckStatus;
+  detail: string;
+  evidence?: MaterialEvidence[];
+  outcomeCodes?: string[];
+  confidence?: number;
+  model?: ModelCallInfo;
+}
+
+export interface MaterialItemResult {
+  itemId: string;
+  /** Revision the checks ran against. */
+  revision: string;
+  /** True once something the checks depend on changed; re-run before trusting them. */
+  stale: boolean;
+  checks: MaterialCheck[];
+}
+
+export type SuggestionStatus = 'proposed' | 'accepted' | 'rejected' | 'stale';
+
+export interface MaterialSuggestion {
+  id: string;
+  itemId: string;
+  addresses: MaterialCheckId[];
+  group: PatchGroup;
+  rationale: string;
+  evidence?: MaterialEvidence[];
+  /** New correct option label(s) for this question, when the fix changes the answer. */
+  keyChange?: string[];
+  status: SuggestionStatus;
+  /** The teacher changed the proposed text before accepting. */
+  editedByTeacher?: boolean;
+  decidedAt?: string;
+  /** After acceptance: 'pending' until the affected items were re-checked. */
+  recheck?: 'pending' | 'done';
+  model: ModelCallInfo;
+}
+
+export interface MaterialSelectedSource {
+  sourceId: string;
+  purpose: 'program' | 'fact';
+  version: string;
+  contentHash: string;
+}
+
+export interface MaterialReviewLogEntry {
+  at: string;
+  action: string;
+  detail: string;
+}
+
+export interface MaterialReview {
+  id: string;
+  fileName: string;
+  fileSha256: string;
+  uploadedAt: string;
+  subject: string;
+  grade: number;
+  selectedSources: MaterialSelectedSource[];
+  preservation: PreservationItem[];
+  privacy: { checkedParts: string[]; uncheckable: { part: string; reason: string }[] };
+  segmentation?: MaterialSegmentation;
+  answerKey: MaterialAnswerKeyEntry[];
+  /** Accepted groups in order; the current revision is the original plus these. */
+  acceptedGroups: PatchGroup[];
+  revision: string;
+  results: MaterialItemResult[];
+  suggestions: MaterialSuggestion[];
+  log: MaterialReviewLogEntry[];
+}

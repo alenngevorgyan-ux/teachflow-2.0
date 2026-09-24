@@ -12,8 +12,23 @@ import {
   ReportInstance,
   AnswerSheetSubmission,
   TerminologyGlossaryItem,
+  MaterialReview,
 } from '../../shared/types.js';
 import { validateExternalMaterial } from '../pipeline/materialValidator.js';
+import {
+  confirmSegmentation,
+  createReview,
+  decide,
+  getReview,
+  reviewStatus,
+  runChecks,
+  segment,
+  selectSources,
+  setTeacherKey,
+  suggest,
+} from '../materials/reviewService.js';
+import { buildChangeList, correctedFileName, exportReviewDocx } from '../materials/exportReview.js';
+import { currentParagraphs, loadWorkingCopy } from '../materials/workingCopy.js';
 import {
   confirmSource,
   revokeSourceConfirmation,
@@ -562,6 +577,147 @@ export function createApiRouter(): Router {
   });
 
   // --- Validate Material ---
+  // --- Material review: teacher DOCX -> checks -> accepted fixes -> DOCX ---
+  // No defaults: subject, grade and sources are chosen explicitly; content
+  // checks use only the selected confirmed sources.
+  const materialDeps = (body: { providerId?: unknown; judgeProviderId?: unknown } = {}) => ({
+    provider: getProvider(typeof body.providerId === 'string' ? body.providerId : getDefaultProviderId()),
+    judge: getJudgeProvider(typeof body.judgeProviderId === 'string' ? body.judgeProviderId : 'gemini'),
+  });
+
+  const materialView = async (review: MaterialReview) => {
+    const w = await loadWorkingCopy(review);
+    return { review, paragraphs: currentParagraphs(w), status: reviewStatus(review) };
+  };
+
+  router.get('/materials', (_req: Request, res: Response) => {
+    const list = repository.getMaterialReviews().map((r) => ({
+      id: r.id,
+      fileName: r.fileName,
+      subject: r.subject,
+      grade: r.grade,
+      uploadedAt: r.uploadedAt,
+      revision: r.revision,
+      status: reviewStatus(r),
+    }));
+    res.json({ materials: list });
+  });
+
+  router.post('/materials', upload.single('file'), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) throw new UserInputError('Ֆայլը բացակայում է:');
+      const review = await createReview({
+        fileName: req.file.originalname,
+        subject: req.body.subject,
+        grade: req.body.grade,
+        bytes: new Uint8Array(req.file.buffer),
+      });
+      res.json(await materialView(review));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  router.get('/materials/:id', async (req: Request, res: Response) => {
+    try {
+      res.json(await materialView(getReview(req.params.id)));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  router.put('/materials/:id/sources', async (req: Request, res: Response) => {
+    try {
+      res.json(await materialView(selectSources(req.params.id, req.body.programSourceIds, req.body.factSourceIds)));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/materials/:id/segment', async (req: Request, res: Response) => {
+    try {
+      res.json(await materialView(await segment(req.params.id, materialDeps(req.body))));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/materials/:id/segmentation/confirm', async (req: Request, res: Response) => {
+    try {
+      res.json(await materialView(confirmSegmentation(req.params.id, req.body.expectedRevision)));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  router.put('/materials/:id/items/:itemId/key', async (req: Request, res: Response) => {
+    try {
+      res.json(await materialView(setTeacherKey(req.params.id, req.params.itemId, req.body.optionLabels)));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/materials/:id/check', async (req: Request, res: Response) => {
+    try {
+      res.json(await materialView(await runChecks(req.params.id, materialDeps(req.body), { all: req.body.all === true })));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/materials/:id/suggest', async (req: Request, res: Response) => {
+    try {
+      const { review, problems } = await suggest(req.params.id, materialDeps(req.body));
+      res.json({ ...(await materialView(review)), suggestionProblems: problems });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  router.post('/materials/:id/suggestions/:suggestionId/decision', async (req: Request, res: Response) => {
+    try {
+      const review = await decide(
+        req.params.id,
+        req.params.suggestionId,
+        { decision: req.body.decision, replacements: req.body.replacements, expectedRevision: req.body.expectedRevision },
+        materialDeps(req.body)
+      );
+      res.json(await materialView(review));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // Export is allowed at any time; a draft is labelled as such in the file
+  // name, the header and the change list.
+  router.get('/materials/:id/export.docx', async (req: Request, res: Response) => {
+    try {
+      const review = getReview(req.params.id);
+      const buf = await exportReviewDocx(review);
+      const status = reviewStatus(review);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.setHeader('Content-Disposition', `attachment; filename="material.docx"; filename*=UTF-8''${encodeURIComponent(correctedFileName(review))}`);
+      res.setHeader('X-TeachFlow-Status', status.final ? 'final' : 'draft');
+      res.setHeader('X-TeachFlow-Revision', review.revision);
+      res.send(buf);
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  router.get('/materials/:id/changes.txt', async (req: Request, res: Response) => {
+    try {
+      const review = getReview(req.params.id);
+      const text = await buildChangeList(review);
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="changes.txt"; filename*=UTF-8''${encodeURIComponent(review.fileName.replace(/\.docx$/i, '') + ' — փոփոխություններ.txt')}`);
+      res.send(text);
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
   router.post('/validate-material', async (req: Request, res: Response) => {
     try {
       const {

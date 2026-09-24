@@ -209,4 +209,15 @@ describe('openDocx: privacy check before anything is stored or sent', () => {
     const doc = await openDocx(await buildDocx({ body: para(run('Տիգրան Մեծը և Արտաշես Առաջինը')) }));
     expect(doc.privacy.checkedParts).toContain('word/document.xml');
   });
+
+  it('scans paragraph by paragraph: a class label in the title does not attach to a name in another paragraph', async () => {
+    const doc = await openDocx(
+      await buildDocx({ body: para(run('Թեստ, 7Բ դասարան')) + para(run('Արամ Պետրոսյան')) })
+    );
+    expect(doc.privacy.checkedParts).toContain('word/document.xml');
+  });
+
+  it('still blocks a name next to a class label in the same paragraph', async () => {
+    await blocked(await buildDocx({ body: para(run('7Բ դասարան՝ Արամ Պետրոսյան')) }), 'word/document.xml');
+  });
 });

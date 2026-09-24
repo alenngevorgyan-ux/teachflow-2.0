@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import type { PreservationItem, PreservationKind } from '../../shared/types.js';
 import { PrivacyViolationError, checkPrivacy } from '../pipeline/privacyGuard.js';
 import { DocxPackage, DocxRejectedError, loadDocxPackage, partText, writeDocxPackage } from './docxPackage.js';
 import { XmlElement, XmlSafetyError, childElements, firstChild, parseXml, textContent, walkElements } from './xml.js';
@@ -33,34 +34,6 @@ export interface NumberingInfo {
   /** Computed list label ("3.", "ա)"). Approximate: a preview, not Word's rendering. */
   label?: string;
   format?: string;
-}
-
-export type PreservationKind =
-  | 'header_footer'
-  | 'footnotes_endnotes'
-  | 'comments'
-  | 'text_box'
-  | 'equation'
-  | 'field'
-  | 'content_control'
-  | 'tracked_changes'
-  | 'images'
-  | 'embedded_objects'
-  | 'charts_diagrams'
-  | 'alt_chunk'
-  | 'metadata'
-  | 'numbering_format'
-  | 'unknown_inline';
-
-export interface PreservationItem {
-  kind: PreservationKind;
-  count: number;
-  parts: string[];
-  /** Text of this content was read and passed the privacy check. */
-  textChecked: boolean;
-  /** Always false: these are kept byte-identical and never edited by TeachFlow. */
-  editable: false;
-  note: string;
 }
 
 export interface DocxDocument {
@@ -482,6 +455,23 @@ function collectParagraphs(body: XmlElement, counts: Counts) {
 const TEXT_PART = /\.(xml|rels)$/i;
 const BINARY_TEXTLESS = /\.(png|jpe?g|gif|bmp|tiff?|emf|wmf|svg|webp)$/i;
 
+function textLines(root: XmlElement): string[] {
+  const lines: string[] = [];
+  const visit = (el: XmlElement) => {
+    if (/(^|:)p$/.test(el.name)) {
+      lines.push(textContent(el));
+      // Nested paragraphs (text boxes) are also scanned on their own lines.
+      for (const c of el.children) if (c.type === 'element') for (const e of walkElements(c)) if (/(^|:)p$/.test(e.name)) lines.push(textContent(e));
+      return;
+    }
+    const direct = el.children.filter((c) => c.type === 'text').map((c) => (c as { value: string }).value).join('');
+    if (direct.trim()) lines.push(direct);
+    for (const c of el.children) if (c.type === 'element') visit(c);
+  };
+  visit(root);
+  return lines;
+}
+
 function privacyScan(pkg: DocxPackage): DocxDocument['privacy'] {
   const checkedParts: string[] = [];
   const uncheckable: { part: string; reason: string }[] = [];
@@ -490,8 +480,10 @@ function privacyScan(pkg: DocxPackage): DocxDocument['privacy'] {
     if (TEXT_PART.test(part.name)) {
       const root = parsePart(pkg, part.name);
       if (!root) continue;
-      // Text nodes plus person-bearing attributes (comment and revision authors).
-      const lines: string[] = [textContent(root)];
+      // One line per paragraph (w:p, a:p) and per other text-bearing element,
+      // so words of neighbouring paragraphs never merge into one "sentence";
+      // plus person-bearing attributes (comment and revision authors).
+      const lines = textLines(root);
       for (const e of walkElements(root)) {
         for (const k of ['w:author', 'w:initials', 'w15:userId']) if (e.attrs[k]) lines.push(`${k}: ${e.attrs[k]}`);
       }
