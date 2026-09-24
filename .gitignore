@@ -12,3 +12,10 @@ coverage/
 data/teachflow_store.json
 data/material-files/
 .fixture-data/
+# Real pilot cases: teacher documents, source books, evidence. Never committed.
+pilot-private/
+**/pilot-private/
+# Anything a pilot run writes next to a committed example case
+pilot/examples/*/work/
+pilot/examples/*/evidence/
+pilot/examples/*/outputs/

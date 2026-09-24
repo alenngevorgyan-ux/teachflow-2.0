@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "pilot-case/1",
+  "caseId": "<FILL: e.g. CASE-001>",
+  "createdAt": "<FILL: set by pilot init>",
+  "operator": "<FILL: name of the person running the pilot>",
+  "teacherRole": "<FILL: role only, e.g. history teacher, grade 7>",
+  "organization": null,
+  "subject": "Հայոց պատմություն",
+  "grade": 7,
+  "language": "hy",
+  "scenario": "<FILL: what the teacher wants, in one or two sentences>",
+  "synthetic": false,
+  "modelMode": "real",
+  "inputs": [
+    {
+      "id": "program",
+      "role": "PROGRAM_SOURCE",
+      "file": "inputs/<FILL: program file .pdf/.docx/.txt>",
+      "origin": "<FILL: where the file came from>",
+      "official": null,
+      "source": {
+        "title": "<FILL>",
+        "authority": "<FILL: issuing body as written on the document>",
+        "docType": "subject_program",
+        "version": "<FILL: as written on the document>",
+        "effectiveFrom": "<FILL: YYYY-MM-DD>",
+        "grades": [7]
+      }
+    },
+    {
+      "id": "fact",
+      "role": "FACT_SOURCE",
+      "file": "inputs/<FILL: textbook or source file>",
+      "origin": "<FILL>",
+      "official": null,
+      "source": {
+        "title": "<FILL>",
+        "authority": "<FILL>",
+        "docType": "textbook",
+        "version": "<FILL>",
+        "effectiveFrom": "<FILL: YYYY-MM-DD>",
+        "grades": [7]
+      }
+    },
+    {
+      "id": "teacher-doc",
+      "role": "TEACHER_DOCUMENT",
+      "file": "inputs/<FILL: the teacher's .docx>",
+      "origin": "teacher"
+    }
+  ]
+}
