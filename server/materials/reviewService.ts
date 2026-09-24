@@ -19,7 +19,7 @@ import { withRedactedAudit } from '../providers/auditContext.js';
 import { IJudgeProvider } from '../providers/judgeProvider.js';
 import { IModelProvider } from '../providers/modelProvider.js';
 import { repository } from '../store/repository.js';
-import { CheckDeps, checkItem, itemInputHash, resolveSelectedSources } from './checks.js';
+import { CheckDeps, checkItem, dependencyFingerprint, itemInputHash, resolveSelectedSources } from './checks.js';
 import { proposeSegmentation, validateTeacherItems } from './segmentation.js';
 import { ResolvedStructure, resolveStructure } from './spans.js';
 import { itemsNeedingFixes, keyEntryMatches, proposeSuggestions } from './suggestions.js';
@@ -86,11 +86,7 @@ function load(id: string): MaterialReview {
     r.segmentation.atGroupCount = r.acceptedGroups.length;
   }
   for (const s of r.suggestions) if ((s.status as string) === 'stale') s.status = 'superseded';
-  // A selected source that was superseded, changed or lost its confirmation
-  // since the checks ran: every result may depend on it, so none stays fresh.
-  if (r.selectedSources.length && r.results.some((x) => !x.stale) && resolveSelectedSources(r).problems.length) {
-    for (const x of r.results) x.stale = true;
-  }
+  invalidateOutdated(r);
   for (const run of r.runs) {
     if (run.status === 'running' && Date.now() - Date.parse(run.startedAt) > RUN_INTERRUPTED_AFTER_MS) {
       run.status = 'failed';
@@ -99,6 +95,23 @@ function load(id: string): MaterialReview {
     }
   }
   return r;
+}
+
+/**
+ * The dependency contract, applied on every load (so before a check run picks
+ * what to skip, before status/export, and before any decision): a result whose
+ * review-wide dependencies changed since it was computed — a selected source
+ * superseded, changed or unconfirmed, confirmed outcomes changed, a method rule
+ * changed or switched off — is stale, and every proposal built on it is
+ * superseded. Results without a fingerprint (older records) are treated as
+ * stale: when in doubt, nothing stays green.
+ */
+function invalidateOutdated(r: MaterialReview): void {
+  if (!r.results.some((x) => !x.stale)) return;
+  const current = dependencyFingerprint(r);
+  const sourceProblems = r.selectedSources.length > 0 && resolveSelectedSources(r).problems.length > 0;
+  const outdated = r.results.filter((x) => !x.stale && (sourceProblems || x.dependencyFingerprint !== current)).map((x) => x.itemId);
+  if (outdated.length) markStale(r, outdated);
 }
 
 function save(review: MaterialReview): MaterialReview {
@@ -147,6 +160,7 @@ function runContext(review: MaterialReview): string {
   return hash({
     revision: review.revision,
     sources: review.selectedSources,
+    dependencies: dependencyFingerprint(review),
     segmentation: review.segmentation
       ? [review.segmentation.status, review.segmentation.confirmedAt, review.segmentation.atGroupCount, review.segmentation.items]
       : null,
@@ -450,7 +464,7 @@ export async function runChecks(id: string, deps: ReviewDeps, opts: CheckOptions
         const prior = snapshot.results.find((x) => x.itemId === itemId);
         // Identical inputs and no execution error: reuse instead of paying again.
         if (!opts.all && prior && prior.inputHash === inputHash && !prior.checks.some((c) => c.executionError)) {
-          computed.set(itemId, { ...prior, stale: false, revision: snapshot.revision });
+          computed.set(itemId, { ...prior, stale: false, revision: snapshot.revision, dependencyFingerprint: dependencyFingerprint(snapshot) });
           continue;
         }
         computed.set(itemId, await checkItem(item, key, snapshot, paragraphs, sources, checkDeps));
@@ -532,7 +546,7 @@ export async function suggest(id: string, deps: ReviewDeps): Promise<{ review: M
       const before = snapshot.results.find((x) => x.itemId === p.itemId);
       // The finding it answers must be the same, still-fresh result.
       if (!isFresh(res, r) || res!.inputHash !== before?.inputHash) continue;
-      r.suggestions.push(p);
+      r.suggestions.push({ ...p, basedOnInputHash: res!.inputHash });
       kept++;
     }
     finishRun(r, runId, 'succeeded');
@@ -605,8 +619,21 @@ export async function decide(
     requireConfirmedSegmentation(review);
     const s = review.suggestions.find((x) => x.id === suggestionId);
     if (!s) throw new UserInputError(`Անհայտ առաջարկ՝ «${suggestionId}»:`);
-    if (s.status !== 'proposed') throw new ConflictError('Այս առաջարկի վերաբերյալ որոշումն արդեն կայացված է կամ այն այլևս կիրառելի չէ:');
+    if (s.status !== 'proposed') {
+      // Persist an invalidation load() may just have made, then refuse.
+      save(review);
+      throw new ConflictError('Այս առաջարկի վերաբերյալ որոշումն արդեն կայացված է կամ այն այլևս կիրառելի չէ (օրինակ՝ աղբյուրը կամ կանոնը փոխվել է): Կատարեք նոր ստուգում:');
+    }
     requireRevision(review, input.expectedRevision);
+    // The finding this proposal answers must still be the current, fresh
+    // result: evidence from a replaced source or an outdated rule is not a
+    // basis for changing the document (server-side, whatever the UI shows).
+    const basis = review.results.find((x) => x.itemId === s.itemId);
+    if (input.decision === 'accept' && (!basis || basis.stale || (s.basedOnInputHash && basis.inputHash !== s.basedOnInputHash))) {
+      s.status = 'superseded';
+      save(review);
+      throw new ConflictError('Առաջարկի հիմքը (ստուգման արդյունքը կամ աղբյուրը) այլևս արդիական չէ. փաստաթուղթը չի փոխվել: Կատարեք նոր ստուգում և նոր առաջարկ:');
+    }
 
     if (input.decision === 'reject') {
       // Declining a change says nothing about the finding: a failed check stays failed.

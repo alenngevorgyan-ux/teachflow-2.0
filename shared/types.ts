@@ -737,6 +737,13 @@ export interface MaterialItemResult {
   checks: MaterialCheck[];
   /** Hash of everything the checks read (text, key, sources, prompts, models); identical inputs may reuse the result. */
   inputHash?: string;
+  /**
+   * Fingerprint of the review-wide dependencies at check time (selected
+   * sources and whether each is still usable, confirmed program outcomes,
+   * method-rule settings, prompt versions). Compared on every load: a
+   * mismatch makes the result stale before anything is skipped or reported.
+   */
+  dependencyFingerprint?: string;
   checkedAt?: string;
 }
 
@@ -754,6 +761,8 @@ export interface MaterialSuggestion {
   keyChange?: string[];
   /** Key labels before this suggestion was accepted (restored by undo). */
   keyBefore?: string[];
+  /** inputHash of the check result this proposal answers; accepting requires the same current result. */
+  basedOnInputHash?: string;
   status: SuggestionStatus;
   /** The teacher changed the proposed text before accepting. */
   editedByTeacher?: boolean;

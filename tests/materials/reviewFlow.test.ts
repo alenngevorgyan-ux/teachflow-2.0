@@ -838,3 +838,113 @@ describe('material review: a linked question + key group is atomic at the review
     expect(texts).toContain('1-ա, 2-ա');
   });
 });
+
+describe('independent review R1: an obsolete proposal cannot be accepted', () => {
+  async function proposalThen(change: () => void) {
+    const { r, deps } = await readyForChecks();
+    await runChecks(r.id, deps);
+    const { review } = await suggest(r.id, deps);
+    const sid = review.suggestions[0].id;
+    change();
+    return { r, deps, review, sid };
+  }
+  const refusedWithoutChange = async (r: MaterialReview, deps: ReviewDeps, sid: string, revision: string) => {
+    await expect(decide(r.id, sid, { decision: 'accept', expectedRevision: revision }, deps)).rejects.toBeInstanceOf(ConflictError);
+    const after = getReview(r.id);
+    expect(after.revision).toBe(revision);
+    expect(after.acceptedGroups).toHaveLength(0);
+    expect(after.answerKey.find((k) => k.itemId === 'item-2')!.optionLabels).toEqual(['գ']);
+    expect(after.suggestions.find((x) => x.id === sid)!.status).toBe('superseded');
+    expect(Buffer.compare(await exportReviewDocx(after), Buffer.from(store.files.get(after.fileSha256)!))).toBe(0);
+    return after;
+  };
+
+  it('after the supporting source is superseded: results stale, proposal superseded, accept refused, document untouched', async () => {
+    const { r, deps, review, sid } = await proposalThen(() => {
+      store.sources.find((x) => x.id === 'fact-1')!.status = 'superseded';
+    });
+    const before = getReview(r.id);
+    expect(before.results.every((x) => x.stale)).toBe(true);
+    expect(before.suggestions.find((x) => x.id === sid)!.status).toBe('superseded');
+    await refusedWithoutChange(r, deps, sid, review.revision);
+  });
+
+  it('after the source confirmation is revoked (old tab still shows the proposal): refused, document untouched', async () => {
+    const { r, deps, review, sid } = await proposalThen(() => {
+      const src = store.sources.find((x) => x.id === 'fact-1')!;
+      delete src.confirmation;
+    });
+    await refusedWithoutChange(r, deps, sid, review.revision);
+  });
+
+  it('after a new check the old proposal stays unusable; a fresh proposal is needed and works', async () => {
+    const { r, deps, review, sid } = await proposalThen(() => {
+      store.sources.find((x) => x.id === 'fact-1')!.status = 'superseded';
+    });
+    await refusedWithoutChange(r, deps, sid, review.revision);
+    store.sources.find((x) => x.id === 'fact-1')!.status = 'active'; // source usable again
+    await runChecks(r.id, deps);
+    await expect(decide(r.id, sid, { decision: 'accept', expectedRevision: review.revision }, deps)).rejects.toBeInstanceOf(ConflictError);
+    const { review: fresh } = await suggest(r.id, deps);
+    const newSid = fresh.suggestions.find((x) => x.status === 'proposed')!.id;
+    const accepted = await decide(r.id, newSid, { decision: 'accept', expectedRevision: fresh.revision }, deps);
+    expect(accepted.acceptedGroups).toHaveLength(1);
+  });
+});
+
+describe('independent review R2: changed dependencies invalidate finished results', () => {
+  async function finalReview() {
+    const { r, deps } = await readyForChecks();
+    await runChecks(r.id, deps);
+    const { review } = await suggest(r.id, deps);
+    const after = await decide(r.id, review.suggestions[0].id, { decision: 'accept', expectedRevision: review.revision }, deps);
+    expect(reviewStatus(after).final).toBe(true);
+    return { r, deps };
+  }
+
+  it('raising minOptions: status no longer final at once, and an ordinary check re-runs and fails option_count', async () => {
+    const { r, deps } = await finalReview();
+    store.rules.find((x) => x.id === 'rule-single-correct-answer')!.params = { minOptions: 4, maxOptions: 5 };
+    expect(reviewStatus(getReview(r.id)).final).toBe(false);
+    const checked = await runChecks(r.id, deps);
+    expect(checked.runs.at(-1)!.itemIds).toEqual(['item-1', 'item-2']);
+    expect(checked.results.find((x) => x.itemId === 'item-1')!.checks.find((c) => c.checkId === 'option_count')!.status).toBe('fail');
+    expect(reviewStatus(checked).final).toBe(false);
+  });
+
+  it('switching the rule off: not final, ordinary check reports option_count not evaluated', async () => {
+    const { r, deps } = await finalReview();
+    store.rules.find((x) => x.id === 'rule-single-correct-answer')!.active = false;
+    expect(reviewStatus(getReview(r.id)).final).toBe(false);
+    const checked = await runChecks(r.id, deps);
+    expect(checked.results[0].checks.find((c) => c.checkId === 'option_count')!.status).toBe('not_evaluated');
+    expect(reviewStatus(checked).final).toBe(false);
+  });
+
+  it('a changed confirmed outcome of the selected program invalidates the results', async () => {
+    const { r } = await finalReview();
+    store.outcomes = store.outcomes.map((o) => ({ ...o, text: `${o.text} (խմբագրված)` }));
+    const after = getReview(r.id);
+    expect(after.results.every((x) => x.stale)).toBe(true);
+    expect(reviewStatus(after).final).toBe(false);
+  });
+
+  it('the change report and export status follow the invalidation', async () => {
+    const { r } = await finalReview();
+    store.rules.find((x) => x.id === 'rule-single-correct-answer')!.active = false;
+    const list = await buildChangeList(getReview(r.id));
+    expect(list).toContain('ՍԵՎԱԳԻՐ');
+    expect(list).toContain('ստուգումը հնացել է');
+  });
+
+  it('valid reuse is preserved when dependencies truly match: no new model calls', async () => {
+    const state: FakeState = { keyedTwo: 'գ' };
+    const { r, deps } = await readyForChecks(state);
+    await runChecks(r.id, deps);
+    const calls = state.scopeCalls!;
+    const again = await runChecks(r.id, deps);
+    expect(state.scopeCalls).toBe(calls);
+    expect(again.runs.at(-1)!.itemIds).toEqual([]);
+    expect(again.results.every((x) => !x.stale)).toBe(true);
+  });
+});

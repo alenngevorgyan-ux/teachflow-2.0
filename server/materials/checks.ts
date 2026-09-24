@@ -380,6 +380,30 @@ export function itemInputHash(item: MaterialItem, key: MaterialAnswerKeyEntry | 
   );
 }
 
+/**
+ * Review-wide dependencies of every check result, independent of the
+ * document text (text changes go through accept/undo, which mark the affected
+ * items stale). Synchronous so it can be compared on every load.
+ */
+export function dependencyFingerprint(review: MaterialReview): string {
+  const usable = resolveSelectedSources(review);
+  const programIds = new Set(review.selectedSources.filter((s) => s.purpose === 'program').map((s) => s.sourceId));
+  const outcomes = repository
+    .getOutcomes()
+    .filter((o) => o.confirmed && programIds.has(o.sourceId) && o.grade === review.grade && o.subject === review.subject)
+    .map((o) => [o.sourceId, o.code, o.text])
+    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return hashText(
+    JSON.stringify({
+      sources: review.selectedSources.map((s) => [s.purpose, s.sourceId, s.version, s.contentHash]),
+      usable: [usable.program.map((x) => x.id).sort(), usable.fact.map((x) => x.id).sort()],
+      outcomes,
+      optionBounds: optionBoundsRule(),
+      prompts: [PROGRAM_SCOPE_PROMPT_VERSION, UNAMBIGUOUS_PROMPT_VERSION, 'judge:verifyClaim'],
+    })
+  );
+}
+
 export async function checkItem(
   item: MaterialItem,
   key: MaterialAnswerKeyEntry | undefined,
@@ -408,6 +432,7 @@ export async function checkItem(
     stale: false,
     checks,
     inputHash: itemInputHash(item, key, review, paragraphs, deps),
+    dependencyFingerprint: dependencyFingerprint(review),
     checkedAt: new Date().toISOString(),
   };
 }
