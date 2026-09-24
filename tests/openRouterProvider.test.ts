@@ -6,10 +6,10 @@ vi.mock('../server/store/repository.js', () => ({
   repository: { logAIInteraction: (l: { providerId: string; modelId: string; action: string }) => logs.push(l) },
 }));
 
-import { OPENROUTER_API_URL, OpenRouterProvider, getDefaultProviderId, getProvider } from '../server/providers/modelProvider.js';
+import { OPENROUTER_API_URL, OpenRouterProvider, TruncatedOutputError, assertGeminiNotTruncated, getDefaultProviderId, getProvider } from '../server/providers/modelProvider.js';
 import { getJudgeProvider } from '../server/providers/judgeProvider.js';
 
-const ENV_KEYS = ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL_ID', 'OPENROUTER_JUDGE_MODEL_ID', 'MODEL_PROVIDER'];
+const ENV_KEYS = ['OPENROUTER_API_KEY', 'OPENROUTER_MODEL_ID', 'OPENROUTER_JUDGE_MODEL_ID', 'MODEL_PROVIDER', 'OPENROUTER_MAX_TOKENS'];
 let savedEnv: Record<string, string | undefined>;
 
 function reply(body: unknown, status = 200) {
@@ -24,6 +24,7 @@ beforeEach(() => {
   process.env.OPENROUTER_MODEL_ID = 'vendor/model-x';
   delete process.env.OPENROUTER_JUDGE_MODEL_ID;
   delete process.env.MODEL_PROVIDER;
+  delete process.env.OPENROUTER_MAX_TOKENS;
   logs.length = 0;
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
@@ -129,5 +130,50 @@ describe('provider selection', () => {
     const r = await judge.verifyClaim('claim', 'evidence');
     expect(r.verdict).toBe('supported');
     expect(judge.modelId).toBe('vendor/model-x-2026-09');
+  });
+});
+
+describe('OpenRouter output-token limit', () => {
+  const Items = z.object({ items: z.array(z.string()) });
+
+  it('sends the documented default when unset, and the configured value when valid', async () => {
+    fetchMock.mockImplementation(async () => reply({ choices: [{ message: { content: '{"answer":"x"}' }, finish_reason: 'stop' }] }));
+    await new OpenRouterProvider().generateStructured('q', Schema);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).max_tokens).toBe(8192);
+    process.env.OPENROUTER_MAX_TOKENS = ' 2048 ';
+    await new OpenRouterProvider().generateStructured('q', Schema);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).max_tokens).toBe(2048);
+  });
+
+  it.each(['abc', '0', '-5', '1.5', '999999'])('an invalid OPENROUTER_MAX_TOKENS=%s is a visible config error, not the default', async (v) => {
+    process.env.OPENROUTER_MAX_TOKENS = v;
+    await expect(new OpenRouterProvider().generateStructured('q', Schema)).rejects.toThrow(/OPENROUTER_MAX_TOKENS/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses an answer cut at the limit even when the cut text is valid JSON (an incomplete list), without retrying', async () => {
+    // A list that "ends" early still parses: only finish_reason tells it is incomplete.
+    fetchMock.mockImplementation(async () => reply({ choices: [{ message: { content: '{"items":["1","2"]}' }, finish_reason: 'length' }] }));
+    await expect(new OpenRouterProvider().generateStructured('q', Items)).rejects.toThrow(/after 1 attempt: .*cut off at the output-token limit \(8192\)/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(logs.at(-1)?.action).toMatch(/:FAILED$/);
+  });
+
+  it('also refuses a native MAX_TOKENS stop and truncated free text', async () => {
+    fetchMock.mockResolvedValue(reply({ choices: [{ message: { content: 'Կիսատ պատասխ' }, finish_reason: 'stop', native_finish_reason: 'MAX_TOKENS' }] }));
+    await expect(new OpenRouterProvider().generateText('q')).rejects.toThrow(/output-token limit/);
+  });
+
+  it('a normal stop is accepted', async () => {
+    fetchMock.mockResolvedValue(reply({ choices: [{ message: { content: '{"items":["1","2","3"]}' }, finish_reason: 'stop' }] }));
+    const res = await new OpenRouterProvider().generateStructured('q', Items);
+    expect(res.output.items).toHaveLength(3);
+  });
+});
+
+describe('Gemini truncation', () => {
+  it('finishReason MAX_TOKENS is refused; STOP is accepted', () => {
+    expect(() => assertGeminiNotTruncated({ candidates: [{ finishReason: 'MAX_TOKENS' }] }, 'g')).toThrow(TruncatedOutputError);
+    expect(() => assertGeminiNotTruncated({ candidates: [{ finishReason: 'STOP' }] }, 'g')).not.toThrow();
   });
 });

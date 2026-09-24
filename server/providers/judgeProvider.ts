@@ -3,7 +3,7 @@ import { OpenRouter } from '@openrouter/sdk';
 import { z } from 'zod';
 import { repository } from '../store/repository.js';
 import { FixtureJudgeProvider, isFixtureMode } from './fixtureProvider.js';
-import { IModelProvider, getDefaultProviderId, getProvider } from './modelProvider.js';
+import { IModelProvider, assertGeminiNotTruncated, getDefaultProviderId, getProvider } from './modelProvider.js';
 
 export interface ClaimVerificationResult {
   verdict: 'supported' | 'partially_supported' | 'not_supported';
@@ -132,6 +132,7 @@ export class GeminiJudgeProvider implements IJudgeProvider {
         },
       });
 
+      assertGeminiNotTruncated(response, this.modelId);
       const raw = response.text || '{}';
       let cleaned = raw.trim();
       if (cleaned.startsWith('```json')) {
@@ -183,6 +184,7 @@ export class GeminiJudgeProvider implements IJudgeProvider {
         },
       });
 
+      assertGeminiNotTruncated(response, this.modelId);
       const raw = response.text || '{}';
       let cleaned = raw.trim();
       if (cleaned.startsWith('```json')) {

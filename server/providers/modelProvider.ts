@@ -82,6 +82,7 @@ export class GeminiProvider implements IModelProvider {
           },
         });
 
+        assertGeminiNotTruncated(response, model);
         rawText = response.text || '';
         if (!rawText) {
           throw new Error('Empty response received from Gemini model');
@@ -121,6 +122,7 @@ export class GeminiProvider implements IModelProvider {
       } catch (err: unknown) {
         lastError = err instanceof Error ? err : new Error(String(err));
         console.warn(`[GeminiProvider] Attempt ${attempts} failed:`, lastError.message);
+        if (err instanceof TruncatedOutputError) break; // the same limit would cut it again
       }
     }
 
@@ -135,7 +137,7 @@ export class GeminiProvider implements IModelProvider {
     });
 
     throw new Error(
-      `Gemini Provider (${model}) failed to generate valid structured output after 2 attempts: ${lastError?.message}`
+      `Gemini Provider (${model}) failed to generate valid structured output after ${attempts} attempt${attempts === 1 ? '' : 's'}: ${lastError?.message}`
     );
   }
 
@@ -155,6 +157,7 @@ export class GeminiProvider implements IModelProvider {
         },
       });
 
+      assertGeminiNotTruncated(response, model);
       const output = response.text || '';
       const latencyMs = Date.now() - start;
 
@@ -233,10 +236,40 @@ export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions
  * explicitly (OPENROUTER_MODEL_ID or per call); there is no built-in default.
  * The model id OpenRouter reports back is what gets recorded.
  */
-/** Output token ceiling per OpenRouter request (OPENROUTER_MAX_TOKENS, default 8192). */
+export const OPENROUTER_DEFAULT_MAX_TOKENS = 8192;
+const OPENROUTER_MAX_TOKENS_LIMIT = 131072;
+
+/**
+ * Output token ceiling per OpenRouter request. Unset/empty -> the documented
+ * default (8192). A value that is set but not a whole number in
+ * 1..131072 is a configuration error, reported on every call, never replaced
+ * silently by the default.
+ */
 export function openRouterMaxTokens(): number {
-  const v = Number(process.env.OPENROUTER_MAX_TOKENS);
-  return Number.isInteger(v) && v > 0 ? v : 8192;
+  const raw = process.env.OPENROUTER_MAX_TOKENS?.trim();
+  if (!raw) return OPENROUTER_DEFAULT_MAX_TOKENS;
+  const v = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isInteger(v) || v < 1 || v > OPENROUTER_MAX_TOKENS_LIMIT) {
+    throw new Error(`OpenRouter Provider Error: OPENROUTER_MAX_TOKENS="${raw}" is invalid (a whole number 1–${OPENROUTER_MAX_TOKENS_LIMIT} expected).`);
+  }
+  return v;
+}
+
+/**
+ * The model stopped because it hit the output-token limit. The text is cut
+ * off: even if it happens to parse as JSON (e.g. a list that ends early) it
+ * is not a complete answer and is never accepted.
+ */
+export class TruncatedOutputError extends Error {
+  constructor(providerModel: string, limit: number | string) {
+    super(`${providerModel}: the response was cut off at the output-token limit (${limit}); an incomplete answer is not accepted.`);
+    this.name = 'TruncatedOutputError';
+  }
+}
+
+/** Gemini: candidates[0].finishReason === 'MAX_TOKENS' means a cut-off answer. */
+export function assertGeminiNotTruncated(response: { candidates?: { finishReason?: string }[] }, model: string): void {
+  if (response.candidates?.[0]?.finishReason === 'MAX_TOKENS') throw new TruncatedOutputError(`Gemini (${model})`, 'model maximum');
 }
 
 export class OpenRouterProvider implements IModelProvider {
@@ -258,6 +291,7 @@ export class OpenRouterProvider implements IModelProvider {
       throw new Error('OpenRouter Provider Error: no model id (set OPENROUTER_MODEL_ID).');
     }
     const system = options?.systemInstruction || defaultSystem;
+    const maxTokens = openRouterMaxTokens();
     const res = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
@@ -272,18 +306,23 @@ export class OpenRouterProvider implements IModelProvider {
         // (65536 for the configured model), which a key with a spending limit
         // cannot afford even for a small structured answer. Bounded here;
         // a too-small limit yields invalid JSON and a visible error.
-        max_tokens: openRouterMaxTokens(),
+        max_tokens: maxTokens,
         ...extra,
       }),
     });
     const body = (await res.json().catch(() => null)) as {
       model?: string;
-      choices?: { message?: { content?: string | null } }[];
+      choices?: { message?: { content?: string | null }; finish_reason?: string | null; native_finish_reason?: string | null }[];
       error?: { message?: string; code?: number | string };
     } | null;
     if (!res.ok || !body || body.error) {
       const msg = body?.error?.message || `HTTP ${res.status}`;
       throw new Error(`OpenRouter (${model}) error: ${msg}`);
+    }
+    const finish = body.choices?.[0]?.finish_reason;
+    const nativeFinish = body.choices?.[0]?.native_finish_reason;
+    if (finish === 'length' || nativeFinish === 'MAX_TOKENS' || nativeFinish === 'max_tokens') {
+      throw new TruncatedOutputError(`OpenRouter (${body.model || model})`, maxTokens);
     }
     const text = body.choices?.[0]?.message?.content || '';
     if (!text) throw new Error(`OpenRouter (${model}) returned an empty response`);
@@ -302,7 +341,9 @@ export class OpenRouterProvider implements IModelProvider {
     let rawText = '';
     let lastError: Error | null = null;
 
+    let attempts = 0;
     for (let attempt = 1; attempt <= 2; attempt++) {
+      attempts = attempt;
       try {
         const { text, model } = await this.complete(
           prompt,
@@ -332,6 +373,8 @@ export class OpenRouterProvider implements IModelProvider {
       } catch (err: unknown) {
         lastError = err instanceof Error ? err : new Error(String(err));
         console.warn(`[OpenRouterProvider] Attempt ${attempt} failed:`, lastError.message);
+        // The same limit would cut the answer again: do not pay for a retry.
+        if (err instanceof TruncatedOutputError || /OPENROUTER_MAX_TOKENS=/.test(lastError.message)) break;
       }
     }
 
@@ -344,7 +387,7 @@ export class OpenRouterProvider implements IModelProvider {
       latencyMs: Date.now() - start,
     });
     throw new Error(
-      `OpenRouter Provider (${modelUsed}) failed to generate valid structured output after 2 attempts: ${lastError?.message}`
+      `OpenRouter Provider (${modelUsed}) failed to generate valid structured output after ${attempts} attempt${attempts === 1 ? '' : 's'}: ${lastError?.message}`
     );
   }
 
