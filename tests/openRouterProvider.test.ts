@@ -159,6 +159,13 @@ describe('OpenRouter output-token limit', () => {
     expect(logs.at(-1)?.action).toMatch(/:FAILED$/);
   });
 
+  it('a cut-off answer reports the token usage, so reasoning that ate the budget is visible (pilot audit)', async () => {
+    fetchMock.mockImplementation(async () =>
+      reply({ choices: [{ message: { content: '{"items":[' }, finish_reason: 'length' }], usage: { prompt_tokens: 900, completion_tokens: 8192, completion_tokens_details: { reasoning_tokens: 8000 } } })
+    );
+    await expect(new OpenRouterProvider().generateStructured('q', Items)).rejects.toThrow(/output-token limit \(8192\); usage: completion 8192 tokens, of which reasoning 8000/);
+  });
+
   it('also refuses a native MAX_TOKENS stop and truncated free text', async () => {
     fetchMock.mockResolvedValue(reply({ choices: [{ message: { content: 'Կիսատ պատասխ' }, finish_reason: 'stop', native_finish_reason: 'MAX_TOKENS' }] }));
     await expect(new OpenRouterProvider().generateText('q')).rejects.toThrow(/output-token limit/);

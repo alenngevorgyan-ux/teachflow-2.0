@@ -261,8 +261,8 @@ export function openRouterMaxTokens(): number {
  * is not a complete answer and is never accepted.
  */
 export class TruncatedOutputError extends Error {
-  constructor(providerModel: string, limit: number | string) {
-    super(`${providerModel}: the response was cut off at the output-token limit (${limit}); an incomplete answer is not accepted.`);
+  constructor(providerModel: string, limit: number | string, usage?: string) {
+    super(`${providerModel}: the response was cut off at the output-token limit (${limit})${usage ? `; usage: ${usage}` : ''}; an incomplete answer is not accepted.`);
     this.name = 'TruncatedOutputError';
   }
 }
@@ -313,6 +313,7 @@ export class OpenRouterProvider implements IModelProvider {
     const body = (await res.json().catch(() => null)) as {
       model?: string;
       choices?: { message?: { content?: string | null }; finish_reason?: string | null; native_finish_reason?: string | null }[];
+      usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } };
       error?: { message?: string; code?: number | string };
     } | null;
     if (!res.ok || !body || body.error) {
@@ -322,7 +323,13 @@ export class OpenRouterProvider implements IModelProvider {
     const finish = body.choices?.[0]?.finish_reason;
     const nativeFinish = body.choices?.[0]?.native_finish_reason;
     if (finish === 'length' || nativeFinish === 'MAX_TOKENS' || nativeFinish === 'max_tokens') {
-      throw new TruncatedOutputError(`OpenRouter (${body.model || model})`, maxTokens);
+      // Reasoning tokens count toward max_tokens: the usage shows whether thinking used up the budget.
+      const u = body.usage;
+      const usage =
+        typeof u?.completion_tokens === 'number'
+          ? `completion ${u.completion_tokens} tokens${typeof u.completion_tokens_details?.reasoning_tokens === 'number' ? `, of which reasoning ${u.completion_tokens_details.reasoning_tokens}` : ''}`
+          : undefined;
+      throw new TruncatedOutputError(`OpenRouter (${body.model || model})`, maxTokens, usage);
     }
     const text = body.choices?.[0]?.message?.content || '';
     if (!text) throw new Error(`OpenRouter (${model}) returned an empty response`);
