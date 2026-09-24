@@ -19,6 +19,7 @@ vi.mock('../server/store/repository.js', () => ({
 }));
 
 import { importLegacyReport } from '../server/pipeline/legacyReportImporter.js';
+import { getDemoReportTemplates } from '../server/store/demoData.js';
 import type { IModelProvider } from '../server/providers/modelProvider.js';
 
 function template(): ReportTemplate {
@@ -246,5 +247,60 @@ describe('importLegacyReport invents nothing outside the document', () => {
     expect(report.dataSnapshotHash).toBe(
       crypto.createHash('sha256').update(JSON.stringify(report.data)).digest('hex')
     );
+  });
+
+  it('keeps the academic year with the real tpl-program-progress form, which has no academicYear field', async () => {
+    // The form the import modal actually sends. The earlier test added an
+    // academicYear field to its own template, which hid that this one has none.
+    const real = getDemoReportTemplates().find((t) => t.id === 'tpl-program-progress')!;
+    expect(real.fields.some((f) => f.key === 'academicYear')).toBe(false);
+    store.template = real;
+
+    const rawText = '2024-2025 ուսումնական տարի, 7-րդ դասարան, Հայոց պատմություն:';
+    const provider = providerReturning({
+      fields: [
+        { key: 'subject', value: 'Հայոց պատմություն', confidence: 0.9, sourceQuote: 'Հայոց պատմություն', lineNumber: 1 },
+        { key: 'grade', value: 7, confidence: 0.9, sourceQuote: '7-րդ դասարան', lineNumber: 1 },
+        { key: 'academicYear', value: '2024-2025', confidence: 0.9, sourceQuote: '2024-2025', lineNumber: 1 },
+      ],
+    });
+
+    const report = await importLegacyReport({
+      rawText,
+      fileName: 'f.txt',
+      templateId: 'tpl-program-progress',
+      schoolId: 'sch-1',
+      schoolName: 'Դպրոց Ա',
+      authorName: 'Ուսուցիչ',
+      provider,
+    });
+
+    expect(report.academicYear).toBe('2024-2025');
+    expect(report.grade).toBe(7);
+    expect(report.subject).toBe('Հայոց պատմություն');
+    // The form's data stays exactly the form's fields.
+    expect('academicYear' in report.data).toBe(false);
+    // The model was asked for the year even though the form lacks the field.
+    const prompt = (provider.generateStructured as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0] as string;
+    expect(prompt).toContain('"academicYear"');
+  });
+
+  it('still drops a metadata value whose quote is not verbatim in the document', async () => {
+    store.template = getDemoReportTemplates().find((t) => t.id === 'tpl-program-progress')!;
+    const provider = providerReturning({
+      fields: [{ key: 'academicYear', value: '2025-2026', confidence: 0.9, sourceQuote: '2025-2026', lineNumber: 1 }],
+    });
+
+    const report = await importLegacyReport({
+      rawText: '2024-2025 ուսումնական տարի:',
+      fileName: 'f.txt',
+      templateId: 'tpl-program-progress',
+      schoolId: 'sch-1',
+      schoolName: 'Դպրոց Ա',
+      authorName: 'Ուսուցիչ',
+      provider,
+    });
+
+    expect(report.academicYear).toBeNull();
   });
 });

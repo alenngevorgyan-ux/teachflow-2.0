@@ -33,7 +33,7 @@ import { computeItemAnalysis, gradeSubmissionDeterministically } from '../pipeli
 import { runReportReview } from '../pipeline/reportReviewer.js';
 import { importLegacyReport } from '../pipeline/legacyReportImporter.js';
 import { extractOutcomes } from '../pipeline/outcomeExtractor.js';
-import { UserInputError } from '../pipeline/errors.js';
+import { UserInputError, parseGradeInput } from '../pipeline/errors.js';
 import {
   PrivacyViolationError,
   assertNoPii,
@@ -766,10 +766,7 @@ export function createApiRouter(): Router {
       const { subject, grade, programVersion, academicYear, schoolId, teacherName } = req.body;
       requireText({ subject, programVersion, academicYear, schoolId, teacherName });
 
-      const gradeNum = Number(grade);
-      if (!Number.isInteger(gradeNum) || gradeNum < 1) {
-        throw new UserInputError(`«grade» դաշտը պարտադիր է և պետք է լինի դասարանի համար (ստացվել է՝ ${JSON.stringify(grade)}):`);
-      }
+      const gradeNum = parseGradeInput(grade);
 
       const school = repository.getSchools().find((s) => s.id === schoolId);
       if (!school) {

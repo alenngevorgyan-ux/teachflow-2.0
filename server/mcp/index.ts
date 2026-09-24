@@ -307,19 +307,25 @@ export function createMcpServer(): McpServer {
     'legacy_report_extract',
     'Extract unstructured legacy report text into structured template schema with confidence and provenance',
     {
-      rawText: z.string(),
-      fileName: z.string().default('legacy_report.txt'),
-      templateId: z.string().default('tpl-program-progress'),
-      schoolId: z.string().default('sch-1'),
+      // No defaults, same as POST /reports/legacy-import: the file name,
+      // form, school and author are facts about the imported document.
+      rawText: z.string().min(1),
+      fileName: z.string().min(1),
+      templateId: z.string().min(1),
+      schoolId: z.string().min(1),
+      authorName: z.string().min(1),
     },
-    async ({ rawText, fileName, templateId, schoolId }) => {
+    async ({ rawText, fileName, templateId, schoolId, authorName }) => {
+      const school = repository.getSchools().find((s) => s.id === schoolId);
+      if (!school) throw new Error(`Unknown school: ${schoolId}`);
+
       const report = await importLegacyReport({
         rawText,
         fileName,
         templateId,
         schoolId,
-        schoolName: 'Դպրոց Ա',
-        authorName: 'Ուսուցիչ (ներմուծված)',
+        schoolName: school.name,
+        authorName,
       });
 
       // report.templateVersion is already real.

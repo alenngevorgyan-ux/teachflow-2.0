@@ -893,7 +893,7 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
                 <div className="grid grid-cols-3 gap-4 text-xs">
                   <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                     <span className="text-gray-700 block">Պլանավորված ժամեր</span>
-                    <span className="text-base font-bold text-gray-900">{activeReport.data.plannedHours || 32} ժամ</span>
+                    <span className="text-base font-bold text-gray-900">{activeReport.data.plannedHours != null ? `${activeReport.data.plannedHours} ժամ` : 'n/a'}</span>
                   </div>
                   <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                     <span className="text-gray-700 block">Փաստացի անցած</span>
@@ -901,14 +901,14 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
                   </div>
                   <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                     <span className="text-gray-700 block">Կատարողական (%)</span>
-                    <span className="text-base font-bold text-emerald-700">{activeReport.data.completionPercentage || 100}%</span>
+                    <span className="text-base font-bold text-emerald-700">{activeReport.data.completionPercentage != null ? `${activeReport.data.completionPercentage}%` : 'n/a'}</span>
                   </div>
                 </div>
 
                 <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-xs space-y-2">
                   <span className="font-bold text-gray-800">Ուսուցչի մեկնաբանություն.</span>
                   <p className="text-gray-700 leading-relaxed">
-                    {activeReport.data.teacherReflection || 'Ծրագիրը կատարվել է լիարժեք:'}
+                    {activeReport.data.teacherReflection || 'n/a'}
                   </p>
                 </div>
               </div>

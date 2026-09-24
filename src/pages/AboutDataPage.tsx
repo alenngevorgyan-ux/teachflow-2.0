@@ -108,7 +108,7 @@ export const AboutDataPage: React.FC<AboutDataPageProps> = ({ lang }) => {
           <p>&bull; <code>lesson_plan_generate(thematicPlanId, rowId, durationMinutes)</code></p>
           <p>&bull; <code>answer_sheet_grade(assessmentId, variant, studentCode, answers)</code></p>
           <p>&bull; <code>report_review(reportId)</code></p>
-          <p>&bull; <code>legacy_report_extract(rawText, fileName, templateId, schoolId)</code></p>
+          <p>&bull; <code>legacy_report_extract(rawText, fileName, templateId, schoolId, authorName)</code></p>
           <p>&bull; <code>emis_export(exportType, targetId)</code></p>
           <p>&bull; <code>armenian_eval_run(providerId, modelId)</code></p>
           <p className="text-gray-500 pt-1">Յուրաքանչյուր գործիքի պատասխան ներառում է ընթացիկ policyVersion-ը և հղված աղբյուրների իրական տարբերակները:</p>

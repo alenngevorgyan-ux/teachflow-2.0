@@ -15,6 +15,8 @@ vi.mock('../server/store/repository.js', () => ({
     getOutcomes: () => store.outcomes,
     getThematicPlan: (id: string) => store.plans[id] || null,
     computePolicyVersion: () => 'policy-test-v1',
+    getSchools: () => [{ id: 'sch-1', name: 'Test school' }],
+    getReportTemplate: () => null,
   },
 }));
 
@@ -150,5 +152,27 @@ describe('MCP tools: policyVersion and source versions are real, not omitted', (
     expect(tools.length).toBe(12);
     expect(tools.map((t) => t.name)).toContain('search_curriculum');
     expect(tools.map((t) => t.name)).toContain('lesson_plan_generate');
+  });
+});
+
+describe('MCP legacy_report_extract invents no metadata', () => {
+  it('rejects a call with only rawText instead of defaulting file, form, school and author', async () => {
+    const client = await connectedClient();
+    const result = await client.callTool({ name: 'legacy_report_extract', arguments: { rawText: 'text' } });
+    expect(result.isError).toBe(true);
+    const text = (result.content as { type: string; text: string }[])[0].text;
+    for (const key of ['fileName', 'templateId', 'schoolId', 'authorName']) {
+      expect(text).toContain(key);
+    }
+  });
+
+  it('rejects an unknown school instead of using a hardcoded school name', async () => {
+    const client = await connectedClient();
+    const result = await client.callTool({
+      name: 'legacy_report_extract',
+      arguments: { rawText: 'text', fileName: 'f.txt', templateId: 'tpl-program-progress', schoolId: 'sch-nope', authorName: 'A' },
+    });
+    expect(result.isError).toBe(true);
+    expect((result.content as { type: string; text: string }[])[0].text).toContain('sch-nope');
   });
 });

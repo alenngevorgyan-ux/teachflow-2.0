@@ -29,6 +29,24 @@ const ExtractionResponseSchema = z.object({
   fields: z.array(FieldExtractionSchema),
 });
 
+// Report-level metadata is extracted whether or not the chosen form has a
+// field for it: `report.subject/grade/academicYear` are what the reviewer
+// matches against a thematic plan, and `tpl-program-progress` (the form the
+// import modal uses) has no academicYear field. Taking these only from the
+// form's fields silently dropped a year the document stated.
+const REPORT_METADATA_FIELDS: ReportField[] = [
+  { key: 'subject', label: { hy: 'Առարկա', ru: 'Предмет' }, type: 'text', source: 'manual', required: true },
+  { key: 'grade', label: { hy: 'Դասարան', ru: 'Класс' }, type: 'number', source: 'manual', required: true },
+  {
+    key: 'academicYear',
+    label: { hy: 'Ուսումնական տարի', ru: 'Учебный год' },
+    type: 'text',
+    source: 'manual',
+    required: true,
+    description: 'The academic year the report covers, e.g. 2024-2025',
+  },
+];
+
 export async function importLegacyReport(params: LegacyImportParams): Promise<ReportInstance> {
   const { rawText, fileName, templateId, schoolId, schoolName, authorName, modelId } = params;
   // Check before the text reaches a model or the store.
@@ -40,7 +58,16 @@ export async function importLegacyReport(params: LegacyImportParams): Promise<Re
     throw new UserInputError(`Անհայտ հաշվետվության ձևանմուշ՝ «${templateId}»:`);
   }
 
+  const templateKeys = new Set(template.fields.map((f) => f.key));
+  const extractionFields = [
+    ...template.fields,
+    ...REPORT_METADATA_FIELDS.filter((f) => !templateKeys.has(f.key)),
+  ];
+
   const extractedData: Record<string, any> = {};
+  // Metadata that is not a form field: validated the same way, but kept out
+  // of `data` so the form's contents stay exactly the form's fields.
+  const metadata: Record<string, any> = {};
   const fieldConfidences: Record<string, number> = {};
   const fieldProvenance: Record<string, string> = {};
 
@@ -56,7 +83,7 @@ export async function importLegacyReport(params: LegacyImportParams): Promise<Re
 DO NOT fabricate or guess any values. If a field is not explicitly mentioned or clearly derivable from the text, set value to null and confidence to 0.
 
 Template fields to extract:
-${template.fields
+${extractionFields
   .map(
     (f) =>
       `- Key: "${f.key}", Label: "${f.label.hy}", Type: "${f.type}", Required: ${f.required ? 'true' : 'false'}, Description: "${f.description || ''}"`
@@ -98,7 +125,7 @@ Instructions:
   }
 
   // Deterministic validation of extracted fields
-  for (const field of template.fields) {
+  for (const field of extractionFields) {
     const extracted = extractionMap.get(field.key);
     let value: any = null;
     let confidence = 0;
@@ -134,16 +161,22 @@ Instructions:
       }
     }
 
+    if (!templateKeys.has(field.key)) {
+      metadata[field.key] = value;
+      continue;
+    }
     extractedData[field.key] = value;
     fieldConfidences[field.key] = confidence;
     fieldProvenance[field.key] = provenance;
   }
 
-  const gradeRaw = extractedData.grade;
+  const meta = (key: string) => (templateKeys.has(key) ? extractedData[key] : metadata[key]);
+
+  const gradeRaw = meta('grade');
   const gradeNum = typeof gradeRaw === 'number' ? gradeRaw : typeof gradeRaw === 'string' && gradeRaw.trim() !== '' ? Number(gradeRaw) : NaN;
   const extractedGrade = Number.isInteger(gradeNum) && gradeNum > 0 ? gradeNum : null;
 
-  const yearRaw = extractedData.academicYear;
+  const yearRaw = meta('academicYear');
   const extractedAcademicYear = typeof yearRaw === 'string' && yearRaw.trim() !== '' ? yearRaw.trim() : null;
 
   const reportId = `rep-imported-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -156,7 +189,7 @@ Instructions:
     schoolName,
     authorRole: template.authorRole,
     authorName,
-    subject: extractedData.subject || '',
+    subject: meta('subject') || '',
     // Nothing here is assumed: a grade or an academic year the document does
     // not state stays null and is shown as "n/a" for manual confirmation.
     // Grade 0 and the current year were both invented values.
