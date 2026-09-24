@@ -285,3 +285,29 @@ credit. The expected cost of one synthetic run is about $0.10.
 | Fixture browser E2E (`scripts/e2e-review.mjs`, fresh store) | `E2E OK`, corrected DOCX `58cc0b0e…` (unchanged) |
 
 **NOT DEPLOYED TO PRODUCTION.**
+
+### Re-verification after the key limit was raised to $4 (2026-09-24)
+
+- **Splitting fix confirmed on the real model:** `minimal`, 3 of 3 runs
+  with no rejected parts, and question 2 has all 3 options ($0.028). In one
+  run the model attached question 3's two instruction lines as "options"
+  of the open question. These are exact copies, not caused by the fix; the
+  teacher sees them at the structure step.
+- **Clean real-model synthetic pilot `SYNTH-REAL-3`** on committed code
+  `2224d50` (tracked files modified: 0):
+  - `TECHNICAL_RUN_COMPLETE`, `real_external`;
+  - `SEMANTIC_RETRIEVAL = GOOGLE_EMBEDDINGS` (5 of 5 checks);
+  - all checks pass, no automatic problems;
+  - 23 calls, **$0.0915**.
+- **Question 2:** the right fix, key «1-ա, 2-գ» → «1-ա, 2-ա», sourced
+  from the fact passage. The export has no duplicate option. The expected
+  text `2-ա` is present.
+- **Question 3, open concern for human review.** The proposal rewrote
+  "explain why the battle matters" into "when and who led", fitting the
+  question to the thin synthetic source. This time `program_scope`
+  *passed* the rewritten question; in `SYNTH-REAL-2` the same kind of
+  rewrite *failed* it. So the check is inconsistent on this pattern, and
+  the proposer tends to narrow a question to whatever the source covers.
+  This is exactly what the teacher's accept/reject decision and the human
+  review sheet exist for. Watch it with Narek's real textbook.
+- **Key after these runs:** about $1.86 of $4 left.
