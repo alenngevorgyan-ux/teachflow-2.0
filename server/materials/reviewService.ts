@@ -435,8 +435,13 @@ export async function runChecks(id: string, deps: ReviewDeps, opts: CheckOptions
   let runId = '';
   let snapshot!: MaterialReview;
   let todo: string[] = [];
+  // Captured once, under the lock, before any await: the dependency state the
+  // whole run is computed against. Never recomputed later from the live
+  // repository as if it were history.
+  let captured!: { context: string; dependencyFingerprint: string };
   await mutate(id, (r) => {
     requireConfirmedSegmentation(r);
+    captured = { context: runContext(r), dependencyFingerprint: dependencyFingerprint(r) };
     todo = allItemIds(r).filter((iid) => {
       if (opts.itemIds && !opts.itemIds.includes(iid)) return false;
       const res = r.results.find((x) => x.itemId === iid);
@@ -464,10 +469,10 @@ export async function runChecks(id: string, deps: ReviewDeps, opts: CheckOptions
         const prior = snapshot.results.find((x) => x.itemId === itemId);
         // Identical inputs and no execution error: reuse instead of paying again.
         if (!opts.all && prior && prior.inputHash === inputHash && !prior.checks.some((c) => c.executionError)) {
-          computed.set(itemId, { ...prior, stale: false, revision: snapshot.revision, dependencyFingerprint: dependencyFingerprint(snapshot) });
+          computed.set(itemId, { ...prior, stale: false, revision: snapshot.revision, dependencyFingerprint: captured.dependencyFingerprint });
           continue;
         }
-        computed.set(itemId, await checkItem(item, key, snapshot, paragraphs, sources, checkDeps));
+        computed.set(itemId, await checkItem(item, key, snapshot, paragraphs, sources, checkDeps, captured));
       }
     });
   } catch (err) {
@@ -475,13 +480,18 @@ export async function runChecks(id: string, deps: ReviewDeps, opts: CheckOptions
   }
 
   return withLock(id, async () => {
+    // Async preparation first (review mutations cannot happen: we hold its
+    // lock; registry/rule changes can, so they are compared only afterwards).
+    const prepared = load(id);
+    const paragraphs = currentParagraphs((await workingCopyFactory(prepared))());
+    // From here to save() everything is synchronous: nothing can change
+    // between the comparison and the write in this single-process server.
     const r = load(id);
-    if (runContext(r) !== runContext(snapshot)) {
-      // Something the checks depend on changed while they ran: discard, never overwrite newer state.
+    if (r.revision !== prepared.revision || runContext(r) !== captured.context || dependencyFingerprint(r) !== captured.dependencyFingerprint) {
+      // Something the checks depend on changed while they ran: discard, never publish as current.
       finishRun(r, runId, 'obsolete', 'Մուտքային տվյալները փոխվել են ստուգման ընթացքում. արդյունքները չեն պահպանվել:');
       return save(r);
     }
-    const paragraphs = currentParagraphs((await workingCopyFactory(r))());
     const structure = resolveStructure(r);
     let kept = 0;
     for (const [itemId, result] of computed) {

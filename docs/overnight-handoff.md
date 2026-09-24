@@ -214,3 +214,28 @@ On every load, a result whose fingerprint differs (or that has none) becomes sta
 - live-model runs beyond the one splitting call.
 
 **The pilot is not ready.**
+
+## Fourth pass — review of 963fb4b (dependency race during a check)
+
+Finding (reproduced on `963fb4b` with the reviewer's `reproduce-race.patch`, 2 passed = bug present):
+- `checkItem` ran the rule checks before waiting on retrieval or the model, but stamped `inputHash` and `dependencyFingerprint` afterwards from the live repository.
+- The commit compared `runContext(r)` against `runContext(snapshot)`, and both read the live rules.
+- So a rule change during the wait left the old rule's result as a fresh pass, and the next ordinary check skipped it.
+
+Fix:
+- `runChecks` captures the run context and dependency fingerprint once, under the lock, before any await. Results are stamped with the captured values; the input hash is computed before the first await.
+- At commit, the document is loaded first. Then, synchronously and with nothing between the comparison and `save()` in this single-process server, the live context is compared with the captured one.
+- On a mismatch the run is `obsolete` and nothing is published as current; earlier results are left stale by the load-time contract.
+- No lock is held during model calls.
+
+Regression tests (the reviewer's scenarios, now asserting the safe behaviour):
+- threshold raised during the wait, and rule switched off during the wait: run obsolete, no fresh result, and the next ordinary check re-runs the question (`fail` / `not_evaluated`);
+- earlier fresh results plus a change during a re-run: all stale, not final;
+- source superseded during the wait: obsolete, nothing current. This also failed on `963fb4b`: the same race existed for sources;
+- unchanged inputs: the run succeeds and reuse still makes no new model calls.
+
+Four of these fail on `963fb4b`.
+
+Checks: `tsc --noEmit` clean; `npm test` 37 files / **430** passing; `vite build` OK; fixture E2E passes (single key-line change, only `word/document.xml` differs).
+
+Unchanged gates: no real sources, no real teacher DOCX, no Word layout check, no Armenian linguistic QA, no live-model content checks. **The pilot is not ready.**

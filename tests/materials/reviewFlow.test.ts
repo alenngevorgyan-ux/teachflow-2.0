@@ -948,3 +948,74 @@ describe('independent review R2: changed dependencies invalidate finished result
     expect(again.results.every((x) => !x.stale)).toBe(true);
   });
 });
+
+describe('independent race (review 963fb4b): dependencies change while a check waits', () => {
+  /** Runs checks with the first retrieval held until `change` has been applied. */
+  async function raced(change: () => void, opts: { priorRun?: boolean } = {}) {
+    const { r, deps } = await readyForChecks();
+    if (opts.priorRun) await runChecks(r.id, deps);
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((res) => (release = res));
+    const started = new Promise<void>((res) => (entered = res));
+    const original = deps.retrieve!;
+    let first = true;
+    const held: ReviewDeps = {
+      ...deps,
+      retrieve: (async (...args: Parameters<NonNullable<ReviewDeps['retrieve']>>) => {
+        if (first) {
+          first = false;
+          entered();
+          await gate;
+        }
+        return original(...args);
+      }) as ReviewDeps['retrieve'],
+    };
+    const pending = runChecks(r.id, held, { all: opts.priorRun });
+    await started;
+    change();
+    release();
+    const done = await pending;
+    return { r, deps, done };
+  }
+  const rule = () => store.rules.find((x) => x.id === 'rule-single-correct-answer')!;
+
+  it.each([
+    ['threshold raised to 4', () => { rule().params = { minOptions: 4, maxOptions: 5 }; }, 'fail'],
+    ['rule switched off', () => { rule().active = false; }, 'not_evaluated'],
+  ] as const)('%s during the wait: run obsolete, no fresh pass, the ordinary next check re-runs it', async (_l, change, expected) => {
+    const { r, deps, done } = await raced(change);
+    expect(done.runs.at(-1)!.status).toBe('obsolete');
+    const q1 = getReview(r.id).results.find((x) => x.itemId === 'item-1');
+    expect(q1 === undefined || q1.stale).toBe(true); // never a fresh result from the old rule
+    const ordinary = await runChecks(r.id, deps);
+    expect(ordinary.runs.at(-1)!.itemIds).toContain('item-1');
+    expect(ordinary.results.find((x) => x.itemId === 'item-1')!.checks.find((c) => c.checkId === 'option_count')!.status).toBe(expected);
+  });
+
+  it('with earlier fresh results: a threshold change during a re-run leaves them stale, not current', async () => {
+    const { r, done } = await raced(() => { rule().params = { minOptions: 4, maxOptions: 5 }; }, { priorRun: true });
+    expect(done.runs.at(-1)!.status).toBe('obsolete');
+    expect(getReview(r.id).results.every((x) => x.stale)).toBe(true);
+    expect(reviewStatus(getReview(r.id)).final).toBe(false);
+  });
+
+  it('a source superseded during the wait: run obsolete, nothing published as current', async () => {
+    const { r, done } = await raced(() => {
+      store.sources.find((x) => x.id === 'fact-1')!.status = 'superseded';
+    });
+    expect(done.runs.at(-1)!.status).toBe('obsolete');
+    expect(getReview(r.id).results.filter((x) => !x.stale)).toHaveLength(0);
+  });
+
+  it('nothing changed during the wait: the run succeeds and later reuse still makes no new calls', async () => {
+    const state: FakeState = { keyedTwo: 'գ' };
+    const { r, deps } = await readyForChecks(state);
+    const first = await runChecks(r.id, deps);
+    expect(first.runs.at(-1)!.status).toBe('succeeded');
+    const calls = state.scopeCalls!;
+    const again = await runChecks(r.id, deps);
+    expect(state.scopeCalls).toBe(calls);
+    expect(again.results.every((x) => !x.stale)).toBe(true);
+  });
+});

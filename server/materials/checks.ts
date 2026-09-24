@@ -404,15 +404,25 @@ export function dependencyFingerprint(review: MaterialReview): string {
   );
 }
 
+/**
+ * Checks one item. `captured` is the run's dependency context, taken once
+ * before any await: the result is stamped with the inputs that were actually
+ * read (hash computed here, before the first await), never with whatever the
+ * live repository holds when the slow calls return. A dependency change during
+ * the wait is detected by the run's commit guard.
+ */
 export async function checkItem(
   item: MaterialItem,
   key: MaterialAnswerKeyEntry | undefined,
   review: MaterialReview,
   paragraphs: MaterialParagraph[],
   sources: ResolvedSources,
-  deps: CheckDeps
+  deps: CheckDeps,
+  captured?: { dependencyFingerprint: string }
 ): Promise<MaterialItemResult> {
   const t = itemText(item, paragraphs, key);
+  const inputHash = itemInputHash(item, key, review, paragraphs, deps);
+  const fingerprint = captured?.dependencyFingerprint ?? dependencyFingerprint(review);
   const checks = deterministicChecks(t);
   if (item.type !== 'other') {
     let chunks: RetrievedChunk[] | Error;
@@ -431,8 +441,8 @@ export async function checkItem(
     revision: review.revision,
     stale: false,
     checks,
-    inputHash: itemInputHash(item, key, review, paragraphs, deps),
-    dependencyFingerprint: dependencyFingerprint(review),
+    inputHash,
+    dependencyFingerprint: fingerprint,
     checkedAt: new Date().toISOString(),
   };
 }

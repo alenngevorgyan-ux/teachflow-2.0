@@ -1,8 +1,8 @@
-review mat-muf9m3q4-fb4bd0  revision r1-90f1d695f1b1  accepted groups 1
-suggestion sug-item-2-muf9m8sf-1  status=rejected  item=item-2  keyChange=["ա"]  keyBefore=null  recheck=-  model=fixture/fixture-deterministic-v1
+review mat-mufcabyo-3b533a  revision r1-90095e207d27  accepted groups 1
+suggestion sug-item-2-mufcag3c-1  status=rejected  item=item-2  keyChange=["ա"]  keyBefore=null  recheck=-  model=fixture/fixture-deterministic-v1
   text patch item-2-s1-e1: paragraph p0012-e8f4a436 [5,8) "2-գ" -> "2-ա" (base r0-5167fb305948)
-suggestion sug-item-2-muf9m9q2-1  status=accepted  item=item-2  keyChange=["ա"]  keyBefore=["գ"]  recheck=done  model=fixture/fixture-deterministic-v1
+suggestion sug-item-2-mufcagw5-1  status=accepted  item=item-2  keyChange=["ա"]  keyBefore=["գ"]  recheck=done  model=fixture/fixture-deterministic-v1
   text patch item-2-s1-e1: paragraph p0012-e8f4a436 [5,8) "2-գ" -> "2-ա" (base r0-5167fb305948)
-accepted group grp-item-2-muf9m9q1-1: 1 patch(es) in p0012-e8f4a436
+accepted group grp-item-2-mufcagw4-1: 1 patch(es) in p0012-e8f4a436
 answer key item-1: ["ա"] (document, p0012-e8f4a436 [0,3))
 answer key item-2: ["ա"] (document, p0012-e8f4a436 [5,8))
