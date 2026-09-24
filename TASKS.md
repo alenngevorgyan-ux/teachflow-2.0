@@ -31,6 +31,24 @@ Already merged into this base (from the interrupted AI Studio session): default 
 - [x] **T16. Demo data** uses the 2026–2027 academic year; remove invented curriculum codes from demo seeds or label them clearly as fictional.
 - [x] **T17. README**: setup, env, architecture, honest limitations.
 
+## Release 1 — "Fix my material" (DOCX), Հայոց պատմություն, grade 7
+
+Flow: upload DOCX -> check against selected confirmed sources -> accept fixes -> re-check -> download corrected DOCX + change list. Branch `claude/docx-material-fix`.
+
+- [x] **M1. DOCX model.** Safe load (zip limits, safe XML, .doc/.docm/.dotx rejected), paragraph index with list labels, preservation report, privacy scan of all readable parts before storage or any model call.
+- [x] **M2. Patch engine.** Versioned, atomic text patches spliced into the original XML; stale/overlapping patches refused; export re-opened and verified.
+- [x] **M3. Source confirmation** bound to version + content hash; stated name, not an identity.
+- [x] **M4. Review service.** Split into questions (model gives ids/quotes only, verified), teacher-confirmed split, explicit or teacher-set key, checks pass/fail/needs_review/not_evaluated, suggestions with verbatim evidence, accept/reject with targeted re-check, draft/final export and change list.
+- [x] **M5. UI** page + registry confirmation controls.
+- [x] **M6. Layout check tool** (`scripts/docx-layout-check.ts`): renders original and corrected copy with LibreOffice or Word and compares pagination. Text-level only; the PDFs are for a person to look at.
+
+Open — the pilot is NOT ready until these are done:
+- [ ] **P1. Real teacher files.** Run the full flow on 2–3 real DOCX files written in Word by teachers (no student data), including the layout check in Word. Synthetic test files do not count.
+- [ ] **P2. Real sources.** Upload the current subject program and standard (and the pilot teacher's textbook with permission), extract and confirm outcomes, confirm each source version. Until then content checks are not_evaluated.
+- [ ] **P3. Model runs.** Split, checks and suggestions have only run against fake models in tests; the OpenRouter key had no credits. Run them on the real files and record quality problems.
+- [ ] **P4. Teacher measurement.** Time to bring an own test to a usable state vs the usual way.
+- [ ] Later: PDF/scans, separate key file, Word tracked-changes export.
+
 ## Later (after teacher/KTAK feedback — do not start without confirmation)
 - Real report forms from schools → templates.
 - ChatGPT Edu app publication (needs workspace admin).
