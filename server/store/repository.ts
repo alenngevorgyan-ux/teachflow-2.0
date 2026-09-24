@@ -897,9 +897,9 @@ export class JsonFileRepository implements IRepository {
     subjectGroup?: string
   ): ReportInstance {
     const school = DEMO_SCHOOLS.find((s) => s.id === schoolId);
-    if (!school) throw new UserInputError(`Unknown school: ${schoolId}`);
+    if (!school) throw new UserInputError(`Անհայտ դպրոց՝ «${schoolId}»:`);
     const template = this.getReportTemplate(templateId);
-    if (!template) throw new UserInputError(`Unknown report template: ${templateId}`);
+    if (!template) throw new UserInputError(`Անհայտ հաշվետվության ձևանմուշ՝ «${templateId}»:`);
 
     // Accepted child reports from this school and year
     const childReports = this.reports.filter(

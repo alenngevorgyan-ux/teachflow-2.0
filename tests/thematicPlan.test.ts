@@ -22,6 +22,7 @@ vi.mock('../server/store/repository.js', () => ({
 
 import {
   generateThematicPlan,
+  thematicPlanNotEvaluated,
   validateThematicPlanDeterministically,
 } from '../server/pipeline/thematicPlanGenerator.js';
 import type { IModelProvider } from '../server/providers/modelProvider.js';
@@ -64,7 +65,7 @@ function plan(rows: ThematicPlanRow[], programTargetHours: number): ThematicPlan
     programTargetHours,
     status: 'draft',
     rows,
-    calendar: { term1Weeks: 16, term2Weeks: 18, holidays: [] },
+    calendar: { term1Weeks: 16, term2Weeks: 18, holidays: [], source: 'user_confirmed' },
     validationErrors: [],
     createdAt: '',
     updatedAt: '',
@@ -139,7 +140,7 @@ describe('validateThematicPlanDeterministically', () => {
   it('week-bounds check is driven by the plan\'s own calendar, not a hardcoded constant', () => {
     const shortYearPlan: ThematicPlan = {
       ...plan(validRows(), 4),
-      calendar: { term1Weeks: 5, term2Weeks: 5, holidays: [] }, // 10 teaching weeks total
+      calendar: { term1Weeks: 5, term2Weeks: 5, holidays: [], source: 'user_confirmed' }, // 10 teaching weeks total
     };
     const rows = [
       row('1', { outcomeCodes: ['T7-1'], plannedHours: 2, weekNumber: 8 }), // within 10: ok
@@ -151,6 +152,19 @@ describe('validateThematicPlanDeterministically', () => {
     );
     expect(errors.filter((e) => e.includes('շաբաթ'))).toHaveLength(1);
     expect(errors.join(' ')).toContain('15');
+  });
+
+  it('without a supplied calendar the week check is not evaluated; the hours check still runs', () => {
+    const noCal: ThematicPlan = { ...plan([row('1', { outcomeCodes: ['T7-1'], plannedHours: 2, weekNumber: 99 })], 4), calendar: null };
+    const errors = validateThematicPlanDeterministically(noCal, store.outcomes);
+    expect(errors.some((e) => e.includes('շաբաթ'))).toBe(false); // week 99 is not judged against an assumed calendar
+    expect(errors.some((e) => e.includes('Ժամաքանակի'))).toBe(true); // 2 of 4 hours still fails
+    expect(thematicPlanNotEvaluated(noCal)[0]).toContain('Օրացույցային ստուգումը չի կատարվել');
+  });
+
+  it('an old stored calendar without provenance (the former hardcoded 16+18) is not trusted', () => {
+    const legacy: ThematicPlan = { ...plan(validRows(), 4), calendar: { term1Weeks: 16, term2Weeks: 18, holidays: [] } };
+    expect(thematicPlanNotEvaluated(legacy)).toHaveLength(1);
   });
 });
 

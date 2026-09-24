@@ -120,7 +120,7 @@ describe('MCP tools: policyVersion and source versions are real, not omitted', (
       totalAnnualHours: 2,
       programTargetHours: 2,
       status: 'draft',
-      calendar: { term1Weeks: 16, term2Weeks: 18, holidays: [] },
+      calendar: { term1Weeks: 16, term2Weeks: 18, holidays: [], source: 'user_confirmed' },
       validationErrors: [],
       createdAt: '',
       updatedAt: '',
@@ -186,5 +186,16 @@ describe('MCP legacy_report_extract invents no metadata', () => {
     const text = (result.content as { type: string; text: string }[])[0].text;
     expect(text).toContain('fileName');
     expect(text).toContain('authorName');
+  });
+});
+
+describe('MCP required strings', () => {
+  it('rejects whitespace-only subject and query, and blank material text', async () => {
+    const client = await connectedClient();
+    const r1 = await client.callTool({ name: 'search_curriculum', arguments: { subject: '  ', grade: 5, query: ' ' } });
+    expect(r1.isError).toBe(true);
+    const r2 = await client.callTool({ name: 'thematic_plan_generate', arguments: { subject: 'x', grade: 7, programVersion: ' ', academicYear: 'y', schoolId: 's', teacherName: 't', weeklyHours: 2, totalAnnualHours: 68 } });
+    expect(r2.isError).toBe(true);
+    expect((r2.content as { text: string }[])[0].text).toContain('programVersion');
   });
 });

@@ -12,6 +12,7 @@ import { repository } from '../store/repository.js';
 import {
   generateThematicPlan,
   validateThematicPlanDeterministically,
+  thematicPlanNotEvaluated,
 } from '../pipeline/thematicPlanGenerator.js';
 import { generateLessonPlanFromRow } from '../pipeline/lessonPlanGenerator.js';
 import { gradeSubmissionDeterministically } from '../pipeline/autoGrader.js';
@@ -40,6 +41,12 @@ function toolResult(payload: unknown) {
   };
 }
 
+// Required user-entered strings: trimmed, and blank is rejected (as REST does).
+const requiredText = () => z.string().trim().min(1);
+// Document / material content: blank is rejected but the text is passed on
+// byte for byte (trimming would shift line numbers and verbatim quotes).
+const requiredContent = () => z.string().refine((v) => v.trim().length > 0, { message: 'Required' });
+
 export function createMcpServer(): McpServer {
   const server = new McpServer({
     name: 'TeachFlow Curriculum Connector',
@@ -59,9 +66,9 @@ export function createMcpServer(): McpServer {
     'search_curriculum',
     'Search official confirmed curriculum learning outcomes by subject, grade and keyword query',
     {
-      subject: z.string().describe('Subject name (e.g. Բնագիտություն)'),
+      subject: requiredText().describe('Subject name (e.g. Բնագիտություն)'),
       grade: z.number().describe('Grade level (e.g. 5)'),
-      query: z.string().describe('Search query keyword'),
+      query: requiredText().describe('Search query keyword'),
     },
     async ({ subject, grade, query }) => {
       const outcomes = repository.getConfirmedOutcomes(subject, grade);
@@ -96,9 +103,9 @@ export function createMcpServer(): McpServer {
     'get_source_fragment',
     'Retrieve top verified FACT chunks for a subject, grade, and topic query',
     {
-      subject: z.string().describe('Subject name'),
+      subject: requiredText().describe('Subject name'),
       grade: z.number().describe('Grade level'),
-      query: z.string().describe('Topic or concept keyword'),
+      query: requiredText().describe('Topic or concept keyword'),
     },
     async ({ subject, grade, query }) => {
       const { factChunks } = await retrieveChunks(subject, grade, query);
@@ -120,9 +127,9 @@ export function createMcpServer(): McpServer {
     'generate_assessment_with_trace',
     'Generate a curriculum-grounded assessment with item traces, variant equivalence, and source citations',
     {
-      subject: z.string(),
+      subject: requiredText(),
       grade: z.number(),
-      topic: z.string(),
+      topic: requiredText(),
       sourceIds: z.array(z.string()).optional(),
     },
     async ({ subject, grade, topic, sourceIds }) => {
@@ -146,9 +153,9 @@ export function createMcpServer(): McpServer {
     'validate_material',
     'Validate any arbitrary educational text or ChatGPT test against approved curriculum sources',
     {
-      subject: z.string(),
+      subject: requiredText(),
       grade: z.number(),
-      text: z.string(),
+      text: requiredContent(),
       sourceIds: z.array(z.string()).optional(),
     },
     async ({ subject, grade, text, sourceIds }) => {
@@ -167,12 +174,12 @@ export function createMcpServer(): McpServer {
       // No defaults: the caller states the program version, school, teacher
       // and hour counts, or the tool call fails. Guessing them would put
       // invented curriculum facts into the generated plan.
-      subject: z.string().min(1),
+      subject: requiredText(),
       grade: z.number().int().positive(),
-      programVersion: z.string().min(1),
-      academicYear: z.string().min(1),
-      schoolId: z.string().min(1),
-      teacherName: z.string().min(1),
+      programVersion: requiredText(),
+      academicYear: requiredText(),
+      schoolId: requiredText(),
+      teacherName: requiredText(),
       weeklyHours: z.number().int().positive(),
       totalAnnualHours: z.number().int().positive(),
     },
@@ -217,8 +224,9 @@ export function createMcpServer(): McpServer {
       if (!plan) throw new Error(`Plan not found: ${planId}`);
       const outcomes = repository.getConfirmedOutcomes(plan.subject, plan.grade);
       const errors = validateThematicPlanDeterministically(plan, outcomes);
+      const notEvaluated = thematicPlanNotEvaluated(plan);
 
-      return toolResult(withPolicyVersion({ planId, valid: errors.length === 0, errors }));
+      return toolResult(withPolicyVersion({ planId, valid: errors.length === 0 && notEvaluated.length === 0, errors, notEvaluated }));
     }
   );
 
@@ -309,12 +317,12 @@ export function createMcpServer(): McpServer {
     {
       // No defaults, same as POST /reports/legacy-import: the file name,
       // form, school and author are facts about the imported document.
-      // trim() first: "   " is as missing as "", and REST rejects it too.
-      rawText: z.string().trim().min(1),
-      fileName: z.string().trim().min(1),
-      templateId: z.string().trim().min(1),
-      schoolId: z.string().trim().min(1),
-      authorName: z.string().trim().min(1),
+      // Blank is rejected as REST does; the document text itself is not trimmed.
+      rawText: requiredContent(),
+      fileName: requiredText(),
+      templateId: requiredText(),
+      schoolId: requiredText(),
+      authorName: requiredText(),
     },
     async ({ rawText, fileName, templateId, schoolId, authorName }) => {
       const school = repository.getSchools().find((s) => s.id === schoolId);

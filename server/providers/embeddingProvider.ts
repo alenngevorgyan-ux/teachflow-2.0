@@ -26,33 +26,47 @@ function getClient(): GoogleGenAI {
 // whether a missing/failed embedding should block their operation or degrade
 // visibly to keyword-only scoring; this function never silently returns
 // fabricated vectors.
-export async function embedTexts(texts: string[]): Promise<number[][]> {
+//
+// Every attempt is written to the audit log here, success or failure, so no
+// caller can bypass it and nothing is counted twice. The texts themselves are
+// never logged (they can be source or teacher content); usage is not
+// reported by the API and is recorded as unknown, not zero. Chunks that
+// already carry an embedding make no call and produce no entry.
+export async function embedTexts(texts: string[], purpose = 'embed'): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const ai = getClient();
+  const start = Date.now();
+  const input = `${texts.length} text(s), ${texts.reduce((n, t) => n + t.length, 0)} chars (text not logged); usage: unknown`;
+  const audit = (action: string, output: string) =>
+    repository.logAIInteraction({ providerId: 'gemini', modelId: EMBEDDING_MODEL_ID, action, prompt: input, output, latencyMs: Date.now() - start });
 
-  const res = await ai.models.embedContent({
-    model: EMBEDDING_MODEL_ID,
-    contents: texts,
-    config: { outputDimensionality: OUTPUT_DIMENSIONALITY },
-  });
-
-  const embeddings = res.embeddings;
-  if (!embeddings || embeddings.length !== texts.length) {
-    throw new Error(
-      `Embedding Provider Error: expected ${texts.length} embeddings, got ${embeddings?.length ?? 0}`
-    );
-  }
-
-  return embeddings.map((e, i) => {
-    if (!e.values || e.values.length === 0) {
-      throw new Error(`Embedding Provider Error: empty embedding vector for input #${i}`);
+  let vectors: number[][];
+  try {
+    const ai = getClient();
+    const res = await ai.models.embedContent({
+      model: EMBEDDING_MODEL_ID,
+      contents: texts,
+      config: { outputDimensionality: OUTPUT_DIMENSIONALITY },
+    });
+    const embeddings = res.embeddings;
+    if (!embeddings || embeddings.length !== texts.length) {
+      throw new Error(`Embedding Provider Error: expected ${texts.length} embeddings, got ${embeddings?.length ?? 0}`);
     }
-    return e.values;
-  });
+    vectors = embeddings.map((e, i) => {
+      if (!e.values || e.values.length === 0) {
+        throw new Error(`Embedding Provider Error: empty embedding vector for input #${i}`);
+      }
+      return e.values;
+    });
+  } catch (err: unknown) {
+    audit(`embed:${purpose}:FAILED`, `Error: ${err instanceof Error ? err.message : String(err)}`);
+    throw err;
+  }
+  audit(`embed:${purpose}`, `${vectors.length} vector(s) × ${vectors[0]?.length ?? 0} dims`);
+  return vectors;
 }
 
 export async function embedQuery(text: string): Promise<number[]> {
-  const [vec] = await embedTexts([text]);
+  const [vec] = await embedTexts([text], 'query');
   return vec;
 }
 
@@ -82,22 +96,15 @@ export async function embedChunksInPlace(
   if (pending.length === 0) return { embedded: 0 };
 
   try {
-    const vectors = await embedTexts(pending.map((c) => c.text));
+    const vectors = await embedTexts(pending.map((c) => c.text), 'chunks');
     pending.forEach((c, i) => {
       c.embedding = vectors[i];
     });
     return { embedded: pending.length };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    // Already audited once inside embedTexts.
     console.warn('embedChunksInPlace failed, chunks stored without embeddings:', msg);
-    repository.logAIInteraction({
-      providerId: 'gemini',
-      modelId: EMBEDDING_MODEL_ID,
-      action: 'embedChunksInPlace:FAILED',
-      prompt: `${pending.length} chunk(s)`,
-      output: `Error: ${msg}`,
-      latencyMs: 0,
-    });
     return {
       embedded: 0,
       warning: `Իմաստային որոնման վեկտորները (embeddings) չհաշվարկվեցին. ${msg} Աղբյուրը պահպանվել է, բայց որոնումը այս հատվածների համար կաշխատի միայն բանալի բառերով:`,

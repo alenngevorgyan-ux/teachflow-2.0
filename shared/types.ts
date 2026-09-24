@@ -312,12 +312,21 @@ export interface ThematicPlan {
   programTargetHours: number;
   status: 'draft' | 'approved' | 'submitted';
   rows: ThematicPlanRow[];
+  /**
+   * The school's teaching calendar, only when someone supplied it. There is
+   * no assumed national calendar: without one, calendar-dependent checks are
+   * reported as not evaluated. 'demo' marks synthetic seed data.
+   */
   calendar: {
     term1Weeks: number;
     term2Weeks: number;
     holidays: { name: string; dates: string }[];
-  };
+    source?: 'user_confirmed' | 'demo';
+    confirmedAt?: string;
+  } | null;
   validationErrors: string[];
+  /** Checks that could not run, with the reason (e.g. no confirmed calendar). */
+  validationNotEvaluated?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -473,6 +482,12 @@ export interface ReportInstance {
   data: Record<string, any>;
   fieldConfidences?: Record<string, number>;
   fieldProvenance?: Record<string, string>;
+  /**
+   * Values a person confirmed or corrected by hand (e.g. an imported report's
+   * academic year). Kept apart from the extraction confidence, which stays as
+   * extracted; the stated name is not an authenticated identity.
+   */
+  manualConfirmations?: Record<string, { value: unknown; previous: unknown; confirmedByName: string; at: string }>;
   comments: { id: string; fieldKey?: string; author?: string; authorName?: string; role?: string; text: string; date?: string; createdAt?: string }[];
   timeline: { action: string; actor: string; timestamp: string; note?: string }[];
   isStale?: boolean;

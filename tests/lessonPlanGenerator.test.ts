@@ -67,7 +67,7 @@ function thematicPlan(): ThematicPlan {
     totalAnnualHours: 4,
     programTargetHours: 4,
     status: 'draft',
-    calendar: { term1Weeks: 16, term2Weeks: 18, holidays: [] },
+    calendar: { term1Weeks: 16, term2Weeks: 18, holidays: [], source: 'user_confirmed' },
     validationErrors: [],
     createdAt: '',
     updatedAt: '',

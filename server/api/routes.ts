@@ -54,6 +54,7 @@ import { repository } from '../store/repository.js';
 import {
   generateThematicPlan,
   validateThematicPlanDeterministically,
+  thematicPlanNotEvaluated,
 } from '../pipeline/thematicPlanGenerator.js';
 import { generateLessonPlanFromRow } from '../pipeline/lessonPlanGenerator.js';
 import { computeItemAnalysis, gradeSubmissionDeterministically } from '../pipeline/autoGrader.js';
@@ -1023,6 +1024,7 @@ export function createApiRouter(): Router {
         // === 0 must not slip through as a value.
         weeklyHours: req.body.weeklyHours,
         totalAnnualHours: req.body.totalAnnualHours,
+        calendar: req.body.calendar,
       });
 
       res.json({ plan });
@@ -1043,7 +1045,9 @@ export function createApiRouter(): Router {
     if (!plan) return res.status(404).json({ error: 'Thematic plan not found' });
     const outcomes = repository.getConfirmedOutcomes(plan.subject, plan.grade);
     const errors = validateThematicPlanDeterministically(plan, outcomes);
-    res.json({ errors, valid: errors.length === 0 });
+    const notEvaluated = thematicPlanNotEvaluated(plan);
+    // "valid" only when nothing failed AND nothing was skipped.
+    res.json({ errors, notEvaluated, valid: errors.length === 0 && notEvaluated.length === 0 });
   });
 
   router.get('/thematic-plans/:id/export/csv', (req: Request, res: Response) => {
@@ -1245,13 +1249,13 @@ export function createApiRouter(): Router {
 
   router.post('/reports/consolidate', (req: Request, res: Response) => {
     try {
-      const {
-        templateId = 'tpl-method-unit',
-        schoolId = 'sch-1',
-        academicYear = '2026-2027',
-        period = 'half_year',
-        subjectGroup,
-      } = req.body;
+      // No defaults: the form, school, year and period are chosen explicitly.
+      // Unknown school / template are rejected by consolidateSchoolReport.
+      const { templateId, schoolId, academicYear, period, subjectGroup } = req.body;
+      requireText({ templateId, schoolId, academicYear, period });
+      if (!['term', 'half_year', 'year', 'on_demand'].includes(period)) {
+        throw new UserInputError(`Անհայտ ժամանակահատված՝ «${period}»:`);
+      }
 
       const consolidated = repository.consolidateSchoolReport(
         templateId,
@@ -1298,6 +1302,42 @@ export function createApiRouter(): Router {
     if (!report) return res.status(404).json({ error: 'Report not found' });
     const reviewResult = runReportReview(report);
     res.json({ review: reviewResult });
+  });
+
+  // Manual confirmation / correction of report metadata (V1: academicYear).
+  // Writes report.academicYear (the field the reviewer matches plans by),
+  // never report.data, and records who (stated name) and what changed.
+  router.put('/reports/:id/metadata', (req: Request, res: Response) => {
+    try {
+      const report = repository.getReport(req.params.id);
+      if (!report) return res.status(404).json({ error: 'Report not found' });
+      const { academicYear, confirmedByName } = req.body;
+      requireText({ confirmedByName });
+      if (academicYear !== null && (typeof academicYear !== 'string' || !/^\d{4}\s*[-–]\s*\d{4}$/.test(academicYear.trim()))) {
+        throw new UserInputError('Ուսումնական տարին պետք է լինի «2025-2026» ձևով կամ դատարկ (null):');
+      }
+      const value = academicYear === null ? null : academicYear.trim().replace(/\s*[-–]\s*/, '-');
+      const at = new Date().toISOString();
+      const updated = {
+        ...report,
+        academicYear: value,
+        manualConfirmations: {
+          ...report.manualConfirmations,
+          academicYear: { value, previous: report.academicYear, confirmedByName: confirmedByName.trim(), at },
+        },
+        fieldProvenance: {
+          ...report.fieldProvenance,
+          academicYear: `Ձեռքով հաստատված՝ ${confirmedByName.trim()} (նշված անուն), ${at.slice(0, 10)}${
+            report.fieldProvenance?.academicYear ? `. նախկին աղբյուր՝ ${report.fieldProvenance.academicYear}` : ''
+          }`,
+        },
+        timeline: [...report.timeline, { action: 'metadata_confirmed', actor: confirmedByName.trim(), timestamp: at, note: `academicYear: ${report.academicYear ?? '—'} → ${value ?? '—'}` }],
+        updatedAt: at,
+      };
+      res.json({ report: repository.saveReport(updated) });
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
   });
 
   router.put('/reports/:id/status', (req: Request, res: Response) => {

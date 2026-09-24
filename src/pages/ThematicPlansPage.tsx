@@ -29,7 +29,7 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
   const t = translations[lang];
   const [plans, setPlans] = useState<ThematicPlan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<ThematicPlan | null>(null);
-  const [validationResult, setValidationResult] = useState<{ valid: boolean; errors: string[] } | null>(null);
+  const [validationResult, setValidationResult] = useState<{ valid: boolean; errors: string[]; notEvaluated?: string[] } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   // Hours and teacher are asked for, never assumed: the weekly and annual
@@ -38,11 +38,18 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
   const [showGenerateForm, setShowGenerateForm] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState('');
   const [totalAnnualHours, setTotalAnnualHours] = useState('');
+  // Optional: the school's teaching weeks per term. Without them the calendar
+  // check is reported as not evaluated; nothing is assumed.
+  const [term1Weeks, setTerm1Weeks] = useState('');
+  const [term2Weeks, setTerm2Weeks] = useState('');
+  const calendarGiven = term1Weeks.trim() !== '' || term2Weeks.trim() !== '';
+  const calendarValid = !calendarGiven || (/^[1-9][0-9]*$/.test(term1Weeks.trim()) && /^[1-9][0-9]*$/.test(term2Weeks.trim()));
   const [teacherName, setTeacherName] = useState('');
 
   const generateReady =
     /^[1-9][0-9]*$/.test(weeklyHours.trim()) &&
     /^[1-9][0-9]*$/.test(totalAnnualHours.trim()) &&
+    calendarValid &&
     teacherName.trim() !== '';
 
   useEffect(() => {
@@ -92,6 +99,7 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
           teacherName: teacherName.trim(),
           weeklyHours: Number(weeklyHours),
           totalAnnualHours: Number(totalAnnualHours),
+          calendar: calendarGiven ? { term1Weeks: Number(term1Weeks), term2Weeks: Number(term2Weeks) } : undefined,
         }),
       });
       const data = await res.json();
@@ -189,6 +197,27 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
               />
             </label>
             <label className="space-y-1">
+              <span className="font-semibold text-gray-900">{t.thematicPlan.term1Weeks}</span>
+              <input
+                type="number"
+                min={1}
+                value={term1Weeks}
+                onChange={(e) => setTerm1Weeks(e.target.value)}
+                className="w-full p-2 bg-gray-50 border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-gray-900">{t.thematicPlan.term2Weeks}</span>
+              <input
+                type="number"
+                min={1}
+                value={term2Weeks}
+                onChange={(e) => setTerm2Weeks(e.target.value)}
+                className="w-full p-2 bg-gray-50 border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+            </label>
+            <p className="sm:col-span-3 text-gray-700">{t.thematicPlan.calendarHint}</p>
+            <label className="space-y-1">
               <span className="font-semibold text-gray-900">Ուսուցիչ *</span>
               <input
                 type="text"
@@ -234,8 +263,17 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
             <span className="font-bold">
               {validationResult.valid
                 ? 'Պլանն անցել է բոլոր դետերմինիստիկ ստուգումները՝ գրանցամատյանի հաստատված վերջնարդյունքների նկատմամբ:'
-                : 'Հայտնաբերվել են չափորոշչային անհամապատասխանություններ:'}
+                : validationResult.errors.length > 0
+                ? 'Հայտնաբերվել են չափորոշչային անհամապատասխանություններ:'
+                : 'Սխալներ չեն հայտնաբերվել, բայց ոչ բոլոր ստուգումներն են կատարվել:'}
             </span>
+            {(validationResult.notEvaluated ?? []).length > 0 && (
+              <ul className="list-disc list-inside space-y-0.5 text-gray-800">
+                {validationResult.notEvaluated!.map((n, i) => (
+                  <li key={i}>{n}</li>
+                ))}
+              </ul>
+            )}
             {validationResult.errors.length > 0 && (
               <ul className="list-disc list-inside space-y-0.5 text-amber-800">
                 {validationResult.errors.map((err, i) => (

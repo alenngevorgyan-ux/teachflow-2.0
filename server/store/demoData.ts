@@ -500,6 +500,7 @@ export function getDemoThematicPlans(): ThematicPlan[] {
       totalAnnualHours: 68,
       programTargetHours: 68,
       status: 'approved',
+      // DEMO DATA: synthetic calendar for the seeded plan only.
       calendar: {
         term1Weeks: 16,
         term2Weeks: 18,
@@ -508,6 +509,7 @@ export function getDemoThematicPlans(): ThematicPlan[] {
           { name: 'Ձմեռային արձակուրդներ', dates: '29.12 - 11.01' },
           { name: 'Գարնանային արձակուրդներ', dates: '23.03 - 29.03' },
         ],
+        source: 'demo',
       },
       validationErrors: [],
       createdAt: '2026-08-28T09:00:00Z',

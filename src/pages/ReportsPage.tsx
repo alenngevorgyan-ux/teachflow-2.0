@@ -94,26 +94,77 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
     }
   };
 
+  // Manual confirmation of the academic year (kept apart from report.data).
+  const [yearDraft, setYearDraft] = useState('');
+  const [yearName, setYearName] = useState('');
+  const [yearSaving, setYearSaving] = useState(false);
+  const [yearError, setYearError] = useState<string | null>(null);
+  useEffect(() => {
+    setYearDraft(selectedReport?.academicYear ?? '');
+    setYearError(null);
+  }, [selectedReport?.id]);
+
+  const handleConfirmYear = async () => {
+    if (!selectedReport) return;
+    setYearSaving(true);
+    setYearError(null);
+    try {
+      const res = await fetch(`/api/reports/${selectedReport.id}/metadata`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ academicYear: yearDraft.trim() === '' ? null : yearDraft.trim(), confirmedByName: yearName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      setReports((prev) => prev.map((r) => (r.id === data.report.id ? data.report : r)));
+      setSelectedReport(data.report);
+    } catch (err) {
+      setYearError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setYearSaving(false);
+    }
+  };
+
+  // Consolidation inputs are chosen explicitly: nothing is preselected.
+  const [showConsolidate, setShowConsolidate] = useState(false);
+  const [consTemplate, setConsTemplate] = useState('');
+  const [consPeriod, setConsPeriod] = useState('');
+  const [consYear, setConsYear] = useState('');
+  const [consError, setConsError] = useState<string | null>(null);
+  const aggregateTemplates = templates.filter((tpl) => tpl.aggregatesFrom);
+  const acceptedYears = [
+    ...new Set(
+      reports
+        .filter((r) => r.schoolId === pinnedContext.schoolId && (r.status === 'accepted_by_director' || r.status === 'included_in_school_report'))
+        .map((r) => r.academicYear)
+        .filter((y): y is string => !!y)
+    ),
+  ];
+
   const handleConsolidateSchoolReport = async () => {
+    if (!consTemplate || !consPeriod || !consYear.trim()) return;
     setIsConsolidating(true);
+    setConsError(null);
     try {
       const res = await fetch('/api/reports/consolidate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          templateId: 'tpl-method-unit',
+          templateId: consTemplate,
           schoolId: pinnedContext.schoolId,
-          academicYear: pinnedContext.academicYear,
-          period: 'half_year',
+          academicYear: consYear.trim(),
+          period: consPeriod,
         }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
       if (data.report) {
         setReports((prev) => [data.report, ...prev]);
         setSelectedReport(data.report);
+        setShowConsolidate(false);
       }
     } catch (err) {
-      console.error(err);
+      setConsError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsConsolidating(false);
     }
@@ -185,7 +236,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
 
           {(role === 'director' || role === 'methodologist' || role === 'admin') && (
             <button
-              onClick={handleConsolidateSchoolReport}
+              onClick={() => setShowConsolidate((v) => !v)}
+              aria-expanded={showConsolidate}
               disabled={isConsolidating}
               className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
             >
@@ -195,6 +247,64 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
           )}
         </div>
       </div>
+
+      {showConsolidate && (
+        <section className="tf-section" aria-labelledby="consolidate-title">
+          <h2 id="consolidate-title">{t.reports.consolidateSchool}</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(14rem, 1fr))', gap: 12 }}>
+            <label className="tf-field">
+              <span>{t.reports.consolidateTemplate}</span>
+              <select className="tf-select" value={consTemplate} onChange={(e) => setConsTemplate(e.target.value)}>
+                <option value="">{t.reports.consolidateChoose}</option>
+                {aggregateTemplates.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.name.hy} ({tpl.version})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="tf-field">
+              <span>{t.reports.consolidatePeriod}</span>
+              <select className="tf-select" value={consPeriod} onChange={(e) => setConsPeriod(e.target.value)}>
+                <option value="">{t.reports.consolidateChoose}</option>
+                <option value="term">{t.reports.periodTerm}</option>
+                <option value="half_year">{t.reports.periodHalfYear}</option>
+                <option value="year">{t.reports.periodYear}</option>
+                <option value="on_demand">{t.reports.periodOnDemand}</option>
+              </select>
+            </label>
+            <label className="tf-field">
+              <span>{t.reports.consolidateYear}</span>
+              <input className="tf-input" list="consolidate-years" value={consYear} onChange={(e) => setConsYear(e.target.value)} />
+              <datalist id="consolidate-years">
+                {acceptedYears.map((y) => (
+                  <option key={y} value={y} />
+                ))}
+              </datalist>
+              <span>
+                {t.reports.consolidateYearHint}: {acceptedYears.join(', ') || '—'}
+              </span>
+            </label>
+            <div className="tf-field">
+              <span>{t.reports.consolidateSchoolLabel}</span>
+              <span style={{ color: 'var(--tf-ink)' }}>{pinnedContext.schoolName ?? pinnedContext.schoolId}</span>
+            </div>
+          </div>
+          {consError && (
+            <div className="tf-notice" data-tone="error" role="alert">
+              {t.reports.consolidateFailed}: {consError}
+            </div>
+          )}
+          <div className="tf-actions">
+            <button className="tf-btn tf-btn--primary" disabled={isConsolidating || !consTemplate || !consPeriod || !consYear.trim()} onClick={handleConsolidateSchoolReport}>
+              {t.reports.consolidateSubmit}
+            </button>
+            <button className="tf-btn" onClick={() => setShowConsolidate(false)}>
+              {t.reports.consolidateCancel}
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* Unconfirmed Template Warning Banner */}
       <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl text-xs text-amber-900 flex items-center justify-between">
@@ -356,6 +466,42 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* Academic year: extracted value, its provenance, and manual confirmation */}
+              <section className="p-6 border-b border-gray-100 text-xs space-y-2" aria-labelledby="year-title">
+                <h3 id="year-title" className="font-bold text-gray-900 text-sm">
+                  {t.reports.yearTitle}: {selectedReport.academicYear ?? t.reports.yearMissing}
+                </h3>
+                <p className="text-gray-700">
+                  {t.reports.yearProvenance}: {selectedReport.fieldProvenance?.academicYear ?? '—'}
+                  {selectedReport.fieldConfidences?.academicYear !== undefined &&
+                    ` · ${t.reports.yearConfidence}: ${Math.round(selectedReport.fieldConfidences.academicYear * 100)}%`}
+                </p>
+                {selectedReport.manualConfirmations?.academicYear && (
+                  <p className="text-gray-700">
+                    {t.reports.yearManual}: {selectedReport.manualConfirmations.academicYear.confirmedByName},{' '}
+                    {selectedReport.manualConfirmations.academicYear.at.slice(0, 10)}
+                  </p>
+                )}
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="tf-field" style={{ flex: '1 1 12rem' }}>
+                    <span>{t.reports.yearInput}</span>
+                    <input className="tf-input" value={yearDraft} onChange={(e) => setYearDraft(e.target.value)} />
+                  </label>
+                  <label className="tf-field" style={{ flex: '1 1 16rem' }}>
+                    <span>{t.reports.yearName}</span>
+                    <input className="tf-input" value={yearName} onChange={(e) => setYearName(e.target.value)} />
+                  </label>
+                  <button className="tf-btn" disabled={!yearName.trim() || yearSaving} onClick={handleConfirmYear}>
+                    {t.reports.yearConfirm}
+                  </button>
+                </div>
+                {yearError && (
+                  <div className="tf-notice" data-tone="error" role="alert">
+                    {yearError}
+                  </div>
+                )}
+              </section>
 
               {/* Field Provenance & Confidences Section */}
               {selectedReport.fieldConfidences && Object.keys(selectedReport.fieldConfidences).length > 0 && (

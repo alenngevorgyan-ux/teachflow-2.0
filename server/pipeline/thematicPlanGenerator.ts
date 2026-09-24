@@ -21,6 +21,12 @@ export interface GenerateThematicPlanParams {
    * study weeks, so the caller must supply it.
    */
   totalAnnualHours: number;
+  /**
+   * The school's teaching weeks per term, as the teacher states them. Optional:
+   * without it the plan is still generated and the calendar check is reported
+   * as not evaluated. Nothing is assumed.
+   */
+  calendar?: { term1Weeks: unknown; term2Weeks: unknown };
   provider?: IModelProvider;
   modelId?: string;
 }
@@ -79,20 +85,34 @@ export function validateThematicPlanDeterministically(
     }
   }
 
-  // 4. Calendar & holiday check — bounds are driven by THIS plan's own calendar
-  // (term1Weeks + term2Weeks, which already net out holiday weeks per the RA
-  // school calendar convention), never a hardcoded constant. A schedule that
-  // overflows past the real number of teaching weeks fails here.
-  const totalTeachingWeeks = plan.calendar.term1Weeks + plan.calendar.term2Weeks;
-  for (const row of plan.rows) {
-    if (!row.plannedDates || row.weekNumber < 1 || row.weekNumber > totalTeachingWeeks) {
-      errors.push(
-        `Անվավեր շաբաթ «${row.topic}» թեմայի համար (շաբաթ #${row.weekNumber}): մատչելի է միայն 1-${totalTeachingWeeks} միջակայքը (${plan.calendar.term1Weeks} + ${plan.calendar.term2Weeks} ուսումնական շաբաթ, արձակուրդներից հետո):`
-      );
+  // 4. Calendar check — only against a calendar someone supplied (or labelled
+  // demo data). Without one it is not evaluated (see thematicPlanNotEvaluated),
+  // never checked against an assumed national calendar.
+  if (hasUsableCalendar(plan)) {
+    const cal = plan.calendar!;
+    const totalTeachingWeeks = cal.term1Weeks + cal.term2Weeks;
+    for (const row of plan.rows) {
+      if (!row.plannedDates || row.weekNumber < 1 || row.weekNumber > totalTeachingWeeks) {
+        errors.push(
+          `Անվավեր շաբաթ «${row.topic}» թեմայի համար (շաբաթ #${row.weekNumber}): մատչելի է միայն 1-${totalTeachingWeeks} միջակայքը (${cal.term1Weeks} + ${cal.term2Weeks} ուսումնական շաբաթ):`
+        );
+      }
     }
   }
 
   return errors;
+}
+
+function hasUsableCalendar(plan: ThematicPlan): boolean {
+  const c = plan.calendar;
+  return !!c && (c.source === 'user_confirmed' || c.source === 'demo') && c.term1Weeks > 0 && c.term2Weeks > 0;
+}
+
+/** Checks that could not run for this plan, with the reason. */
+export function thematicPlanNotEvaluated(plan: ThematicPlan): string[] {
+  return hasUsableCalendar(plan)
+    ? []
+    : ['Օրացույցային ստուգումը չի կատարվել. դպրոցի ուսումնական օրացույցը (շաբաթների քանակը) նշված չէ: Ընդհանուր ժամաքանակի և վերջնարդյունքների ստուգումները կատարվել են:'];
 }
 
 function getFactChunksForSubjectGrade(subject: string, grade: number) {
@@ -130,6 +150,10 @@ export async function generateThematicPlan(params: GenerateThematicPlanParams): 
   } = params;
 
   requirePositiveInt(weeklyHours, 'weeklyHours', 'շաբաթական ժամաքանակը');
+  if (params.calendar) {
+    requirePositiveInt(params.calendar.term1Weeks, 'calendar.term1Weeks', '1-ին կիսամյակի ուսումնական շաբաթների քանակը');
+    requirePositiveInt(params.calendar.term2Weeks, 'calendar.term2Weeks', '2-րդ կիսամյակի ուսումնական շաբաթների քանակը');
+  }
   requirePositiveInt(params.totalAnnualHours, 'totalAnnualHours', 'ծրագրով պահանջվող տարեկան ժամաքանակը');
   const targetHours = params.totalAnnualHours;
   const outcomes = repository.getConfirmedOutcomes(subject, grade);
@@ -171,16 +195,16 @@ export async function generateThematicPlan(params: GenerateThematicPlanParams): 
     actionName: 'generateThematicPlan',
   });
 
-  // Default standard calendar for RA schools (1-st semester 16 weeks, 2-nd semester 18 weeks)
-  const calendar = {
-    term1Weeks: 16,
-    term2Weeks: 18,
-    holidays: [
-      { name: 'Աշնանային արձակուրդներ', dates: '27.10 - 02.11' },
-      { name: 'Ձմեռային արձակուրդներ', dates: '29.12 - 11.01' },
-      { name: 'Գարնանային արձակուրդներ', dates: '23.03 - 29.03' },
-    ],
-  };
+  // The calendar is only what the teacher stated; there is no assumed default.
+  const calendar: ThematicPlan['calendar'] = params.calendar
+    ? {
+        term1Weeks: params.calendar.term1Weeks as number,
+        term2Weeks: params.calendar.term2Weeks as number,
+        holidays: [],
+        source: 'user_confirmed',
+        confirmedAt: new Date().toISOString(),
+      }
+    : null;
 
   // Deterministic scheduling from the model's proposed topics. Hours are taken
   // exactly as the model returned them — never patched to force-match
@@ -233,5 +257,6 @@ export async function generateThematicPlan(params: GenerateThematicPlanParams): 
   };
 
   plan.validationErrors = validateThematicPlanDeterministically(plan, outcomes);
+  plan.validationNotEvaluated = thematicPlanNotEvaluated(plan);
   return repository.saveThematicPlan(plan);
 }
