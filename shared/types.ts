@@ -29,8 +29,12 @@ export interface Source {
   role: SourceRole;
   version: string;
   effectiveFrom: string; // ISO date
+  /** Official end date, only when stated. Not set automatically on supersede. */
   effectiveTo?: string;
   status: SourceStatus;
+  /** System facts of a supersede: when this record was replaced, and by which source id. */
+  supersededAt?: string;
+  supersededBy?: string;
   sha256: string; // hash of original uploaded file
   isDemo: boolean; // true for seeded sample data
   uploadedAt: string;

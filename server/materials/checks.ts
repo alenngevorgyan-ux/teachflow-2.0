@@ -364,6 +364,13 @@ export function itemInputHash(item: MaterialItem, key: MaterialAnswerKeyEntry | 
       options: t.options,
       key: key ? [key.origin, key.optionLabels] : null,
       sources: review.selectedSources.map((s) => [s.purpose, s.sourceId, s.version, s.contentHash]),
+      // Whether each selected source is still usable (confirmed, active,
+      // unchanged): a superseded or unconfirmed source must not let an old
+      // result be reused.
+      usable: (() => {
+        const r = resolveSelectedSources(review);
+        return [r.program.map((x) => x.id).sort(), r.fact.map((x) => x.id).sort()];
+      })(),
       outcomes,
       optionBounds: optionBoundsRule(),
       prompts: [PROGRAM_SCOPE_PROMPT_VERSION, UNAMBIGUOUS_PROMPT_VERSION, 'judge:verifyClaim'],

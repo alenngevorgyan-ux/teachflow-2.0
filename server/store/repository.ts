@@ -396,7 +396,10 @@ export class JsonFileRepository implements IRepository {
       throw new Error(`Old source ${oldSourceId} not found`);
     }
     oldSource.status = 'superseded';
-    oldSource.effectiveTo = new Date().toISOString();
+    // When the record was replaced in TeachFlow is a system fact; the old
+    // version's official end date (effectiveTo) is not known and not invented.
+    oldSource.supersededAt = new Date().toISOString();
+    oldSource.supersededBy = newSource.id;
 
     newSource.status = 'active';
     this.sources.push(newSource);

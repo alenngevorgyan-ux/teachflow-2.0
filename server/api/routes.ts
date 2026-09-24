@@ -71,7 +71,7 @@ import {
 } from '../pipeline/privacyGuard.js';
 import { emisAdapter } from '../pipeline/emisAdapter.js';
 import { computeCategoryModelRecommendations, runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
-import { ingestSourceFile, parseSourceMetadata } from '../pipeline/sourceIngestion.js';
+import { buildSupersedingSource, ingestSourceFile, parseSourceMetadata } from '../pipeline/sourceIngestion.js';
 import { parseWorkspaceIntent } from '../pipeline/workspaceIntent.js';
 import { scanAnswerSheet } from '../pipeline/answerSheetScanner.js';
 import { generateAnswerSheetQrDataUrl } from '../pipeline/answerSheetQr.js';
@@ -261,40 +261,16 @@ export function createApiRouter(): Router {
     }
   });
 
-  router.post('/sources/:id/supersede', (req: Request, res: Response) => {
+  // A new version of a source: official particulars (version, effective
+  // date) are stated by the person, never derived; see buildSupersedingSource.
+  router.post('/sources/:id/supersede', async (req: Request, res: Response) => {
     try {
-      const oldId = req.params.id;
-      const oldSource = repository.getSource(oldId);
-      if (!oldSource) {
-        return res.status(404).json({ error: 'Source not found' });
-      }
-
-      const { newVersion, effectiveFrom, text } = req.body;
-      const contentToUse = text || oldSource.chunks.map((c) => c.text).join('\n\n');
-      const newSourceId = `src-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      const sha256 = crypto.createHash('sha256').update(contentToUse).digest('hex');
-
-      const newChunks = oldSource.chunks.map((c, idx) => ({
-        id: c.page !== undefined ? `${newSourceId}#p${c.page}#c${idx + 1}` : `${newSourceId}#c${idx + 1}`,
-        sourceId: newSourceId,
-        page: c.page,
-        text: c.text,
-      }));
-
-      const newSource: Source = {
-        ...revokeSourceConfirmation(oldSource),
-        id: newSourceId,
-        version: newVersion || `${oldSource.version}-next`,
-        effectiveFrom: effectiveFrom || new Date().toISOString().substring(0, 10),
-        status: 'active',
-        sha256,
-        isDemo: false,
-        uploadedAt: new Date().toISOString(),
-        chunks: newChunks,
-      };
-
-      const result = repository.supersedeSource(oldId, newSource);
-      res.json(result);
+      const oldSource = repository.getSource(req.params.id);
+      if (!oldSource) return res.status(404).json({ error: 'Source not found' });
+      if (oldSource.status !== 'active') throw new UserInputError('Միայն ակտիվ աղբյուրը կարելի է փոխարինել նոր տարբերակով:');
+      const { source, warnings } = await buildSupersedingSource(oldSource, req.body);
+      const result = repository.supersedeSource(oldSource.id, source);
+      res.json({ ...result, warnings });
     } catch (err: unknown) {
       sendError(res, err);
     }
@@ -624,7 +600,8 @@ export function createApiRouter(): Router {
   });
 
   router.get('/materials', (_req: Request, res: Response) => {
-    const list = repository.getMaterialReviews().map((r) => ({
+    // Loaded through the service so source changes are reflected in the status.
+    const list = repository.getMaterialReviews().map((x) => getReview(x.id)).map((r) => ({
       id: r.id,
       fileName: r.fileName,
       subject: r.subject,

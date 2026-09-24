@@ -759,3 +759,19 @@ describe('material review: dependency-scoped invalidation', () => {
     expect(reviewStatus(after).counts.staleItems).toBe(0);
   });
 });
+
+describe('material review: a superseded source invalidates dependent results', () => {
+  it('results go stale, the status is not final, and a new check cannot use the superseded source', async () => {
+    const { r, deps } = await readyForChecks();
+    await runChecks(r.id, deps);
+    // The FACT source is superseded (as POST /sources/:id/supersede does).
+    store.sources = store.sources.map((s) => (s.id === 'fact-1' ? { ...s, status: 'superseded' as const, supersededAt: '2026-09-24T00:00:00Z' } : s));
+    const after = getReview(r.id);
+    expect(after.results.every((x) => x.stale)).toBe(true);
+    expect(reviewStatus(after).final).toBe(false);
+    const rechecked = await runChecks(r.id, deps);
+    const fact = rechecked.results[0].checks.find((c) => c.checkId === 'fact_support')!;
+    expect(fact.status).toBe('not_evaluated');
+    expect(rechecked.log.some((l) => l.action === 'source_problems')).toBe(true);
+  });
+});

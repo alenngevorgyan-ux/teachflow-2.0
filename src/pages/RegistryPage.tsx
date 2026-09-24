@@ -56,6 +56,8 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
   // Supersede modal state
   const [newVersionStr, setNewVersionStr] = useState('');
   const [supersedeContent, setSupersedeContent] = useState('');
+  const [supersedeEffectiveFrom, setSupersedeEffectiveFrom] = useState('');
+  const [supersedeError, setSupersedeError] = useState<string | null>(null);
 
   // Extract outcomes modal
   const [outcomeSourceId, setOutcomeSourceId] = useState<string | null>(null);
@@ -153,25 +155,28 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
   };
 
   const handleSupersede = async () => {
-    if (!supersedeModalSource || !newVersionStr) return;
+    if (!supersedeModalSource || !newVersionStr.trim() || !supersedeEffectiveFrom) return;
     setLoading(true);
+    setSupersedeError(null);
     try {
       const res = await fetch(`/api/sources/${supersedeModalSource.id}/supersede`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          newVersion: newVersionStr,
+          newVersion: newVersionStr.trim(),
+          effectiveFrom: supersedeEffectiveFrom,
           text: supersedeContent || undefined,
         }),
       });
-      if (res.ok) {
-        setSupersedeModalSource(null);
-        setNewVersionStr('');
-        setSupersedeContent('');
-        await fetchSourcesAndOutcomes();
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      setSupersedeModalSource(null);
+      setNewVersionStr('');
+      setSupersedeEffectiveFrom('');
+      setSupersedeContent('');
+      await fetchSourcesAndOutcomes();
     } catch (err) {
-      console.error('Supersede failed:', err);
+      setSupersedeError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -723,7 +728,7 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
                         <button
                           onClick={() => {
                             setSupersedeModalSource(src);
-                            setNewVersionStr(`${src.version}.1`);
+                            setNewVersionStr('');
                           }}
                           className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-100 flex items-center gap-1"
                           title="Փոխարինել նոր տարբերակով (Supersede)"
@@ -893,6 +898,22 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
               </div>
               <div>
                 <label className="block font-medium text-gray-700 mb-1">
+                  {t.registry.effectiveFrom} *
+                  <input
+                    type="date"
+                    value={supersedeEffectiveFrom}
+                    onChange={(e) => setSupersedeEffectiveFrom(e.target.value)}
+                    className="mt-1 w-full border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900"
+                  />
+                </label>
+              </div>
+              {supersedeError && (
+                <div className="tf-notice" data-tone="error" role="alert">
+                  {supersedeError}
+                </div>
+              )}
+              <div>
+                <label className="block font-medium text-gray-700 mb-1">
                   Թարմացված տեքստ (եթե տեքստը փոխվել է, հակառակ դեպքում կպահպանվի նախորդը)
                 </label>
                 <textarea
@@ -916,7 +937,7 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
               <button
                 type="button"
                 onClick={handleSupersede}
-                disabled={loading || !newVersionStr}
+                disabled={loading || !newVersionStr.trim() || !supersedeEffectiveFrom}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700"
               >
                 Հաստատել փոխարինումը

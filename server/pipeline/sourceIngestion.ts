@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { assertNoPii } from './privacyGuard.js';
+import { UserInputError } from './errors.js';
 import { Source, SourceChunk } from '../../shared/types.js';
 import { repository } from '../store/repository.js';
 import { embedChunksInPlace } from '../providers/embeddingProvider.js';
@@ -156,4 +157,70 @@ export function parseSourceMetadata(body: Record<string, unknown>): { metadata?:
 
   if (errors.length > 0) return { errors };
   return { metadata: { title, authority, docType, subject, grades, role, version, effectiveFrom }, errors };
+}
+
+/**
+ * A new version of an existing source. Three things are kept apart:
+ * - the internal revision id (a new generated source id) and the upload time
+ *   (now) — system facts;
+ * - the official particulars (version, effective date) — stated by the person,
+ *   with the same rules as a new upload; never derived ("<old>-next") and
+ *   never defaulted to today. Missing -> the request is refused;
+ * - the content: new text is chunked and used (and privacy-checked); without
+ *   new text the old chunks, pages and file hash are carried over unchanged.
+ * The demo flag is inherited (a demo source cannot become a "real" one by
+ * being superseded) and no confirmation is carried over.
+ */
+export async function buildSupersedingSource(
+  old: Source,
+  body: { newVersion?: unknown; effectiveFrom?: unknown; text?: unknown }
+): Promise<{ source: Source; warnings: string[] }> {
+  const errors: string[] = [];
+  const version = typeof body.newVersion === 'string' ? body.newVersion.trim() : '';
+  const effectiveFrom = typeof body.effectiveFrom === 'string' ? body.effectiveFrom.trim() : '';
+  if (!version) errors.push('newVersion');
+  else if (version === old.version) errors.push('newVersion (must differ from the current version)');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) || Number.isNaN(Date.parse(effectiveFrom))) errors.push('effectiveFrom (YYYY-MM-DD)');
+  const text = typeof body.text === 'string' && body.text.trim() !== '' ? body.text : undefined;
+  if (body.text !== undefined && body.text !== null && typeof body.text !== 'string') errors.push('text');
+  if (errors.length) throw new UserInputError(`Նոր տարբերակի պարտադիր կամ սխալ դաշտեր՝ ${errors.join(', ')}:`);
+
+  const id = `src-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  let chunks: SourceChunk[];
+  let sha256: string;
+  let ocr: boolean | undefined;
+  const warnings: string[] = [];
+  if (text) {
+    assertNoPii(text, 'source.text', { allowContacts: true });
+    // Pasted text has no pages: chunks carry no page number (never invented).
+    chunks = chunkPageText(text).map((t, i) => ({ id: `${id}#c${i + 1}`, sourceId: id, text: t }));
+    sha256 = crypto.createHash('sha256').update(text).digest('hex');
+    ocr = undefined;
+    const emb = await embedChunksInPlace(chunks);
+    if (emb.warning) warnings.push(emb.warning);
+  } else {
+    chunks = old.chunks.map((c, i) => ({
+      ...c,
+      id: c.page !== undefined ? `${id}#p${c.page}#c${i + 1}` : `${id}#c${i + 1}`,
+      sourceId: id,
+    }));
+    sha256 = old.sha256;
+    ocr = old.ocr;
+  }
+
+  const { confirmation: _dropped, ...rest } = old;
+  const source: Source = {
+    ...rest,
+    id,
+    version,
+    effectiveFrom,
+    effectiveTo: undefined,
+    status: 'active',
+    sha256,
+    isDemo: old.isDemo,
+    ocr,
+    uploadedAt: new Date().toISOString(),
+    chunks,
+  };
+  return { source, warnings };
 }

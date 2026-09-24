@@ -86,6 +86,11 @@ function load(id: string): MaterialReview {
     r.segmentation.atGroupCount = r.acceptedGroups.length;
   }
   for (const s of r.suggestions) if ((s.status as string) === 'stale') s.status = 'superseded';
+  // A selected source that was superseded, changed or lost its confirmation
+  // since the checks ran: every result may depend on it, so none stays fresh.
+  if (r.selectedSources.length && r.results.some((x) => !x.stale) && resolveSelectedSources(r).problems.length) {
+    for (const x of r.results) x.stale = true;
+  }
   for (const run of r.runs) {
     if (run.status === 'running' && Date.now() - Date.parse(run.startedAt) > RUN_INTERRUPTED_AFTER_MS) {
       run.status = 'failed';
