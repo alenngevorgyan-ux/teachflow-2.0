@@ -150,7 +150,7 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
           <p className="text-xs text-gray-700 mt-1">{t.thematicPlan.subtitle}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleValidate}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl text-xs font-semibold shadow-2xs transition-colors"

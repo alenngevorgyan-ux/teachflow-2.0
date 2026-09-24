@@ -35,8 +35,8 @@ export const translations = {
       aboutData: 'Տվյալներ և գաղտնիություն',
     },
     common: {
-      demoBadge: 'ՑՈՒՑԱԴՐԱԿԱՆ ՆՄՈՒՇ — Սինթետիկ տվյալներ',
-      simulatedBadge: 'ՍԻՄՈՒԼՅԱՑՎԱԾ — առանց իրական մոդելային կանչի',
+      demoBadge: 'Ցուցադրական նմուշ — սինթետիկ տվյալներ',
+      simulatedBadge: 'Սիմուլյացված — առանց իրական մոդելային կանչի',
       simulatedNotice: 'Այս գործառույթը դեռ չի կանչում իրական AI մոդել. արդյունքը ձևանմուշային/քարտեզագրված է, ոչ թե գեներացված:',
       pinnedContext: 'Ակտիվ համատեքստ (Pinned Context)',
       subject: 'Առարկա',
@@ -590,8 +590,8 @@ export const translations = {
       aboutData: 'Данные и приватность',
     },
     common: {
-      demoBadge: 'ДЕМО ОБРАЗЕЦ — Синтетические данные',
-      simulatedBadge: 'СИМУЛЯЦИЯ — без реального вызова модели',
+      demoBadge: 'Демо-образец — синтетические данные',
+      simulatedBadge: 'Симуляция — без реального вызова модели',
       simulatedNotice: 'Эта функция пока не вызывает настоящую AI-модель: результат шаблонный, а не сгенерированный.',
       pinnedContext: 'Закрепленный контекст',
       subject: 'Предмет',
@@ -1145,8 +1145,8 @@ export const translations = {
       aboutData: 'Data & Privacy',
     },
     common: {
-      demoBadge: 'DEMO SAMPLE — Synthetic Data',
-      simulatedBadge: 'SIMULATED — no real model call',
+      demoBadge: 'Demo sample — synthetic data',
+      simulatedBadge: 'Simulated — no real model call',
       simulatedNotice: 'This feature does not yet call a real AI model: the output is templated/mapped, not generated.',
       pinnedContext: 'Pinned Context',
       subject: 'Subject',

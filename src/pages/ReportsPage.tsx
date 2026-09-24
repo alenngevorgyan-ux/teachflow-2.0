@@ -345,7 +345,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-200 text-gray-800 font-medium">
-                    {r.status}
+                    {(t.reports.statuses as Record<string, string>)[r.status] ?? r.status}
                   </span>
                   {r.importedFromLegacy && (
                     <span className="text-[10px] text-purple-700 font-semibold">Legacy Doc</span>
@@ -385,7 +385,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
               <div className="p-4 bg-indigo-50/40 border-b border-gray-100 text-xs flex flex-wrap items-center gap-2">
                 <span className="font-bold text-gray-700">Կարգավիճակ՝</span>
                 <span className="px-2.5 py-1 rounded-full font-bold bg-indigo-100 text-indigo-800">
-                  {selectedReport.status}
+                  {(t.reports.statuses as Record<string, string>)[selectedReport.status] ?? selectedReport.status}
                 </span>
 
                 {/* Workflow Transitions depending on role */}
