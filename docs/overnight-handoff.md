@@ -168,3 +168,49 @@ Kept separate and unchanged in status:
 - live model splitting (one call, synthetic file, overnight);
 - content checks on real sources (not done: no real sources);
 - the Microsoft Word layout check (not done: needs a person at the machine).
+
+## Third pass — independent review of 21569c8 (R1–R3, demo context)
+
+Review package: `TeachFlow_Review_21569c8.zip` (REVIEW.md, reproduce.patch). All four REPRO scenarios reproduced on `21569c8` before any change (4 passed = the defects were present).
+
+| Finding | Fix | Commit |
+|---|---|---|
+| R3 — a failed LLM rule-judge call was listed as an applied rule | LLM rules count as applied only after a validated verdict (pass or fail); failed calls go to `methodRulesNotEvaluated` and keep their visible error | `472dbf3` |
+| R1 — a proposal based on a superseded, changed or unconfirmed source could still be accepted (old tab or API) | Dependency contract (below); `decide(accept)` requires the proposal's basis to be the current fresh result, otherwise 409 with no document change | `2daed04` |
+| R2 — a changed or disabled method rule left a review "final"; an ordinary check skipped it | Same contract: the fingerprint is compared on every load, before choosing what to re-check and before status, export and report | `2daed04` |
+| Demo context flowed into real plan creation (`demo-v1`, `2026-2027`) | Program version and year are typed for each plan (form and chat chip); a plan for a demo school is stored and shown with `isDemoContext` and marked in its EMIS export. There is no real-school registry, and none was invented | `a2d26a6` |
+
+**Dependency contract.** Each check result stores a fingerprint of the review-wide dependencies it used:
+- the selected sources, and whether each is still usable (confirmed, active, unchanged);
+- the confirmed outcomes of the selected program;
+- the option-count rule's state and parameters;
+- the prompt versions.
+
+On every load, a result whose fingerprint differs (or that has none) becomes stale, and the proposals built on it are superseded. A check run that finishes after the dependencies changed is discarded. Reuse of results with identical inputs is unchanged; this is tested with no new model calls.
+
+**Regression tests.** The reviewer's REPRO tests became tests of the safe behaviour:
+- 7 new review-level tests fail on `21569c8`: source superseded or confirmation revoked between proposal and accept, a fresh proposal needed after re-check, minOptions raised, rule switched off, a confirmed outcome changed, the change report following.
+- The R3 test fails on the previous validator.
+- A new test checks that a successful "fail" verdict still counts as applied.
+
+**UI evidence** (disposable fixture environment, synthetic data, `scripts/ui-supersede-check.mjs`, `docs/review-21569c8/`):
+- a finished review is set up through the API;
+- the FACT source is replaced **through the Registry dialog in Chrome** (the version field starts empty; confirm is disabled until version and date are given);
+- result: the old source is `superseded` with no invented `effectiveTo`; the new version `fixture-2` uses the new text and is `unconfirmed`;
+- the old review is 3/3 stale, `final=false`, and its proposal `superseded`; an old-tab accept gets **409** with the revision unchanged and 0 accepted groups;
+- the review page shows stale and draft;
+- the plan form starts with empty text fields, its submit is disabled, and the demo-school note is shown.
+
+**Checks:**
+- `tsc --noEmit` clean; `npm test` 37 files / **425** tests passing; `vite build` OK.
+- The fixture E2E reran and passed. The log now states exactly "1 text patch + structured keyChange" for the accepted fix.
+- One E2E run was slow to close headless Chrome; it finished with "E2E OK", and no Chrome process was left.
+
+**Not changed and still open:**
+- the real-school registry;
+- content checks on real sources;
+- the Microsoft Word layout check;
+- Armenian linguistic QA;
+- live-model runs beyond the one splitting call.
+
+**The pilot is not ready.**

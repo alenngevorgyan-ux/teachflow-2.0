@@ -1,0 +1,9 @@
+review mat-muf9jcoe-27ac08: 3 results, fresh=3, proposal sug-item-2-muf9jd6s-1 (proposed)
+dialog opened; version field initially ""
+confirm disabled before particulars: true
+old: status=superseded, supersededBy=src-1790238099018-lqwd, effectiveTo=(none)
+new: version=fixture-2, effectiveFrom=2026-09-24, isDemo=false, confirmationState=unconfirmed, text=["FIXTURE — նոր խմբագրություն: Ավարայրի ճակատամարտը տեղի է ունեցել 451 թվականին:"]
+old review: final=false, stale=3/3, proposal status=superseded, reasons=["3 հարցի ստուգումը հնացել է և պետք է կրկնել:","3 ստուգում ձախողվել է:","1 ստուգում պահանջում է որոշում:","2 ստուգում չի կատարվել:"]
+old-tab accept of the old proposal -> HTTP 409; revision r0-5167fb305948 (before r0-5167fb305948); accepted groups 0
+review page after supersede: stale badge shown=true, draft shown=true
+plan form: submit disabled=true, text inputs=["","",""], demo-school note shown=true

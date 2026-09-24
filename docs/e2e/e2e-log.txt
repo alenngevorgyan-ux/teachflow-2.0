@@ -1,5 +1,5 @@
 fixture banner visible
-uploaded -> mat-muf7ma19-cae75d; URL #/materials/mat-muf7ma19-cae75d
+uploaded -> mat-muf9m3q4-fb4bd0; URL #/materials/mat-muf9m3q4-fb4bd0
 structure proposed
 structure corrected by the teacher (question 3 -> open, wrong option removed) and saved
 without sources: content checks reported not evaluated, structural checks ran
@@ -11,10 +11,10 @@ focused block outline style: solid
 keyboard: accept button focusable («Ընդունել ուղղումը»), Tab -> «Մերժել առաջարկը»
 rejected: question 2 still has failed checks (fact_support, answer_unambiguous)
 re-checked at the new revision (items keyed in the edited key line): item-1, item-2; untouched item kept: item-3
-accepted linked key fix «2-գ→2-ա», key now ["ա"]; re-check done at r1-02d0bfeadbfa
+accepted fix: 1 text patch(es) «2-գ→2-ա» + structured keyChange ["ա"], key now ["ա"]; re-check done at r1-90f1d695f1b1
 repeated/stale accept -> HTTP 409
-reload restored revision r1-02d0bfeadbfa, 2 sources, decisions rejected/accepted
-download links: ["/api/materials/mat-muf7ma19-cae75d/export.docx","/api/materials/mat-muf7ma19-cae75d/changes.txt","/api/materials/mat-muf7ma19-cae75d/original.docx"]
+reload restored revision r1-90f1d695f1b1, 2 sources, decisions rejected/accepted
+download links: ["/api/materials/mat-muf9m3q4-fb4bd0/export.docx","/api/materials/mat-muf9m3q4-fb4bd0/changes.txt","/api/materials/mat-muf9m3q4-fb4bd0/original.docx"]
 downloaded corrected.docx (2970 bytes; status header draft; sha256 58cc0b0ed9b3c0d427f2cd1e45c7ce42548b61582d42206d6b49642beb50c1b6)
 downloaded original.docx (3321 bytes; status header -; sha256 5167fb305948d67ce640c52b9a66513635f5ef668ce098d78c6803d35c4c84bf)
 downloaded changes.txt (3156 bytes; status header -; sha256 -)

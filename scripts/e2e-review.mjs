@@ -185,7 +185,7 @@ if (!accepted || accepted.recheck !== 'done') fail('accepted fix was not re-chec
 if (!afterAccept.review.results.every((r) => !r.stale)) fail('results not fresh after accept');
 const rechecked = afterAccept.review.results.filter((r) => r.revision === afterAccept.review.revision).map((r) => r.itemId);
 step(`re-checked at the new revision (items keyed in the edited key line): ${rechecked.join(', ')}; untouched item kept: ${afterAccept.review.results.filter((r) => r.revision !== afterAccept.review.revision).map((r) => r.itemId).join(', ') || '-'}`);
-step(`accepted linked key fix «${accepted.group.patches.map((p) => `${p.expected}→${p.replacement}`).join(', ')}», key now ${JSON.stringify(afterAccept.structure.answerKey.find((k) => k.itemId === 'item-2').optionLabels)}; re-check done at ${afterAccept.review.revision}`);
+step(`accepted fix: ${accepted.group.patches.length} text patch(es) «${accepted.group.patches.map((p) => `${p.expected}→${p.replacement}`).join(', ')}» + structured keyChange ${JSON.stringify(accepted.keyChange ?? null)}, key now ${JSON.stringify(afterAccept.structure.answerKey.find((k) => k.itemId === 'item-2').optionLabels)}; re-check done at ${afterAccept.review.revision}`);
 await shot('07-accepted-1440');
 
 // 7. A stale decision (old revision) and a repeated decision are refused (409)
