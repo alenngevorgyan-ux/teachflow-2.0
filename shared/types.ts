@@ -108,6 +108,8 @@ export interface ItemTrace {
   itemId: string;
   factSources: { sourceId: string; version: string; chunkId: string; page?: number }[];
   methodRulesApplied: string[];
+  /** Active rules that could not be evaluated (no evaluator or bad parameters); each also has a 'warn' check. */
+  methodRulesNotEvaluated?: string[];
   templateId?: string;
   providerId: string;
   modelId: string;

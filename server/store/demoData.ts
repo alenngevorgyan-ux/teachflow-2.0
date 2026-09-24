@@ -211,6 +211,60 @@ export function getDemoSources(): Source[] {
   return [scienceFactSource, scienceMethodSource, historyFactSource, historyMethodSource];
 }
 
+/**
+ * Seeded method rules. Every deterministic rule here must have an evaluator in
+ * server/pipeline/validator.ts (guarded by tests/validator.test.ts).
+ */
+export function getDemoRules(): MethodRule[] {
+  return [
+    {
+      id: 'rule-single-correct-answer',
+      title: 'Միակ ճշգրիտ պատասխանի պահանջ',
+      description: 'Մեկ ընտրությամբ հարցերում ճիշտ պատասխանը պետք է լինի միակը և միանշանակ:',
+      kind: 'deterministic',
+      params: { minOptions: 3, maxOptions: 5 },
+      severity: 'error',
+      active: true,
+    },
+    {
+      id: 'rule-no-double-negation',
+      title: 'Երկակի ժխտման արգելք',
+      description: 'Հարցի ձևակերպման մեջ արգելվում է օգտագործել երկակի ժխտումներ (օրինակ՝ «չի հանդիսանում ոչ...»):',
+      kind: 'llm_judged',
+      params: { forbidPhrases: ['չի հանդիսանում ոչ', 'չի կարելի չ'] },
+      severity: 'error',
+      active: true,
+    },
+    {
+      id: 'rule-factual-grounding',
+      title: 'Փաստացի մեջբերման պարտադիր պահանջ',
+      description: 'Յուրաքանչյուր առաջադրանք պետք է հղում ունենա հաստատված FACT աղբյուրի կոնկրետ հատվածին:',
+      kind: 'deterministic',
+      params: { minCitations: 1 },
+      severity: 'error',
+      active: true,
+    },
+    {
+      id: 'rule-balanced-difficulty',
+      title: 'Բարդության մակարդակների բաշխվածություն',
+      description: 'Տարբերակ A-ի և B-ի առաջադրանքների բարդությունները պետք է լինեն համարժեք:',
+      kind: 'llm_judged',
+      params: { checkEquivalence: true },
+      severity: 'warning',
+      active: true,
+    },
+    {
+      id: 'rule-armenian-terminology',
+      title: 'Տերմինացանկով հաստատված տերմինաբանության կիրառում',
+      description: 'Առաջադրանքներում արգելվում են օտարաբանությունները կամ չհաստատված տերմինները:',
+      kind: 'llm_judged',
+      params: { dictionary: 'official_armenian' },
+      severity: 'warning',
+      active: true,
+    },
+  ];
+}
+
 export function getDemoOutcomes(): CurriculumOutcome[] {
   return [
     // Science Grade 5

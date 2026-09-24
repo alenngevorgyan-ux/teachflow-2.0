@@ -15,7 +15,8 @@ vi.mock('../server/store/repository.js', () => ({
   },
 }));
 
-import { validateSingleItem } from '../server/pipeline/validator.js';
+import { validateAllItems, validateSingleItem } from '../server/pipeline/validator.js';
+import { getDemoRules } from '../server/store/demoData.js';
 import type { IJudgeProvider } from '../server/providers/judgeProvider.js';
 import type { IModelProvider } from '../server/providers/modelProvider.js';
 
@@ -370,14 +371,14 @@ describe('validator rule-max-items (per variant)', () => {
   it('passes when the variant is within the limit', async () => {
     store.rules = [maxItems('error')];
     const r = await run(item(), supported, 7, { variantItemCounts: { A: 2, B: 0 } });
-    expect(r.byId('rule-max-items')).toEqual([]);
+    expect(r.byId('rule-max-items')).toEqual(['pass']); // evaluated, and visibly so
     expect(r.status).toBe('PASS');
   });
 
-  it('is not applied when variantItemCounts is not supplied', async () => {
+  it('without variantItemCounts it is reported as not checked, not silently skipped', async () => {
     store.rules = [maxItems('error')];
     const r = await run(item());
-    expect(r.byId('rule-max-items')).toEqual([]);
+    expect(r.byId('rule-max-items')).toEqual(['warn']);
   });
 });
 
@@ -435,5 +436,47 @@ describe('validator trace.modelId', () => {
   it('falls back to the requested modelId when generationModelId is absent', async () => {
     const r = await run(item(), supported, 7, { modelId: 'requested-model' });
     expect(r.trace.modelId).toBe('requested-model');
+  });
+});
+
+describe('seeded method rules through the real caller path (validateAllItems)', () => {
+  const traces = async (items: AssessmentItem[]) => validateAllItems(items, 'history', 7, provider, { judgeProvider: supported });
+
+  it('every active deterministic seeded rule is evaluated: none is skipped for lack of an evaluator', async () => {
+    store.rules = getDemoRules();
+    const [trace] = await traces([item()]);
+    const deterministic = store.rules.filter((r) => r.active && r.kind === 'deterministic');
+    expect(deterministic.length).toBeGreaterThan(0);
+    for (const rule of deterministic) {
+      expect(trace.checks.some((c) => c.checkId === rule.id), `no check for ${rule.id}`).toBe(true);
+      expect(trace.methodRulesApplied).toContain(rule.id);
+    }
+    expect(trace.methodRulesNotEvaluated).toEqual([]);
+  });
+
+  it('the seeded option-count rule fails a single-choice item with too few or too many options', async () => {
+    store.rules = getDemoRules();
+    const [two, six] = await traces([
+      item({ id: 'two', options: ['մ.թ.ա. 95–55', 'մ.թ.ա. 189–160'] }),
+      item({ id: 'six', options: ['մ.թ.ա. 95–55', 'ա', 'բ', 'գ', 'դ', 'ե'] }),
+    ]);
+    expect(two.checks.find((c) => c.checkId === 'rule-single-correct-answer')?.result).toBe('fail');
+    expect(six.checks.find((c) => c.checkId === 'rule-single-correct-answer')?.result).toBe('fail');
+    expect(two.status).toBe('FAIL');
+  });
+
+  it('an active rule with an unknown id is reported as not checked, never counted as applied', async () => {
+    store.rules = [{ id: 'rule-min-optoins', title: 'typo', description: '', kind: 'deterministic', params: { min_options: 3 }, severity: 'error', active: true }];
+    const [trace] = await traces([item()]);
+    expect(trace.checks.find((c) => c.checkId === 'rule-min-optoins')?.result).toBe('warn');
+    expect(trace.methodRulesNotEvaluated).toEqual(['rule-min-optoins']);
+    expect(trace.methodRulesApplied).not.toContain('rule-min-optoins');
+  });
+
+  it('a rule without its parameter is not given an assumed default', async () => {
+    store.rules = [{ id: 'rule-min-options', title: 'min', description: '', kind: 'deterministic', params: {}, severity: 'error', active: true }];
+    const [trace] = await traces([item()]);
+    expect(trace.checks.find((c) => c.checkId === 'rule-min-options')?.result).toBe('warn');
+    expect(trace.methodRulesNotEvaluated).toEqual(['rule-min-options']);
   });
 });

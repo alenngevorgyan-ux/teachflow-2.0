@@ -251,49 +251,90 @@ export async function validateSingleItem(
     });
   }
 
-  // 5. Deterministic MethodRules
+  // 5. Deterministic MethodRules. Every active deterministic rule is either
+  // evaluated here (and leaves a check with its id, pass or not) or reported
+  // as "not checked": a rule id with no evaluator can no longer be skipped
+  // silently (as 'rule-min-options' was, while the seed defines
+  // 'rule-single-correct-answer').
+  const rulesEvaluated: string[] = [];
+  const rulesNotEvaluated: string[] = [];
+  const posInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1;
+  const ruleCheck = (rule: MethodRule, ok: boolean, detail: string) => {
+    rulesEvaluated.push(rule.id);
+    checks.push({
+      checkId: rule.id,
+      label: rule.title,
+      kind: 'deterministic',
+      result: ok ? 'pass' : rule.severity === 'error' ? 'fail' : 'warn',
+      detail,
+    });
+  };
+  const misconfigured = (rule: MethodRule, why: string) => {
+    rulesNotEvaluated.push(rule.id);
+    checks.push({
+      checkId: rule.id,
+      label: rule.title,
+      kind: 'deterministic',
+      result: 'warn',
+      detail: `Կանոնը չի ստուգվել. ${why}`,
+    });
+  };
+
   for (const rule of activeRules.filter((r) => r.kind === 'deterministic')) {
-    if (rule.id === 'rule-min-options' && (item.type === 'single_choice' || item.type === 'multiple_choice')) {
-      const minOpt = (rule.params?.min_options as number) || 3;
-      if (!item.options || item.options.length < minOpt) {
-        checks.push({
-          checkId: rule.id,
-          label: rule.title,
-          kind: 'deterministic',
-          result: rule.severity === 'error' ? 'fail' : 'warn',
-          detail: `Առաջադրանքն ունի ${item.options?.length || 0} տարբերակ, պահանջվում է առնվազն ${minOpt}:`,
-        });
-        continue;
+    switch (rule.id) {
+      // Option count. The seeded rule is for single-choice items (params
+      // minOptions / maxOptions); 'rule-min-options' (min_options) is kept for
+      // rules created earlier and also covers multiple choice. No default.
+      case 'rule-single-correct-answer':
+      case 'rule-min-options': {
+        const applies = rule.id === 'rule-single-correct-answer' ? item.type === 'single_choice' : item.type === 'single_choice' || item.type === 'multiple_choice';
+        if (!applies) break;
+        const min = rule.params?.minOptions ?? rule.params?.min_options;
+        const max = rule.params?.maxOptions ?? rule.params?.max_options;
+        if (!posInt(min) || (max !== undefined && (!posInt(max) || max < min))) {
+          misconfigured(rule, 'տարբերակների նվազագույն/առավելագույն քանակը (minOptions / maxOptions) բացակայում է կամ սխալ է:');
+          break;
+        }
+        const n = item.options?.length ?? 0;
+        const ok = n >= min && (max === undefined || n <= (max as number));
+        ruleCheck(rule, ok, max === undefined ? `${n} տարբերակ, պահանջվում է առնվազն ${min}:` : `${n} տարբերակ, պահանջվում է ${min}–${max}:`);
+        break;
       }
-    }
-
-    if (rule.id === 'rule-allowed-item-types') {
-      const allowed = (rule.params?.allowed_types as string[]) || [];
-      if (allowed.length > 0 && !allowed.includes(item.type)) {
-        checks.push({
-          checkId: rule.id,
-          label: rule.title,
-          kind: 'deterministic',
-          result: rule.severity === 'error' ? 'fail' : 'warn',
-          detail: `«${item.type}» տեսակը թույլատրված չէ մեթոդական կանոններով:`,
-        });
-        continue;
+      case 'rule-factual-grounding': {
+        const min = rule.params?.minCitations;
+        if (!posInt(min)) {
+          misconfigured(rule, 'minCitations արժեքը բացակայում է կամ սխալ է:');
+          break;
+        }
+        const n = item.citations?.length ?? 0;
+        ruleCheck(rule, n >= min, `${n} մեջբերում, պահանջվում է առնվազն ${min}:`);
+        break;
       }
-    }
-
-    if (rule.id === 'rule-max-items' && options?.variantItemCounts) {
-      const maxItems = rule.params?.max_items as number | undefined;
-      const countInVariant = options.variantItemCounts[item.variant] ?? 1;
-      if (typeof maxItems === 'number' && countInVariant > maxItems) {
-        checks.push({
-          checkId: rule.id,
-          label: rule.title,
-          kind: 'deterministic',
-          result: rule.severity === 'error' ? 'fail' : 'warn',
-          detail: `«${item.variant}» տարբերակն ունի ${countInVariant} առաջադրանք, պահանջվում է առավելագույնը ${maxItems}:`,
-        });
-        continue;
+      case 'rule-allowed-item-types': {
+        const allowed = rule.params?.allowed_types;
+        if (!Array.isArray(allowed) || allowed.length === 0) {
+          misconfigured(rule, 'թույլատրված տեսակների ցանկը (allowed_types) դատարկ է:');
+          break;
+        }
+        ruleCheck(rule, allowed.includes(item.type), allowed.includes(item.type) ? `«${item.type}» տեսակը թույլատրված է:` : `«${item.type}» տեսակը թույլատրված չէ մեթոդական կանոններով:`);
+        break;
       }
+      case 'rule-max-items': {
+        const maxItems = rule.params?.max_items;
+        if (!posInt(maxItems)) {
+          misconfigured(rule, 'max_items արժեքը բացակայում է կամ սխալ է:');
+          break;
+        }
+        if (!options?.variantItemCounts) {
+          misconfigured(rule, 'տարբերակի առաջադրանքների քանակը հայտնի չէ (առանձին վերստուգում):');
+          break;
+        }
+        const countInVariant = options.variantItemCounts[item.variant] ?? 1;
+        ruleCheck(rule, countInVariant <= maxItems, `«${item.variant}» տարբերակն ունի ${countInVariant} առաջադրանք, թույլատրվում է առավելագույնը ${maxItems}:`);
+        break;
+      }
+      default:
+        misconfigured(rule, `«${rule.id}» կանոնի համար կանոնային ստուգիչ չկա:`);
     }
   }
 
@@ -489,7 +530,9 @@ export async function validateSingleItem(
   const trace: ItemTrace = {
     itemId: item.id,
     factSources: factSourcesRef,
-    methodRulesApplied: activeRules.map((r) => r.id),
+    // Only rules that were actually evaluated (deterministic here, llm_judged by the rule judge).
+    methodRulesApplied: [...rulesEvaluated, ...activeRules.filter((r) => r.kind === 'llm_judged').map((r) => r.id)],
+    methodRulesNotEvaluated: rulesNotEvaluated,
     providerId: provider.providerId,
     modelId: options?.generationModelId || options?.modelId || provider.defaultModelId || 'n/a',
     judgeProviderId: judge.providerId,

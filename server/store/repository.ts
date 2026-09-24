@@ -34,6 +34,7 @@ import {
   getDemoReports,
   getDemoReportTemplates,
   getDemoSources,
+  getDemoRules,
   getDemoThematicPlans,
 } from './demoData.js';
 
@@ -328,53 +329,7 @@ export class JsonFileRepository implements IRepository {
     this.outcomes = getDemoOutcomes();
 
     // Default pedagogical and methodological rules
-    this.rules = [
-      {
-        id: 'rule-single-correct-answer',
-        title: 'Միակ ճշգրիտ պատասխանի պահանջ',
-        description: 'Մեկ ընտրությամբ հարցերում ճիշտ պատասխանը պետք է լինի միակը և միանշանակ:',
-        kind: 'deterministic',
-        params: { minOptions: 3, maxOptions: 5 },
-        severity: 'error',
-        active: true,
-      },
-      {
-        id: 'rule-no-double-negation',
-        title: 'Երկակի ժխտման արգելք',
-        description: 'Հարցի ձևակերպման մեջ արգելվում է օգտագործել երկակի ժխտումներ (օրինակ՝ «չի հանդիսանում ոչ...»):',
-        kind: 'llm_judged',
-        params: { forbidPhrases: ['չի հանդիսանում ոչ', 'չի կարելի չ'] },
-        severity: 'error',
-        active: true,
-      },
-      {
-        id: 'rule-factual-grounding',
-        title: 'Փաստացի մեջբերման պարտադիր պահանջ',
-        description: 'Յուրաքանչյուր առաջադրանք պետք է հղում ունենա հաստատված FACT աղբյուրի կոնկրետ հատվածին:',
-        kind: 'deterministic',
-        params: { minCitations: 1 },
-        severity: 'error',
-        active: true,
-      },
-      {
-        id: 'rule-balanced-difficulty',
-        title: 'Բարդության մակարդակների բաշխվածություն',
-        description: 'Տարբերակ A-ի և B-ի առաջադրանքների բարդությունները պետք է լինեն համարժեք:',
-        kind: 'llm_judged',
-        params: { checkEquivalence: true },
-        severity: 'warning',
-        active: true,
-      },
-      {
-        id: 'rule-armenian-terminology',
-        title: 'Տերմինացանկով հաստատված տերմինաբանության կիրառում',
-        description: 'Առաջադրանքներում արգելվում են օտարաբանությունները կամ չհաստատված տերմինները:',
-        kind: 'llm_judged',
-        params: { dictionary: 'official_armenian' },
-        severity: 'warning',
-        active: true,
-      },
-    ];
+    this.rules = getDemoRules();
 
     // Seeded frozen tasks for regression testing
     this.frozenTasks = [
