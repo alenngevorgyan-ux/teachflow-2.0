@@ -4,6 +4,7 @@ import {
   assertNoPii,
   assertStudentCode,
   checkPrivacy,
+  isAnonymousStudentCode,
 } from '../server/pipeline/privacyGuard.js';
 
 describe('privacyGuard — content context', () => {
@@ -98,5 +99,86 @@ describe('assertNoPii over structured data', () => {
     expect(() =>
       assertNoPii({ topic: 'Տիգրան Մեծի կայսրությունը', rows: [{ code: '7B-14', score: 18 }] }, 'report.data')
     ).not.toThrow();
+  });
+});
+
+describe('privacyGuard — external review cases', () => {
+  const blocked = (t: string) => checkPrivacy(t).blocked;
+
+  it('catches names regardless of script, order and case', () => {
+    for (const t of [
+      '7B Petrosyan Aram',
+      '7Б Петросян Арам',
+      '7B John Smith',
+      '7Б Иван Иванов',
+      '7Բ արամ պետրոսյան',
+      '7Բ ԱՐԱՄ ՊԵՏՐՈՍՅԱՆ',
+      '7Բ Արամ Պետրոսյանին',
+      '7Բ Պետրոսյան Արամ',
+    ]) {
+      expect(blocked(t), t).toBe(true);
+    }
+  });
+
+  it('staff exemption applies only to the name right after the role word', () => {
+    expect(blocked('ուսուցիչը ասաց՝ աշակերտ Արամ Պետրոսյան')).toBe(true);
+    expect(blocked('տնօրենը ասաց՝ աշակերտ Արամ Պետրոսյան')).toBe(true);
+    expect(blocked('Ուսուցչի՝ Անահիտ Պետրոսյան, 7Բ դասարան')).toBe(false);
+    expect(blocked('Ուսուցչուհի Անահիտ Պետրոսյանը, 7Բ դասարան')).toBe(false);
+  });
+
+  it('a class label links to a name only within the same sentence', () => {
+    expect(blocked('7Բ դասարան. Խաչատուր Աբովյան')).toBe(false);
+    expect(blocked('7Բ դասարան։ Այսօր կուսումնասիրենք Խաչատուր Աբովյանի «Վերք Հայաստանի» վեպը:')).toBe(false);
+    expect(blocked('Աշակերտները կկարդան Հովհաննես Թումանյանի «Անուշ» պոեմը:')).toBe(false);
+    expect(blocked('7Բ դասարանի աշակերտ Արամ Պետրոսյանը')).toBe(true);
+  });
+
+  it('a class roster is flagged, a list of poets is not', () => {
+    expect(blocked('7Բ\n1. Պետրոսյան Անի — 9\n2. Սարգսյան Նարեկ — 8')).toBe(true);
+    expect(blocked('1. Պետրոսյան Անի 18\n2. Սարգսյան Նարեկ 15')).toBe(true);
+    expect(blocked('Բանաստեղծներ\n1. Հովհաննես Թումանյան\n2. Ավետիք Իսահակյան')).toBe(false);
+  });
+
+  it('a neighbouring number cannot hide a phone', () => {
+    expect(checkPrivacy('055123456 7').findings.map((f) => f.match)).toEqual(['055123456']);
+    expect(checkPrivacy('055123456 091234567').findings).toHaveLength(2);
+    expect(blocked('+7 916 123-45-67')).toBe(true);
+    expect(blocked('01-09-2026, 2026-2027, 0.5 + 0.25')).toBe(false);
+  });
+
+  it('student codes must be anonymous codes', () => {
+    for (const c of ['Anna', 'Иван', 'ԱՐԱՄ', '2013-05-14', '14-05-2013', '7B14 Armen', 'Ani-5']) {
+      expect(isAnonymousStudentCode(c), c).toBe(false);
+      expect(() => assertStudentCode(c), c).toThrow(PrivacyViolationError);
+    }
+    for (const c of ['7B-14', '7Բ-03', '10A-1', 'S-2026-017']) expect(isAnonymousStudentCode(c), c).toBe(true);
+  });
+
+  it('birth dates and personal field names are blocked in structured data', () => {
+    expect(() => assertNoPii({ studentCode: '7B-14', dateOfBirth: '2013-05-14' }, 'x')).toThrow(PrivacyViolationError);
+    expect(() => assertNoPii({ note: 'ծնվել է 14.05.2013' }, 'x')).toThrow(PrivacyViolationError);
+    expect(() => assertNoPii({ rows: [{ studentName: 'Արամ' }] }, 'x')).toThrow(PrivacyViolationError);
+    expect(() => assertNoPii({ lessonDate: '2026-09-14', topic: 'Տիգրան Մեծ' }, 'x')).not.toThrow();
+  });
+
+  it('checks every field of a saved object, not only data', () => {
+    expect(() => assertNoPii({ data: {}, comments: [{ text: '7B-14 Արմեն Պետրոսյան' }] }, 'report')).toThrow(
+      PrivacyViolationError
+    );
+    expect(() => assertNoPii({ studentCode: '7B-14', answers: [{ studentAnswer: 'parent@example.com' }] }, 'sheet')).toThrow(
+      PrivacyViolationError
+    );
+    expect(() => assertNoPii({ termHy: '7B-14 Արմեն Պետրոսյան' }, 'glossary')).toThrow(PrivacyViolationError);
+    expect(() => assertNoPii({ studentCode: 'Արմեն Պետրոսյան' }, 'sheet')).toThrow(PrivacyViolationError);
+  });
+
+  it('official sources may contain an institution contact, not student names', () => {
+    expect(() => assertNoPii('Կապ՝ info@example.am, 010 123456', 'source', { allowContacts: true })).not.toThrow();
+    expect(() => assertNoPii('7B-14 Արմեն Պետրոսյան', 'source', { allowContacts: true })).toThrow(PrivacyViolationError);
+  });
+
+  it('never scans image payloads', () => {
+    expect(() => assertNoPii({ studentCode: '7B-14', imageUrl: 'data:image/png;base64,a@b.cd 055123456' }, 'x')).not.toThrow();
   });
 });

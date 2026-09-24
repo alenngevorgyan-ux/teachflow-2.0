@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { AnswerSheetVisionOutput, AnswerSheetVisionSchema } from '../../shared/schemas.js';
 import { repository } from '../store/repository.js';
+import { isAnonymousStudentCode } from '../pipeline/privacyGuard.js';
 
 // Same default Gemini model used elsewhere in this codebase (multimodal).
 export const VISION_MODEL_ID = 'gemini-3.8-flash';
@@ -81,7 +82,16 @@ Output ONLY structured JSON matching the schema: { studentCode?, answers: [{ ite
       modelId: VISION_MODEL_ID,
       action: 'readAnswerSheet',
       prompt: `${params.itemCount} items`,
-      output: rawText,
+      // The audit log is written before the scanner's privacy check, so the
+      // raw model output is never stored: a studentCode that is not an
+      // anonymous code (e.g. a name read off the sheet) is redacted.
+      output: JSON.stringify({
+        ...parsed,
+        studentCode:
+          parsed.studentCode && !isAnonymousStudentCode(parsed.studentCode)
+            ? '[redacted: not an anonymous student code]'
+            : parsed.studentCode,
+      }),
       latencyMs: Date.now() - start,
     });
 
@@ -93,7 +103,9 @@ Output ONLY structured JSON matching the schema: { studentCode?, answers: [{ ite
       modelId: VISION_MODEL_ID,
       action: 'readAnswerSheet:FAILED',
       prompt: `${params.itemCount} items`,
-      output: `Error: ${msg}`,
+      // JSON.parse errors quote a slice of the model output (could be a
+      // student's name), so that message is not logged.
+      output: `Error: ${err instanceof SyntaxError ? 'model returned invalid JSON' : msg}`,
       latencyMs: Date.now() - start,
     });
     throw err;

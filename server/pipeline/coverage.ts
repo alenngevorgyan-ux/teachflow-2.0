@@ -57,7 +57,7 @@ export async function checkCoverageGate(
   const factSourcesFormatted = factChunks
     .map(
       (c) =>
-        `CHUNK ID: ${c.chunk.id} (Source: ${c.sourceTitle}, v${c.version}, page: ${c.chunk.page ?? 1})\nTEXT: ${c.chunk.text}`
+        `CHUNK ID: ${c.chunk.id} (Source: ${c.sourceTitle}, v${c.version}, page: ${c.chunk.page ?? 'n/a'})\nTEXT: ${c.chunk.text}`
     )
     .join('\n\n');
 

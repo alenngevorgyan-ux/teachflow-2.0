@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { assertNoPii } from './privacyGuard.js';
 import { Source, SourceChunk } from '../../shared/types.js';
 import { repository } from '../store/repository.js';
 import { embedChunksInPlace } from '../providers/embeddingProvider.js';
@@ -9,13 +10,13 @@ export interface IngestFileParams {
   fileBuffer: Buffer;
   fileName: string;
   title: string;
-  authority?: string;
-  docType?: Source['docType'];
+  authority: string;
+  docType: Source['docType'];
   subject: string;
   grades: number[];
-  role?: Source['role'];
-  version?: string;
-  effectiveFrom?: string;
+  role: Source['role'];
+  version: string;
+  effectiveFrom: string;
 }
 
 export interface IngestResult {
@@ -66,7 +67,7 @@ export async function ingestSourceFile(params: IngestFileParams): Promise<Ingest
     if (!p.text.trim()) continue; // nothing to chunk — already warned above if this was a scanned page
     for (const chunkText of chunkPageText(p.text)) {
       chunks.push({
-        id: `${sourceId}#p${p.page ?? 1}#c${chunkIndex}`,
+        id: p.page !== undefined ? `${sourceId}#p${p.page}#c${chunkIndex}` : `${sourceId}#c${chunkIndex}`,
         sourceId,
         page: p.page,
         text: chunkText,
@@ -88,13 +89,13 @@ export async function ingestSourceFile(params: IngestFileParams): Promise<Ingest
   const source: Source = {
     id: sourceId,
     title: params.title,
-    authority: params.authority || 'Գրանցված մեթոդիստի կողմից',
-    docType: params.docType || 'textbook',
+    authority: params.authority,
+    docType: params.docType,
     subject: params.subject,
     grades: params.grades,
-    role: params.role || 'FACT',
-    version: params.version || '1.0',
-    effectiveFrom: params.effectiveFrom || new Date().toISOString().substring(0, 10),
+    role: params.role,
+    version: params.version,
+    effectiveFrom: params.effectiveFrom,
     status: 'active',
     sha256: crypto.createHash('sha256').update(params.fileBuffer).digest('hex'),
     isDemo: false,
@@ -103,6 +104,56 @@ export async function ingestSourceFile(params: IngestFileParams): Promise<Ingest
     chunks,
   };
 
+  // Extracted text is checked like any other write (contacts of the issuing
+  // institution are allowed in official sources).
+  assertNoPii(chunks.map((c) => c.text).join('\n\n'), 'source.file', { allowContacts: true });
   const saved = repository.saveSource(source);
   return { source: saved, warnings };
+}
+
+const DOC_TYPES: Source['docType'][] = ['standard', 'subject_program', 'textbook', 'methodological_guide', 'assessment_template', 'other'];
+const ROLES: Source['role'][] = ['FACT', 'METHOD', 'TEMPLATE'];
+
+export interface SourceMetadata {
+  title: string;
+  authority: string;
+  docType: Source['docType'];
+  subject: string;
+  grades: number[];
+  role: Source['role'];
+  version: string;
+  effectiveFrom: string;
+}
+
+/**
+ * Source metadata must be entered by the methodologist: nothing is defaulted
+ * (no version "1.0", no grade 5, no "today" as effective date).
+ */
+export function parseSourceMetadata(body: Record<string, unknown>): { metadata?: SourceMetadata; errors: string[] } {
+  const errors: string[] = [];
+  const str = (k: string) => (typeof body[k] === 'string' ? (body[k] as string).trim() : '');
+  const title = str('title');
+  const authority = str('authority');
+  const subject = str('subject');
+  const version = str('version');
+  const effectiveFrom = str('effectiveFrom');
+  const docType = str('docType') as Source['docType'];
+  const role = str('role') as Source['role'];
+  const rawGrades = body.grades;
+  const gradeList = (Array.isArray(rawGrades) ? rawGrades : typeof rawGrades === 'string' ? rawGrades.split(',') : [])
+    .map((g) => String(g).trim())
+    .filter((g) => g !== '');
+  const grades = gradeList.map(Number);
+
+  if (!title) errors.push('title');
+  if (!authority) errors.push('authority');
+  if (!subject) errors.push('subject');
+  if (!version) errors.push('version');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) || Number.isNaN(Date.parse(effectiveFrom))) errors.push('effectiveFrom (YYYY-MM-DD)');
+  if (!DOC_TYPES.includes(docType)) errors.push(`docType (${DOC_TYPES.join(' | ')})`);
+  if (!ROLES.includes(role)) errors.push(`role (${ROLES.join(' | ')})`);
+  if (grades.length === 0 || grades.some((g) => !Number.isInteger(g) || g < 1 || g > 12)) errors.push('grades (1–12)');
+
+  if (errors.length > 0) return { errors };
+  return { metadata: { title, authority, docType, subject, grades, role, version, effectiveFrom }, errors };
 }

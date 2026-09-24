@@ -60,6 +60,11 @@ const baseParams = {
   title: 'Test Source',
   subject: 'history',
   grades: [7],
+  authority: 'Test authority',
+  docType: 'textbook' as const,
+  role: 'FACT' as const,
+  version: 'test-v1',
+  effectiveFrom: '2026-09-01',
 };
 
 describe('ingestSourceFile', () => {

@@ -79,3 +79,21 @@ describe('report review: program version check can fail', () => {
     expect(versionCheck().passed).toBe(false);
   });
 });
+
+describe('demo seeds pass the privacy guard (no false positives)', () => {
+  it('every seeded record', async () => {
+    const { assertNoPii } = await import('../server/pipeline/privacyGuard.js');
+    const D = await import('../server/store/demoData.js');
+    const lists: unknown[][] = [
+      D.getDemoReports(),
+      D.getDemoReportTemplates(),
+      D.getDemoThematicPlans(),
+      D.getDemoGlossary(),
+      D.getDemoAnswerSheets(),
+      D.getDemoArmenianEvalTasks(),
+      D.getDemoOutcomes(),
+    ];
+    for (const list of lists) for (const r of list) expect(() => assertNoPii(r, 'seed')).not.toThrow();
+    for (const s of D.getDemoSources()) expect(() => assertNoPii(s, 'seed', { allowContacts: true })).not.toThrow();
+  });
+});

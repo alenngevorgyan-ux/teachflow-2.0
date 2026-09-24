@@ -19,7 +19,7 @@ import { runReportReview } from '../pipeline/reportReviewer.js';
 import { importLegacyReport } from '../pipeline/legacyReportImporter.js';
 import { emisAdapter } from '../pipeline/emisAdapter.js';
 import { runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
-import { assertStudentCode } from '../pipeline/privacyGuard.js';
+import { assertNoPii, assertStudentCode } from '../pipeline/privacyGuard.js';
 
 // Every tool response carries the current policyVersion (the hash of active
 // sources + method rules at call time) so an MCP client can tell whether the
@@ -46,8 +46,16 @@ export function createMcpServer(): McpServer {
     version: '1.0.0',
   });
 
+  // Every tool's arguments go through the privacy guard before the handler
+  // runs (rule 5); a violation surfaces as a tool error.
+  const tool = ((name: string, description: string, schema: unknown, handler: (args: any, extra: any) => any) =>
+    server.tool(name, description, schema as any, async (args: any, extra: any) => {
+      assertNoPii(args, `mcp:${name}`);
+      return handler(args, extra);
+    })) as unknown as typeof server.tool;
+
   // Tool 1: search_curriculum
-  server.tool(
+  tool(
     'search_curriculum',
     'Search official confirmed curriculum learning outcomes by subject, grade and keyword query',
     {
@@ -84,7 +92,7 @@ export function createMcpServer(): McpServer {
   );
 
   // Tool 2: get_source_fragment
-  server.tool(
+  tool(
     'get_source_fragment',
     'Retrieve top verified FACT chunks for a subject, grade, and topic query',
     {
@@ -99,7 +107,7 @@ export function createMcpServer(): McpServer {
         sourceId: f.sourceId,
         sourceTitle: f.sourceTitle,
         version: f.version,
-        page: f.chunk.page ?? 1,
+        page: f.chunk.page ?? null,
         text: f.chunk.text,
       }));
 
@@ -108,7 +116,7 @@ export function createMcpServer(): McpServer {
   );
 
   // Tool 3: generate_assessment_with_trace
-  server.tool(
+  tool(
     'generate_assessment_with_trace',
     'Generate a curriculum-grounded assessment with item traces, variant equivalence, and source citations',
     {
@@ -134,7 +142,7 @@ export function createMcpServer(): McpServer {
   );
 
   // Tool 4: validate_material
-  server.tool(
+  tool(
     'validate_material',
     'Validate any arbitrary educational text or ChatGPT test against approved curriculum sources',
     {
@@ -152,7 +160,7 @@ export function createMcpServer(): McpServer {
   );
 
   // Tool 5: thematic_plan_generate
-  server.tool(
+  tool(
     'thematic_plan_generate',
     'Generate a curriculum-aligned annual thematic plan grounded in confirmed outcomes and FACT sources',
     {
@@ -181,7 +189,7 @@ export function createMcpServer(): McpServer {
   );
 
   // Tool 6: thematic_plan_validate
-  server.tool(
+  tool(
     'thematic_plan_validate',
     'Deterministically validate a thematic plan against curriculum hours, mandatory outcomes, and calendar',
     {
@@ -198,7 +206,7 @@ export function createMcpServer(): McpServer {
   );
 
   // Tool 7: lesson_plan_generate
-  server.tool(
+  tool(
     'lesson_plan_generate',
     'Generate a 45-minute lesson plan from a thematic plan row, grounded in FACT sources with citations and a validation trace',
     {
@@ -219,7 +227,7 @@ export function createMcpServer(): McpServer {
   );
 
   // Tool 8: answer_sheet_grade
-  server.tool(
+  tool(
     'answer_sheet_grade',
     'Deterministically grade an answer sheet against assessment answer key and propose rubric points for open answers',
     {
@@ -256,7 +264,7 @@ export function createMcpServer(): McpServer {
   );
 
   // Tool 9: report_review
-  server.tool(
+  tool(
     'report_review',
     'AI review assistant: verifies completeness, rules, registry consistency, source fidelity, anomalies, and summary',
     {
@@ -278,7 +286,7 @@ export function createMcpServer(): McpServer {
   );
 
   // Tool 10: legacy_report_extract
-  server.tool(
+  tool(
     'legacy_report_extract',
     'Extract unstructured legacy report text into structured template schema with confidence and provenance',
     {
@@ -303,7 +311,7 @@ export function createMcpServer(): McpServer {
   );
 
   // Tool 11: emis_export
-  server.tool(
+  tool(
     'emis_export',
     'Export grades, thematic plans, or reports to EMIS-compatible CSV format',
     {
@@ -336,7 +344,7 @@ export function createMcpServer(): McpServer {
   );
 
   // Tool 12: armenian_eval_run
-  server.tool(
+  tool(
     'armenian_eval_run',
     'Run frozen Armenian evaluation harness across orthography, grammar, terminology, OCR, citations, and refusals',
     {

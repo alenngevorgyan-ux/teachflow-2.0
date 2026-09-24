@@ -41,7 +41,7 @@ import {
 } from '../pipeline/privacyGuard.js';
 import { emisAdapter } from '../pipeline/emisAdapter.js';
 import { computeCategoryModelRecommendations, runArmenianEvaluation } from '../pipeline/armenianEvalHarness.js';
-import { ingestSourceFile } from '../pipeline/sourceIngestion.js';
+import { ingestSourceFile, parseSourceMetadata } from '../pipeline/sourceIngestion.js';
 import { parseWorkspaceIntent } from '../pipeline/workspaceIntent.js';
 import { scanAnswerSheet } from '../pipeline/answerSheetScanner.js';
 import { generateAnswerSheetQrDataUrl } from '../pipeline/answerSheetQr.js';
@@ -61,8 +61,27 @@ function sendError(res: Response, err: unknown) {
   return res.status(500).json({ error: msg });
 }
 
+// Paths whose bodies are official sources: an institution's phone / e-mail
+// there is not student data (names near student markers are still blocked).
+const CONTACTS_ALLOWED = [/^\/sources(\/|$)/];
+
 export function createApiRouter(): Router {
   const router = Router();
+
+  // Privacy guard on every JSON write path (rule 5). Multipart uploads are
+  // checked after text extraction (sourceIngestion, answerSheetScanner).
+  router.use((req: Request, res: Response, next) => {
+    if (!['POST', 'PUT', 'PATCH'].includes(req.method) || !req.body || typeof req.body !== 'object') return next();
+    if (req.path === '/privacy/check') return next(); // stores nothing; reports findings itself
+    try {
+      assertNoPii(req.body, `${req.method} ${req.path}`, {
+        allowContacts: CONTACTS_ALLOWED.some((re) => re.test(req.path)),
+      });
+      next();
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
 
   // --- Sources ---
   router.get('/sources', (_req: Request, res: Response) => {
@@ -91,22 +110,12 @@ export function createApiRouter(): Router {
 
   router.post('/sources', async (req: Request, res: Response) => {
     try {
-      const {
-        title,
-        authority,
-        docType,
-        subject,
-        grades,
-        role,
-        version,
-        effectiveFrom,
-        text,
-        isOcr,
-      } = req.body;
-
-      if (!title || !subject || !role || !text) {
-        return res.status(400).json({ error: 'Missing required source metadata or text.' });
+      const { text, isOcr } = req.body;
+      const { metadata, errors } = parseSourceMetadata(req.body);
+      if (!metadata || !text) {
+        return res.status(400).json({ error: `Missing or invalid source fields: ${[...errors, ...(text ? [] : ['text'])].join(', ')}` });
       }
+      assertNoPii(text, 'source.text', { allowContacts: true });
 
       const sourceId = `src-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const sha256 = crypto.createHash('sha256').update(text).digest('hex');
@@ -116,7 +125,7 @@ export function createApiRouter(): Router {
       const chunks: Source['chunks'] = [];
       let currentChunkText = '';
       let chunkIndex = 1;
-      let currentPage = 1;
+      // Pasted text has no pages: chunks carry no page number (never invented).
 
       for (const p of paragraphs) {
         const trimmed = p.trim();
@@ -125,13 +134,11 @@ export function createApiRouter(): Router {
         if (currentChunkText.length + trimmed.length > 800) {
           if (currentChunkText) {
             chunks.push({
-              id: `${sourceId}#p${currentPage}#c${chunkIndex}`,
+              id: `${sourceId}#c${chunkIndex}`,
               sourceId,
-              page: currentPage,
               text: currentChunkText.trim(),
             });
             chunkIndex++;
-            if (chunkIndex % 3 === 0) currentPage++;
             currentChunkText = '';
           }
         }
@@ -140,9 +147,8 @@ export function createApiRouter(): Router {
 
       if (currentChunkText) {
         chunks.push({
-          id: `${sourceId}#p${currentPage}#c${chunkIndex}`,
+          id: `${sourceId}#c${chunkIndex}`,
           sourceId,
-          page: currentPage,
           text: currentChunkText.trim(),
         });
       }
@@ -155,14 +161,7 @@ export function createApiRouter(): Router {
 
       const newSource: Source = {
         id: sourceId,
-        title,
-        authority: authority || 'Գրանցված մեթոդիստի կողմից',
-        docType: docType || 'textbook',
-        subject,
-        grades: Array.isArray(grades) ? grades.map(Number) : [5],
-        role: role || 'FACT',
-        version: version || '1.0',
-        effectiveFrom: effectiveFrom || new Date().toISOString().substring(0, 10),
+        ...metadata,
         status: 'active',
         sha256,
         isDemo: false,
@@ -186,24 +185,15 @@ export function createApiRouter(): Router {
         return res.status(400).json({ error: 'Ֆայլ չի ուղարկվել (multipart field name՝ "file")' });
       }
 
-      const { title, authority, docType, subject, grades, role, version, effectiveFrom } = req.body;
-      if (!title || !subject) {
-        return res.status(400).json({ error: 'Missing required source metadata (title, subject).' });
+      const { metadata, errors } = parseSourceMetadata(req.body);
+      if (!metadata) {
+        return res.status(400).json({ error: `Missing or invalid source fields: ${errors.join(', ')}` });
       }
 
       const { source, warnings } = await ingestSourceFile({
         fileBuffer: req.file.buffer,
         fileName: req.file.originalname,
-        title,
-        authority,
-        docType,
-        subject,
-        grades: (Array.isArray(grades) ? grades : typeof grades === 'string' ? grades.split(',') : [5]).map(
-          Number
-        ),
-        role,
-        version,
-        effectiveFrom,
+        ...metadata,
       });
 
       res.json({ source, warnings });
@@ -226,7 +216,7 @@ export function createApiRouter(): Router {
       const sha256 = crypto.createHash('sha256').update(contentToUse).digest('hex');
 
       const newChunks = oldSource.chunks.map((c, idx) => ({
-        id: `${newSourceId}#p${c.page ?? 1}#c${idx + 1}`,
+        id: c.page !== undefined ? `${newSourceId}#p${c.page}#c${idx + 1}` : `${newSourceId}#c${idx + 1}`,
         sourceId: newSourceId,
         page: c.page,
         text: c.text,
@@ -464,7 +454,6 @@ export function createApiRouter(): Router {
       const itemIdx = assessment.items.findIndex((i) => i.id === req.params.itemId);
       if (itemIdx < 0) return res.status(404).json({ error: 'Item not found' });
 
-      assertNoPii(req.body.item, 'assessment.item');
       const updatedItem: AssessmentItem = {
         ...assessment.items[itemIdx],
         ...req.body.item,
@@ -777,11 +766,6 @@ export function createApiRouter(): Router {
 
   router.put('/thematic-plans/:id/rows/:rowId', (req: Request, res: Response) => {
     const { id, rowId } = req.params;
-    try {
-      assertNoPii(req.body, 'thematicPlan.row');
-    } catch (err) {
-      return sendError(res, err);
-    }
     const updated = repository.updateThematicPlanRow(id, rowId, req.body);
     if (!updated) return res.status(404).json({ error: 'Thematic plan or row not found' });
     res.json({ plan: updated });
@@ -985,7 +969,6 @@ export function createApiRouter(): Router {
 
   router.post('/reports', (req: Request, res: Response) => {
     try {
-      assertNoPii(req.body?.data, 'report.data');
       const report = repository.saveReport(req.body);
       res.json({ report });
     } catch (err: unknown) {
@@ -1055,11 +1038,6 @@ export function createApiRouter(): Router {
 
   router.put('/reports/:id/status', (req: Request, res: Response) => {
     const { status, comment } = req.body;
-    try {
-      if (comment) assertNoPii(comment, 'report.comment');
-    } catch (err) {
-      return sendError(res, err);
-    }
     const updated = repository.updateReportStatus(req.params.id, status, comment);
     if (!updated) return res.status(404).json({ error: 'Report not found' });
     res.json({ report: updated });

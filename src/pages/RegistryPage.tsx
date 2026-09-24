@@ -43,9 +43,10 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
   const [authority, setAuthority] = useState('');
   const [docType, setDocType] = useState<Source['docType']>('textbook');
   const [subject, setSubject] = useState('Բնագիտություն');
-  const [grades, setGrades] = useState('5');
+  const [grades, setGrades] = useState('');
   const [role, setRole] = useState<Source['role']>('FACT');
-  const [version, setVersion] = useState('1.0');
+  const [version, setVersion] = useState('');
+  const [effectiveFrom, setEffectiveFrom] = useState('');
   const [content, setContent] = useState('');
   const [isOcr, setIsOcr] = useState(false);
 
@@ -112,6 +113,7 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
         for (const g of grades.split(',').map((s) => s.trim())) form.append('grades', g);
         form.append('role', role || 'FACT');
         form.append('version', version);
+        form.append('effectiveFrom', effectiveFrom);
         res = await fetch('/api/sources/upload', { method: 'POST', body: form });
       } else {
         res = await fetch('/api/sources', {
@@ -125,6 +127,7 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
             grades: grades.split(',').map((s) => Number(s.trim())),
             role,
             version,
+            effectiveFrom,
             text: content,
             isOcr,
           }),
@@ -382,6 +385,7 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
               </label>
               <input
                 type="text"
+                required
                 value={authority}
                 onChange={(e) => setAuthority(e.target.value)}
                 placeholder="օր. Հաստատված ուսումնական հանձնաժողովի կողմից"
@@ -409,6 +413,7 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
                 </label>
                 <input
                   type="text"
+                  required
                   value={grades}
                   onChange={(e) => setGrades(e.target.value)}
                   placeholder="5"
@@ -435,8 +440,21 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
                 </label>
                 <input
                   type="text"
+                  required
                   value={version}
                   onChange={(e) => setVersion(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900 focus:ring-1 focus:ring-indigo-500 outline-hidden"
+                />
+              </div>
+              <div>
+                <label className="block font-medium text-gray-700 mb-1">
+                  {t.registry.effectiveFrom}
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={effectiveFrom}
+                  onChange={(e) => setEffectiveFrom(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg p-2.5 text-xs text-gray-900 focus:ring-1 focus:ring-indigo-500 outline-hidden"
                 />
               </div>
