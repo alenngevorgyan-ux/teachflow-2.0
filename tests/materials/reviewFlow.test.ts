@@ -775,3 +775,66 @@ describe('material review: a superseded source invalidates dependent results', (
     expect(rechecked.log.some((l) => l.action === 'source_problems')).toBe(true);
   });
 });
+
+describe('material review: a linked question + key group is atomic at the review level', () => {
+  async function withTwoPatchProposal(breakSecond = false) {
+    const { r, deps } = await readyForChecks();
+    const checked = await runChecks(r.id, deps);
+    const stored = store.reviews.get(r.id)!;
+    const { loadWorkingCopy } = await import('../../server/materials/workingCopy.js');
+    const w = await loadWorkingCopy(stored);
+    const structure = resolveStructure(stored);
+    const stem = structure.items[1].stemParagraphIds[0];
+    const keyPara = structure.answerKey.find((k) => k.itemId === 'item-2')!.span!.paragraphId;
+    const stemText = w.paragraphText(stem)!;
+    const s0 = stemText.indexOf('զորավարը');
+    const k0 = w.paragraphText(keyPara)!.indexOf('2-գ');
+    const question = w.makePatch('q', stem, s0, s0 + 'զորավարը'.length, 'սպարապետը');
+    const key = w.makePatch('k', keyPara, k0, k0 + 3, '2-ա');
+    stored.suggestions.push({
+      id: 'sug-linked',
+      itemId: 'item-2',
+      addresses: ['answer_unambiguous'],
+      group: { id: 'grp-linked', patches: [question, breakSecond ? { ...key, expected: '2-բ' } : key] },
+      keyChange: ['ա'],
+      rationale: 'test',
+      status: 'proposed',
+      model: { providerId: 'fake', modelId: 'fake-model', promptVersion: 'test' },
+    });
+    return { r, deps, checked, stem, keyPara };
+  }
+
+  it('both edits apply in one revision, and both reach the exported file', async () => {
+    const { r, deps, checked, stem, keyPara } = await withTwoPatchProposal();
+    const after = await decide(r.id, 'sug-linked', { decision: 'accept', expectedRevision: checked.revision }, deps);
+    expect(after.acceptedGroups).toHaveLength(1);
+    expect(after.acceptedGroups[0].patches.map((p) => p.paragraphId)).toEqual([stem, keyPara]);
+    expect(after.revision.startsWith('r1-')).toBe(true);
+    expect(after.answerKey.find((k) => k.itemId === 'item-2')!.optionLabels).toEqual(['ա']);
+    const doc = await openDocx(await exportReviewDocx(after));
+    const texts = doc.paragraphs.map((p) => p.text);
+    expect(texts).toContain('Ո՞վ էր հայոց սպարապետը Ավարայրի ճակատամարտում:');
+    expect(texts).toContain('1-ա, 2-ա');
+  });
+
+  it('if the second edit no longer applies, neither is applied: text, key and revision unchanged', async () => {
+    const { r, deps, checked } = await withTwoPatchProposal(true);
+    await expect(decide(r.id, 'sug-linked', { decision: 'accept', expectedRevision: checked.revision }, deps)).rejects.toThrow(/expected_mismatch/);
+    const after = getReview(r.id);
+    expect(after.revision).toBe(checked.revision);
+    expect(after.acceptedGroups).toHaveLength(0);
+    expect(after.answerKey.find((k) => k.itemId === 'item-2')!.optionLabels).toEqual(['գ']);
+    const out = await exportReviewDocx(after);
+    expect(Buffer.compare(out, Buffer.from(store.files.get(after.fileSha256)!))).toBe(0); // nothing half-applied
+  });
+
+  it('a teacher edit of one part creates a new proposal revision and still applies both parts', async () => {
+    const { r, deps, checked } = await withTwoPatchProposal();
+    const after = await decide(r.id, 'sug-linked', { decision: 'accept', expectedRevision: checked.revision, replacements: { q: 'հրամանատարը' } }, deps);
+    const edited = after.suggestions.find((x) => x.id === 'sug-linked-t1')!;
+    expect(edited.group.patches.map((p) => p.replacement)).toEqual(['հրամանատարը', '2-ա']);
+    const texts = (await openDocx(await exportReviewDocx(after))).paragraphs.map((p) => p.text);
+    expect(texts).toContain('Ո՞վ էր հայոց հրամանատարը Ավարայրի ճակատամարտում:');
+    expect(texts).toContain('1-ա, 2-ա');
+  });
+});
