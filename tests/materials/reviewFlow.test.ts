@@ -993,6 +993,15 @@ describe('independent race (review 963fb4b): dependencies change while a check w
     expect(ordinary.results.find((x) => x.itemId === 'item-1')!.checks.find((c) => c.checkId === 'option_count')!.status).toBe(expected);
   });
 
+  it('a confirmed program outcome edited during the wait: run obsolete, no fresh result (pilot audit)', async () => {
+    const { r, done } = await raced(() => {
+      const o = store.outcomes.find((x) => x.confirmed)!;
+      o.text = `${o.text} (edited)`;
+    });
+    expect(done.runs.at(-1)!.status).toBe('obsolete');
+    expect(getReview(r.id).results.every((x) => x.stale)).toBe(true);
+  });
+
   it('with earlier fresh results: a threshold change during a re-run leaves them stale, not current', async () => {
     const { r, done } = await raced(() => { rule().params = { minOptions: 4, maxOptions: 5 }; }, { priorRun: true });
     expect(done.runs.at(-1)!.status).toBe('obsolete');

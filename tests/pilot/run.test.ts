@@ -69,6 +69,13 @@ describe('pilot run: synthetic fixture case end to end', () => {
     const runJson = JSON.parse(files['run.json']);
     expect(runJson.auditedCalls.filter((c: { providerId: string }) => c.providerId !== 'fixture')).toEqual([]);
     expect(runJson.provenance.prompts).toBeTruthy();
+    // the synthetic proposal was accepted, re-checked, and reached the exported file
+    const checks = JSON.parse(files['check-results.json']);
+    expect(checks.suggestions.map((x: { status: string; recheck: string | null }) => [x.status, x.recheck])).toEqual([['accepted', 'done']]);
+    const diag = JSON.parse(files['docx-diagnostics.json']);
+    expect(diag.expected).toEqual([{ text: '2-ա', present: true }]);
+    expect(diag.exportDeterministic).toBe(true);
+    expect(diag.sha256).not.toBe(runJson.review.originalSha256);
     const src = JSON.parse(files['source-diagnostics.json']);
     expect(src.sources.every((s: { storedMatchesPreflight?: boolean; chunksMatchPreflight?: boolean }) => s.chunksMatchPreflight !== false)).toBe(true);
 
@@ -217,6 +224,56 @@ describe('pilot run: explicit failure states', () => {
     const ev = await m.collectEvidence(dir);
     expect(ev.overallState).toBe('STRUCTURE_REVIEW_PENDING');
     expect(fs.readFileSync(path.join(ev.bundleDir, 'summary.md'), 'utf8')).toMatch(/STRUCTURE_REVIEW_PENDING/);
+  }, 60_000);
+});
+
+describe('pilot evidence: honesty of the bundle', () => {
+  it('a fixture result under a case now declared real is MODEL_MODE_MISMATCH, never real evidence', async () => {
+    const dir = makeCase();
+    await writePreflight(dir);
+    const m = await modulesFor(dir);
+    expect((await m.runPilotCase(dir)).finalState).toBe('TECHNICAL_RUN_COMPLETE');
+    const man = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    man.modelMode = 'real';
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(man));
+    await writePreflight(dir); // even with a fresh lock
+    const ev = await m.collectEvidence(dir);
+    expect(ev.overallState).toBe('MODEL_MODE_MISMATCH');
+    expect(ev.problems.join()).toMatch(/declared real but results come from the FIXTURE provider/);
+    expect(ev.modelExecution).toBe('fixture_deterministic');
+  }, 60_000);
+
+  it('an input edited after the run makes the evidence PREFLIGHT_STALE', async () => {
+    const dir = makeCase();
+    await writePreflight(dir);
+    const m = await modulesFor(dir);
+    await m.runPilotCase(dir);
+    fs.appendFileSync(path.join(dir, 'inputs/program-FIXTURE.txt'), '\nFIXTURE — edited after the run.');
+    const ev = await m.collectEvidence(dir);
+    expect(ev.overallState).toBe('PREFLIGHT_STALE');
+    expect(ev.problems.join()).toMatch(/"program" changed after preflight/);
+  }, 60_000);
+
+  it('on a completed run, expected text missing from the export is EXPORT_FAILED (before completion it is not evaluated)', async () => {
+    const dir = makeCase((mm) => (mm.expectations = { exportContains: ['FIXTURE — text that no fix produces'] }));
+    await writePreflight(dir);
+    const m = await modulesFor(dir);
+    expect((await m.runPilotCase(dir)).finalState).toBe('TECHNICAL_RUN_COMPLETE');
+    const ev = await m.collectEvidence(dir);
+    expect(ev.overallState).toBe('EXPORT_FAILED');
+    expect(ev.problems.join()).toMatch(/expected text missing \(1\)/);
+  }, 60_000);
+
+  it('Armenian file names with spaces work end to end', async () => {
+    const name = 'inputs/Թեստ Ավարայր 7-րդ դասարան.docx';
+    const dir = makeCase((mm, d) => {
+      fs.renameSync(path.join(d, 'inputs/teacher-test-FIXTURE.docx'), path.join(d, name));
+      mm.inputs[2].file = name;
+    });
+    expect((await writePreflight(dir)).report.status).toBe('PREFLIGHT_PASSED');
+    const m = await modulesFor(dir);
+    expect((await m.runPilotCase(dir)).finalState).toBe('TECHNICAL_RUN_COMPLETE');
+    expect((await m.collectEvidence(dir)).overallState).toBe('TECHNICAL_RUN_COMPLETE');
   }, 60_000);
 });
 

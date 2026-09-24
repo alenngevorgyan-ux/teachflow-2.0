@@ -90,7 +90,8 @@ function ok(rs: RunState, stage: string, detail: string) {
   rs.stages.push({ stage, state: 'ok', at: new Date().toISOString(), detail });
 }
 
-function verifyPreflight(caseDir: string, manifest: PilotManifest): string | null {
+/** null when the manifest and every input still match the preflight lock; otherwise why not. */
+export function verifyPreflight(caseDir: string, manifest: PilotManifest): string | null {
   const lockPath = path.join(caseDir, 'work', 'preflight-lock.json');
   if (!fs.existsSync(lockPath)) return 'no preflight lock: run pilot:preflight first';
   const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as PreflightLock;

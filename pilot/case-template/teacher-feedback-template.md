@@ -1,16 +1,27 @@
 # Teacher feedback
 
-Asked after the teacher has seen the findings and the corrected copy.
-Record the teacher's own words; do not summarise into a score.
+A short conversation after the teacher has used the result. Record the
+teacher's own words; do not turn them into a score.
 
 - Case id / bundle:
 - Date:
 - Recorded by (stated name):
 
-1. Was anything TeachFlow flagged actually wrong in your material? Which?
-2. Was anything flagged that was in fact correct?
-3. Did TeachFlow miss something you know is wrong?
-4. Would you hand out the corrected copy? As is / after edits / no — why?
-5. How long would checking this material by hand take you?
-6. What was confusing in TeachFlow?
-7. Anything else:
+## Workflow
+
+1. What would you normally have done by hand for this material?
+2. Did TeachFlow save time? Roughly how much?
+3. What still needed manual work?
+4. What would stop you from using this tomorrow?
+5. What felt unnecessary?
+6. What did you expect but not see?
+
+## DOCX
+
+7. Would you use the exported document as is?
+8. What must be edited first?
+9. Does it match your real school workflow and template?
+
+## Anything else
+
+10.

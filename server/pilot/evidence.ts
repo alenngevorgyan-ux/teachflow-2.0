@@ -11,7 +11,7 @@ import { docxDiagnostics } from './docxDiagnostics.js';
 import { readManifest, stableStringify } from './manifest.js';
 import { PreflightReport, sha256, writeJson } from './preflight.js';
 import { findSecrets, fullProvenance } from './provenance.js';
-import { assertCaseStore, readRunState } from './run.js';
+import { assertCaseStore, readRunState, verifyPreflight } from './run.js';
 import { PilotState, isFailure } from './states.js';
 
 // Packages one pilot case into a new, never-overwritten evidence bundle:
@@ -62,6 +62,9 @@ export async function collectEvidence(caseDir: string, opts: { includeExcerpts?:
   });
   if (preflight) writeJson(path.join(bundleDir, 'preflight.json'), preflight);
   else problems.push('no preflight report');
+  // The files on disk now must still be the ones the run used.
+  const stale = verifyPreflight(caseDir, manifest);
+  if (stale) problems.push(`inputs do not match the preflight lock: ${stale}`);
 
   // sources: original file vs the text TeachFlow actually stored
   const sources = manifest.inputs
@@ -225,17 +228,32 @@ export async function collectEvidence(caseDir: string, opts: { includeExcerpts?:
       const teacher = manifest.inputs.find((i) => i.role === 'TEACHER_DOCUMENT')!;
       const originalOk = repository.getMaterialFile(review.fileSha256) !== undefined && sha256(fs.readFileSync(path.resolve(caseDir, teacher.file))) === review.fileSha256;
       const diag = await docxDiagnostics(a, manifest.expectations?.exportContains ?? []);
+      const deterministic = exportSha === sha256(b);
+      const unchangedWhenNoFix = review.acceptedGroups.length === 0 ? exportSha === review.fileSha256 : null;
+      // Expected text describes the finished run; before that it is not evaluated (not a failure).
+      const expectationsEvaluated = runState?.finalState === 'TECHNICAL_RUN_COMPLETE';
       writeJson(path.join(bundleDir, 'docx-diagnostics.json'), {
         ...diag,
+        expectationsEvaluated,
         revision: review.revision,
         acceptedGroups: review.acceptedGroups.length,
-        exportDeterministic: exportSha === sha256(b),
-        noAcceptedFixesEqualsOriginal: review.acceptedGroups.length === 0 ? exportSha === review.fileSha256 : null,
+        exportDeterministic: deterministic,
+        noAcceptedFixesEqualsOriginal: unchangedWhenNoFix,
         originalStoredAndMatchesInput: originalOk,
       });
       fs.writeFileSync(path.join(bundleDir, 'change-report.txt'), await buildChangeList(review));
-      exportOk = diag.zipOk && diag.openedByTeachFlow && !diag.suspiciousEmpty && diag.missingRelationshipTargets.length === 0 && diag.expected.every((e) => e.present) && originalOk;
-      if (!exportOk) problems.push(`export diagnostics: ${diag.error ?? ''} ${diag.suspiciousEmpty ? 'suspiciously empty;' : ''} ${diag.missingRelationshipTargets.length ? 'missing relationship targets;' : ''} ${diag.expected.filter((e) => !e.present).length ? 'expected text missing;' : ''} ${originalOk ? '' : 'original not stored / does not match input;'}`.trim());
+      const missingExpected = expectationsEvaluated ? diag.expected.filter((e) => !e.present) : [];
+      const why = [
+        diag.error,
+        diag.suspiciousEmpty && 'suspiciously empty',
+        diag.missingRelationshipTargets.length && 'missing relationship targets',
+        missingExpected.length && `expected text missing (${missingExpected.length})`,
+        !deterministic && 'two exports of the same revision differ',
+        unchangedWhenNoFix === false && 'no fix accepted but the export differs from the original',
+        !originalOk && 'original not stored / does not match input',
+      ].filter(Boolean);
+      exportOk = diag.zipOk && diag.openedByTeachFlow && why.length === 0;
+      if (!exportOk) problems.push(`export diagnostics: ${why.join('; ')}`);
     } catch (err) {
       problems.push(`export failed: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -251,6 +269,7 @@ export async function collectEvidence(caseDir: string, opts: { includeExcerpts?:
   // overall state
   let overall: PilotState;
   if (runState?.finalState && isFailure(runState.finalState)) overall = runState.finalState;
+  else if (stale) overall = stale.startsWith('no preflight') ? 'PREFLIGHT_FAILED' : 'PREFLIGHT_STALE';
   else if (mismatch || externalInFixture.length) overall = 'MODEL_MODE_MISMATCH';
   else if (review && !exportOk) overall = 'EXPORT_FAILED';
   else overall = runState?.finalState ?? 'PREFLIGHT_FAILED';

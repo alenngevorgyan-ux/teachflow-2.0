@@ -18,8 +18,19 @@
       "file": "inputs/program-FIXTURE.txt",
       "origin": "written for the harness self-test",
       "official": false,
-      "source": { "title": "FIXTURE — Հայոց պատմության ծրագիր, 7-րդ դաս. (սինթետիկ)", "authority": "FIXTURE (սինթետիկ, ոչ իրական մարմին)", "docType": "subject_program", "version": "fixture-1", "effectiveFrom": "2026-09-01", "grades": [7] },
-      "confirmation": { "confirmedByName": "SYNTHETIC harness (not a person)" }
+      "source": {
+        "title": "FIXTURE — Հայոց պատմության ծրագիր, 7-րդ դաս. (սինթետիկ)",
+        "authority": "FIXTURE (սինթետիկ, ոչ իրական մարմին)",
+        "docType": "subject_program",
+        "version": "fixture-1",
+        "effectiveFrom": "2026-09-01",
+        "grades": [
+          7
+        ]
+      },
+      "confirmation": {
+        "confirmedByName": "SYNTHETIC harness (not a person)"
+      }
     },
     {
       "id": "fact",
@@ -27,8 +38,19 @@
       "file": "inputs/fact-FIXTURE.txt",
       "origin": "written for the harness self-test",
       "official": false,
-      "source": { "title": "FIXTURE — Ավարայրի ճակատամարտ, փաստական հատված (սինթետիկ)", "authority": "FIXTURE (սինթետիկ, ոչ իրական մարմին)", "docType": "textbook", "version": "fixture-1", "effectiveFrom": "2026-09-01", "grades": [7] },
-      "confirmation": { "confirmedByName": "SYNTHETIC harness (not a person)" }
+      "source": {
+        "title": "FIXTURE — Ավարայրի ճակատամարտ, փաստական հատված (սինթետիկ)",
+        "authority": "FIXTURE (սինթետիկ, ոչ իրական մարմին)",
+        "docType": "textbook",
+        "version": "fixture-1",
+        "effectiveFrom": "2026-09-01",
+        "grades": [
+          7
+        ]
+      },
+      "confirmation": {
+        "confirmedByName": "SYNTHETIC harness (not a person)"
+      }
     },
     {
       "id": "teacher-doc",
@@ -39,8 +61,19 @@
       "noStudentDataDeclared": true
     }
   ],
+  "expectations": {
+    "exportContains": [
+      "2-ա"
+    ]
+  },
   "syntheticAutomation": {
-    "outcomes": [{ "code": "FIXTURE-HP7-1", "text": "Ավարայրի ճակատամարտի պատմական նշանակությունը", "programInputId": "program" }],
+    "outcomes": [
+      {
+        "code": "FIXTURE-HP7-1",
+        "text": "Ավարայրի ճակատամարտի պատմական նշանակությունը",
+        "programInputId": "program"
+      }
+    ],
     "autoConfirmStructure": true,
     "autoAcceptProposals": true
   }
