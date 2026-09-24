@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import type { MaterialReview } from '../../shared/types.js';
 import { repository } from '../store/repository.js';
 import { reviewStatus } from './reviewService.js';
@@ -36,6 +37,8 @@ export async function buildChangeList(review: MaterialReview): Promise<string> {
   L.push('');
   L.push(`Ֆայլ՝ ${review.fileName} (SHA-256 ${review.fileSha256})`);
   L.push(`Տարբերակ՝ ${review.revision}`);
+  const corrected = await w.export();
+  L.push(`Ուղղված պատճենի SHA-256՝ ${crypto.createHash('sha256').update(corrected).digest('hex')}${review.acceptedGroups.length ? '' : ' (ընդունված ուղղում չկա. նույնն է, ինչ բնօրինակը)'}`);
   L.push(`Առարկա՝ ${review.subject}, ${review.grade}-րդ դասարան`);
   L.push('');
   if (status.final) {
@@ -83,7 +86,7 @@ export async function buildChangeList(review: MaterialReview): Promise<string> {
   for (const item of items) {
     const r = review.results.find((x) => x.itemId === item.id);
     if (!r) { L.push(`  • Հարց ${item.number}: չի ստուգվել:`); open++; continue; }
-    if (r.stale || r.revision !== review.revision) { L.push(`  • Հարց ${item.number}: ստուգումը հնացել է:`); open++; }
+    if (r.stale) { L.push(`  • Հարց ${item.number}: ստուգումը հնացել է:`); open++; }
     for (const c of r.checks) {
       if (c.status === 'pass') continue;
       L.push(`  • Հարց ${item.number} · ${c.checkId} · ${STATUS_HY[c.status]}: ${c.detail}`);
@@ -103,7 +106,14 @@ export async function buildChangeList(review: MaterialReview): Promise<string> {
   if (unchecked.length) L.push(`  • Չկարդացված մասեր (անձնական տվյալների ստուգում չի կատարվել)՝ ${unchecked.map((u) => u.part).join(', ')}`);
   L.push('  • Էջի դասավորությունը TeachFlow-ը չի ստուգում. տեքստի երկարության փոփոխությունը կարող է տեղաշարժել աղյուսակներն ու էջերի սահմանները: Բացեք ֆայլը Word-ում և ստուգեք:');
   L.push('  • TeachFlow-ի նախադիտումը պարբերություններով է և Word-ի ճշգրիտ պատկերը չէ:');
-  L.push('  • Ուղղումները փոխում են միայն տեքստը. ձևավորումը վերցվում է փոփոխված հատվածի առաջին հատվածից:');
+  L.push('  • Ուղղումները փոխում են միայն տեքստը և պահպանում դրա ձևավորումը. տարբեր ձևավորմամբ հատվածներ ընդգրկող ուղղումները չեն կիրառվում:');
+  if (review.noStudentDataDeclaration) {
+    L.push(`  • Վերբեռնողը հաստատել է, որ չստուգվող մասերում (${review.noStudentDataDeclaration.parts.join(', ')}) աշակերտների անձնական տվյալներ չկան. TeachFlow-ը դա չի ստուգել:`);
+  }
+  const teacherKeys = review.answerKey.filter((k) => k.origin === 'teacher');
+  if (teacherKeys.length) {
+    L.push(`  • ${teacherKeys.length} հարցի բանալին նշել է ուսուցիչը TeachFlow-ում. այն փաստաթղթում չի ավելացվել:`);
+  }
   L.push('');
   return L.join('\n');
 }

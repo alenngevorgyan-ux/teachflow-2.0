@@ -57,7 +57,7 @@ beforeEach(() => {
     c(base('fx-fact', { chunks: [{ id: 'fx-fact#p1#c1', sourceId: 'fx-fact', page: 1, text: FACT }] })),
   ];
   store.outcomes = [{ code: 'FX-HP7-1', text: 'Ավարայրի ճակատամարտի պատմական նշանակությունը', subject: SUBJECT, grade: 7, standardVersion: 'fx-1', sourceId: 'fx-program', confirmed: true }];
-  store.rules = [{ id: 'rule-min-options', title: 'min', description: '', kind: 'deterministic', params: { min_options: 3 }, severity: 'error', active: true }];
+  store.rules = [{ id: 'rule-single-correct-answer', title: 'single correct', description: '', kind: 'deterministic', params: { minOptions: 3, maxOptions: 5 }, severity: 'error', active: true }];
 });
 
 describe('FIXTURE provider flow', () => {
@@ -73,6 +73,7 @@ describe('FIXTURE provider flow', () => {
     };
     const body =
       para(run('Թեստ՝ Ավարայրի ճակատամարտ')) +
+      para(run('Ընտրեք մեկ ճիշտ պատասխան:')) + // an instruction, not the key heading
       numbered(run('Ե՞րբ է տեղի ունեցել Ավարայրի ճակատամարտը:')) +
       para(run('ա) 451 թ.') + '<w:r><w:tab/></w:r>' + run('բ) 301 թ.') + '<w:r><w:tab/></w:r>' + run('գ) 387 թ.')) +
       numbered(run('Ո՞վ էր հայոց զորավարը Ավարայրի ճակատամարտում:')) +

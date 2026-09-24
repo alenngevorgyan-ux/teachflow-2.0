@@ -153,28 +153,38 @@ function deterministicChecks(t: ItemText): MaterialCheck[] {
 
   // The option-count rule is defined for single-choice questions only.
   if (type === 'single_choice') {
-    const min = minOptionsRule();
-    if (min === 'inactive') {
-      checks.push({ checkId: 'option_count', kind: 'deterministic', status: 'not_evaluated', detail: 'Տարբերակների նվազագույն քանակի կանոնն ակտիվ չէ:' });
-    } else if (min === 'invalid') {
-      checks.push({ checkId: 'option_count', kind: 'deterministic', status: 'not_evaluated', detail: 'Տարբերակների նվազագույն քանակի կանոնում min_options արժեքը բացակայում է կամ սխալ է:' });
+    const bounds = optionBoundsRule();
+    if (bounds === 'inactive') {
+      checks.push({ checkId: 'option_count', kind: 'deterministic', status: 'not_evaluated', detail: 'Տարբերակների քանակի կանոնն (rule-single-correct-answer) ակտիվ չէ:' });
+    } else if (bounds === 'invalid') {
+      checks.push({ checkId: 'option_count', kind: 'deterministic', status: 'not_evaluated', detail: 'Տարբերակների քանակի կանոնում minOptions արժեքը բացակայում է կամ սխալ է:' });
     } else {
+      const n = t.options.length;
+      const ok = n >= bounds.min && (bounds.max === undefined || n <= bounds.max);
       checks.push({
         checkId: 'option_count',
         kind: 'deterministic',
-        status: t.options.length >= min ? 'pass' : 'fail',
-        detail: `${t.options.length} տարբերակ. կանոնը պահանջում է առնվազն ${min}:`,
+        status: ok ? 'pass' : 'fail',
+        detail: bounds.max === undefined ? `${n} տարբերակ. կանոնը պահանջում է առնվազն ${bounds.min}:` : `${n} տարբերակ. կանոնը պահանջում է ${bounds.min}–${bounds.max}:`,
       });
     }
   }
   return checks;
 }
 
-function minOptionsRule(): number | 'inactive' | 'invalid' {
-  const rule = repository.getActiveRules().find((r) => r.id === 'rule-min-options' && r.kind === 'deterministic');
+/**
+ * The seeded method rule for single-choice items (rule-single-correct-answer,
+ * params minOptions / maxOptions). Nothing is assumed when it is inactive or
+ * has no valid minimum.
+ */
+function optionBoundsRule(): { min: number; max?: number } | 'inactive' | 'invalid' {
+  const rule = repository.getActiveRules().find((r) => r.id === 'rule-single-correct-answer' && r.kind === 'deterministic');
   if (!rule) return 'inactive';
-  const min = rule.params?.min_options;
-  return typeof min === 'number' && Number.isInteger(min) && min >= 1 ? min : 'invalid';
+  const min = rule.params?.minOptions;
+  const max = rule.params?.maxOptions;
+  const isPos = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1;
+  if (!isPos(min) || (max !== undefined && (!isPos(max) || max < min))) return 'invalid';
+  return { min, max: max as number | undefined };
 }
 
 // -------------------------------------------------------------- model-based
@@ -355,7 +365,7 @@ export function itemInputHash(item: MaterialItem, key: MaterialAnswerKeyEntry | 
       key: key ? [key.origin, key.optionLabels] : null,
       sources: review.selectedSources.map((s) => [s.purpose, s.sourceId, s.version, s.contentHash]),
       outcomes,
-      minOptions: minOptionsRule(),
+      optionBounds: optionBoundsRule(),
       prompts: [PROGRAM_SCOPE_PROMPT_VERSION, UNAMBIGUOUS_PROMPT_VERSION, 'judge:verifyClaim'],
       model: [deps.provider.providerId, deps.modelId ?? deps.provider.defaultModelId ?? null],
       judge: [deps.judge.providerId, deps.judge.modelId],

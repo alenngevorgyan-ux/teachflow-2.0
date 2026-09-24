@@ -70,7 +70,8 @@ function segment(prompt: string) {
   for (const m of lines) {
     const [, id, label, rawText] = m;
     const text = rawText;
-    if (/պատասխան/iu.test(text) && text.length < 40 && !/[ա-ֆ]\)/u.test(text)) {
+    // The key heading is the word alone ("Պատասխաններ", "Պատասխաններ՝"), not any sentence containing it.
+    if (/^\s*պատասխան(?:ներ)?\s*[:։՝.]?\s*$/iu.test(text)) {
       inKey = true;
       current = null;
       continue;

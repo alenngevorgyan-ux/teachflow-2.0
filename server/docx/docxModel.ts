@@ -556,32 +556,32 @@ export async function openDocx(buffer: Uint8Array): Promise<DocxDocument> {
     if (count > 0) preservation.push({ kind, count, parts, textChecked, editable: false, note });
   };
   const hf = names.filter((n) => /^word\/(header|footer)\d*\.xml$/.test(n));
-  add('header_footer', hf.length, hf, true, 'Headers and footers are kept as they are and are not reviewed or edited.');
+  add('header_footer', hf.length, hf, true, 'Վերնագրերն ու էջատակերը պահպանվում են անփոփոխ և չեն ստուգվում ու խմբագրվում:');
   const notes = names.filter((n) => /^word\/(footnotes|endnotes)\.xml$/.test(n));
-  add('footnotes_endnotes', notes.length, notes, true, 'Footnotes and endnotes are kept as they are and are not reviewed or edited.');
+  add('footnotes_endnotes', notes.length, notes, true, 'Ծանոթագրությունները պահպանվում են անփոփոխ և չեն ստուգվում ու խմբագրվում:');
   const comments = names.filter((n) => /^word\/comments[A-Za-z]*\.xml$/.test(n));
-  add('comments', comments.length, comments, true, 'Word comments are kept as they are; their anchors are not moved.');
-  add('text_box', counts.textBoxes, [pkg.mainPartName], true, 'Text in text boxes is read but not edited.');
-  add('equation', counts.equations, [pkg.mainPartName], true, 'Equations are kept and not edited; paragraphs containing them cannot be edited.');
-  add('field', counts.fields, [pkg.mainPartName], true, 'Paragraphs with fields (page numbers, references, SEQ) cannot be edited.');
-  add('content_control', counts.contentControls, [pkg.mainPartName], true, 'Content controls are kept and not edited.');
-  add('tracked_changes', counts.tracked, [pkg.mainPartName], true, 'The file contains tracked changes; affected paragraphs cannot be edited until they are accepted or rejected in Word.');
+  add('comments', comments.length, comments, true, 'Word-ի մեկնաբանությունները պահպանվում են անփոփոխ, դրանց խարիսխները չեն տեղաշարժվում:');
+  add('text_box', counts.textBoxes, [pkg.mainPartName], true, 'Տեքստային տուփերի տեքստը կարդացվում է, բայց չի խմբագրվում:');
+  add('equation', counts.equations, [pkg.mainPartName], true, 'Բանաձևերը պահպանվում են, իսկ դրանք պարունակող պարբերությունները չեն խմբագրվում:');
+  add('field', counts.fields, [pkg.mainPartName], true, 'Դաշտեր (էջահամարներ, հղումներ, SEQ) պարունակող պարբերությունները չեն խմբագրվում:');
+  add('content_control', counts.contentControls, [pkg.mainPartName], true, 'Բովանդակության կառավարման տարրերը պահպանվում են և չեն խմբագրվում:');
+  add('tracked_changes', counts.tracked, [pkg.mainPartName], true, 'Ֆայլը պարունակում է հետևվող փոփոխություններ. համապատասխան պարբերությունները չեն խմբագրվում, քանի դեռ դրանք Word-ում չեն ընդունվել կամ մերժվել:');
   const media = names.filter((n) => BINARY_TEXTLESS.test(n));
-  add('images', media.length, media, false, 'Images are kept; text inside images is not read, so it is not reviewed or privacy-checked.');
+  add('images', media.length, media, false, 'Նկարները պահպանվում են. նկարների ներսի տեքստը չի կարդացվում, ուստի չի ստուգվում ո՛չ բովանդակային, ո՛չ անձնական տվյալների համար:');
   const embedded = names.filter((n) => /^word\/embeddings\//.test(n));
-  add('embedded_objects', embedded.length, embedded, false, 'Embedded objects are kept; their content is not read.');
+  add('embedded_objects', embedded.length, embedded, false, 'Ներդրված օբյեկտները պահպանվում են, դրանց բովանդակությունը չի կարդացվում:');
   const charts = names.filter((n) => /^word\/(charts|diagrams)\//.test(n) && n.endsWith('.xml'));
-  add('charts_diagrams', charts.length, charts, true, 'Charts and SmartArt are kept; their text is privacy-checked but not reviewed or edited.');
+  add('charts_diagrams', charts.length, charts, true, 'Գծապատկերներն ու SmartArt-ը պահպանվում են. դրանց տեքստը ստուգվում է անձնական տվյալների համար, բայց չի խմբագրվում:');
   const alt = [...walkElements(body)].filter((e) => e.name === 'w:altChunk').length;
-  add('alt_chunk', alt, [pkg.mainPartName], false, 'Imported chunks (altChunk) are kept; their content is not read.');
+  add('alt_chunk', alt, [pkg.mainPartName], false, 'Ներմուծված հատվածները (altChunk) պահպանվում են, դրանց բովանդակությունը չի կարդացվում:');
   const meta = names.filter((n) => /^docProps\//.test(n));
-  add('metadata', meta.length, meta, true, 'Document properties (author, title) are kept unchanged.');
+  add('metadata', meta.length, meta, true, 'Փաստաթղթի հատկությունները (հեղինակ, վերնագիր) պահպանվում են անփոփոխ:');
   if (counter.unrenderedFormats.size) {
     add('numbering_format', counter.unrenderedFormats.size, ['word/numbering.xml'], true,
-      `List numbering format(s) ${[...counter.unrenderedFormats].join(', ')} are not rendered in the preview; Word's numbering itself is unchanged.`);
+      `Համարակալման ձևաչափ(եր)ը (${[...counter.unrenderedFormats].join(', ')}) նախադիտման մեջ չեն ցուցադրվում. Word-ի համարակալումն ինքնին անփոփոխ է:`);
   }
   add('unknown_inline', counts.unknownInline.size, [pkg.mainPartName], true,
-    `Unrecognised inline elements (${[...counts.unknownInline].join(', ')}); paragraphs containing them cannot be edited.`);
+    `Չճանաչված տարրեր (${[...counts.unknownInline].join(', ')}). դրանք պարունակող պարբերությունները չեն խմբագրվում:`);
 
   return {
     pkg,

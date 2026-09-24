@@ -41,7 +41,7 @@ export type SuggestOutput = z.infer<typeof SuggestSchema>;
 /** Items with a fresh fail / needs_review on a check an edit could address. */
 export function itemsNeedingFixes(review: MaterialReview): MaterialItemResult[] {
   return review.results.filter(
-    (r) => !r.stale && r.revision === review.revision && r.checks.some((c) => FIXABLE.includes(c.checkId) && (c.status === 'fail' || c.status === 'needs_review'))
+    (r) => !r.stale && r.checks.some((c) => FIXABLE.includes(c.checkId) && (c.status === 'fail' || c.status === 'needs_review'))
   );
 }
 

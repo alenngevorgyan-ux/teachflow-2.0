@@ -254,7 +254,7 @@ beforeEach(() => {
   store.outcomes = [
     { code: 'HP-7-1', text: 'Ավարայրի ճակատամարտի նշանակությունը', subject: SUBJECT, grade: 7, standardVersion: 'v1', sourceId: 'program-1', confirmed: true },
   ];
-  store.rules = [{ id: 'rule-min-options', title: 'min', description: '', kind: 'deterministic', params: { min_options: 3 }, severity: 'error', active: true }];
+  store.rules = [{ id: 'rule-single-correct-answer', title: 'single correct', description: '', kind: 'deterministic', params: { minOptions: 3, maxOptions: 5 }, severity: 'error', active: true }];
 });
 
 async function readyForChecks(state: FakeState = { keyedTwo: 'գ' }) {
@@ -287,6 +287,7 @@ describe('material review: upload and sources', () => {
     await expect(selectSources(r.id, [], ['fact-unconfirmed'])).rejects.toThrow(/հաստատված չէ/);
     await expect(selectSources(r.id, [], ['fact-grade-8'])).rejects.toThrow(/7-րդ դասարանի/);
     await expect(selectSources(r.id, ['fact-1'], [])).rejects.toThrow(/ծրագիր/); // a textbook is not a program
+    await expect(selectSources(r.id, [], ['program-1'])).rejects.toThrow(/ոչ որպես փաստերի աղբյուր/); // a program is not factual evidence
     const ok = await selectSources(r.id, ['program-1'], ['fact-1']);
     expect(ok.selectedSources.map((s) => `${s.purpose}:${s.sourceId}`)).toEqual(['program:program-1', 'fact:fact-1']);
   });
@@ -727,5 +728,34 @@ describe('material review: uninspected content and keys', () => {
     expect(after.answerKey.find((k) => k.itemId === 'item-2')).toMatchObject({ origin: 'teacher', optionLabels: ['ա'] });
     const out = await exportReviewDocx(after);
     expect(Buffer.compare(out, Buffer.from(store.files.get(after.fileSha256)!))).toBe(0);
+  });
+});
+
+describe('material review: dependency-scoped invalidation', () => {
+  it('an edit inside question 1 re-checks question 1 only; question 2 stays fresh', async () => {
+    const { r, deps } = await readyForChecks();
+    const checked = await runChecks(r.id, deps);
+    const q2Before = checked.results.find((x) => x.itemId === 'item-2')!;
+    const stored = store.reviews.get(r.id)!;
+    const { loadWorkingCopy } = await import('../../server/materials/workingCopy.js');
+    const w = await loadWorkingCopy(stored);
+    const optPara = resolveStructure(stored).items[0].options[2].paragraphId;
+    const text = w.paragraphText(optPara)!;
+    const at = text.indexOf('387');
+    stored.suggestions.push({
+      id: 'sug-q1',
+      itemId: 'item-1',
+      addresses: ['option_count'],
+      group: { id: 'grp-q1', patches: [w.makePatch('p-q1', optPara, at, at + 3, '388')] },
+      rationale: 'test',
+      status: 'proposed',
+      model: { providerId: 'fake', modelId: 'fake-model', promptVersion: 'test' },
+    });
+    const after = await decide(r.id, 'sug-q1', { decision: 'accept', expectedRevision: checked.revision }, deps);
+    const q1 = after.results.find((x) => x.itemId === 'item-1')!;
+    const q2 = after.results.find((x) => x.itemId === 'item-2')!;
+    expect(q1.revision).toBe(after.revision);
+    expect(q2).toEqual(q2Before); // untouched: same result, still fresh
+    expect(reviewStatus(after).counts.staleItems).toBe(0);
   });
 });

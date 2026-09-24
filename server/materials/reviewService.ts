@@ -255,6 +255,10 @@ export function selectSources(id: string, programSourceIds: unknown, factSourceI
         return problems.push(`«${s.title}» աղբյուրը չափորոշիչ կամ առարկայական ծրագիր չէ:`);
       }
       if (purpose === 'fact' && s.role !== 'FACT') return problems.push(`«${s.title}» աղբյուրը ՓԱՍՏԱՑԻ չէ:`);
+      // A standard / program defines scope and outcomes; it is not used as factual evidence.
+      if (purpose === 'fact' && (s.docType === 'standard' || s.docType === 'subject_program')) {
+        return problems.push(`«${s.title}» աղբյուրը չափորոշիչ կամ ծրագիր է. այն ընտրեք որպես ծրագիր, ոչ որպես փաստերի աղբյուր:`);
+      }
       selected.push({ sourceId: s.id, purpose, version: s.version, contentHash: sourceContentHash(s) });
     };
     program.forEach((sid) => add(sid, 'program'));
@@ -398,8 +402,14 @@ export interface CheckOptions {
   kind?: 'check' | 'recheck';
 }
 
-function isFresh(r: MaterialItemResult | undefined, review: MaterialReview): boolean {
-  return !!r && !r.stale && r.revision === review.revision;
+/**
+ * A result stays fresh until something it depends on changes. Every change
+ * (accepted fix, undo, key, sources, structure) marks exactly the dependent
+ * items stale, so a result computed at an earlier revision for a question
+ * the later edits did not touch is still current.
+ */
+function isFresh(r: MaterialItemResult | undefined, _review: MaterialReview): boolean {
+  return !!r && !r.stale;
 }
 
 export async function runChecks(id: string, deps: ReviewDeps, opts: CheckOptions = {}): Promise<MaterialReview> {
@@ -779,7 +789,7 @@ export function reviewStatus(review: MaterialReview): ReviewStatus {
   for (const item of items) {
     const r = review.results.find((x) => x.itemId === item.id);
     if (!r) { counts.uncheckedItems++; continue; }
-    if (r.stale || r.revision !== review.revision) counts.staleItems++;
+    if (r.stale) counts.staleItems++;
     for (const c of r.checks) {
       counts[c.status]++;
       if (c.executionError) counts.executionErrors++;
