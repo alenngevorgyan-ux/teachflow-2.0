@@ -41,11 +41,13 @@ Flow: upload DOCX -> check against selected confirmed sources -> accept fixes ->
 - [x] **M4. Review service.** Split into questions (model gives ids/quotes only, verified), teacher-confirmed split, explicit or teacher-set key, checks pass/fail/needs_review/not_evaluated, suggestions with verbatim evidence, accept/reject with targeted re-check, draft/final export and change list.
 - [x] **M5. UI** page + registry confirmation controls.
 - [x] **M6. Layout check tool** (`scripts/docx-layout-check.ts`): renders original and corrected copy with LibreOffice or Word and compares pagination. Text-level only; the PDFs are for a person to look at.
+- [x] **M7. Night build (2026-09-24)**: sessions, concurrency, undo, run records, fixture environment, Armenian-first design system and review workbench, historical debts. See `docs/overnight-handoff.md`. Deterministic fixture E2E in the real UI passes; one live split call passes.
 
 Open — the pilot is NOT ready until these are done:
 - [ ] **P1. Real teacher files.** Run the full flow on 2–3 real DOCX files written in Word by teachers (no student data), including the layout check in Word. Synthetic test files do not count.
 - [ ] **P2. Real sources.** Upload the current subject program and standard (and the pilot teacher's textbook with permission), extract and confirm outcomes, confirm each source version. Until then content checks are not_evaluated.
-- [ ] **P3. Model runs.** Split, checks and suggestions have only run against fake models in tests; the OpenRouter key had no credits. Run them on the real files and record quality problems.
+- [ ] **P3. Model runs.** Only the split has run live (synthetic file, 2026-09-24, after bounding max_tokens). Checks, fixes and re-checks need confirmed real sources; run them on the real files and record quality problems.
+- [ ] **P5. Armenian linguistic QA** of the UI and server messages by a fluent reviewer.
 - [ ] **P4. Teacher measurement.** Time to bring an own test to a usable state vs the usual way.
 - [ ] Later: PDF/scans, separate key file, Word tracked-changes export.
 

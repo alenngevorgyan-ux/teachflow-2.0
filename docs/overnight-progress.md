@@ -1,28 +1,28 @@
 # Overnight progress — TeachFlow review flow + Armenian-first redesign
 
-Brief: `TeachFlow_Night_Build/MASTER_PROMPT.md` (supplied zip, 2026-09-24).
+Brief: `TeachFlow_Night_Build/MASTER_PROMPT.md` (supplied zip, 2026-09-24). Full report: `docs/overnight-handoff.md`.
 
 ## Baseline (verified at start)
 - Branch `claude/docx-material-fix`, HEAD `6423a6160e2e21aa0acc670679f96b3d7641f6e9`, clean except untracked `.claude/`.
-- Remote `origin` = github.com/alenngevorgyan-ux/teachflow-2.0, default branch `main`. `vercel.json` has no production-branch setting; this feature branch is not `main`.
-- `npx tsc --noEmit` OK; `npm test` 32 files / 360 tests pass; `vite build` OK. `npm run lint` = `tsc --noEmit`.
-- Before screenshots: `docs/screenshots/before/` (1440, 1024, 390). At 390px the page overflows horizontally by 596px.
-- Live model: OpenRouter key has no credits (seen 2026-09-24). No real sources, no real teacher DOCX.
+- Remote `origin` = github.com/alenngevorgyan-ux/teachflow-2.0, default branch `main`; `vercel.json` has no production-branch setting; this branch is not `main`.
+- `tsc` OK; `npm test` 32 files / 360 tests; `vite build` OK. Before screenshots show 596px horizontal overflow at 390px.
 
-## Plan (short)
-1. P0/P1 correctness: per-review mutation lock + optimistic version; run records (pending/running/succeeded/failed/obsolete) with input hashes; late results discarded; spans stored in segmentation coordinates and mapped through accepted groups (enables undo); undo; question-type rules; formatting policy for cross-run edits; no-op export = original bytes; original download; declaration for uninspected content; no document text in audit logs; result reuse by input hash; teacher segmentation edits (validated); unassigned material listed; proposal states proposed/accepted/rejected/superseded.
-2. Deterministic FIXTURE environment (separate data dir, fixture provider, labelled everywhere) for the E2E UI run.
-3. P2 design system: tokens, locally bundled Noto Sans Armenian, AppShell with left nav, review workbench with stages, findings panel, filters, evidence, diff, export summary; translations.
-4. P3 debts: consolidation defaults, calendar assumptions, embedding audit, MCP trimming, academic-year manual confirmation.
-5. Visual migration of other main screens via shared tokens/components.
-6. Verification: tests, build, puppeteer E2E (download + inspect DOCX), screenshots 1440/1024/390 + 200% zoom, docs, commits, push (feature branch only).
-
-## Log
-- (start) Baseline recorded, before screenshots captured, puppeteer-core added as dev dependency (drives the installed Google Chrome; no browser download).
+## Done
+1. Correctness: lock + version, run records, late-result discard, span anchoring + undo, proposal revisions, key-only fixes, input-hash reuse, retry, formatting policy, exact no-op export, original download, shared-paragraph spans, teacher split edits, type rules, declaration, audit redaction, FIXTURE environment (`fed0f0f`).
+2. E2E-found fixes (`be8c6fa`).
+3. Design system, shell, Home, review UI, fixture tooling, E2E evidence (`a59d0a9`).
+4. Historical debts (`06c2297`).
+5. Other screens (`9d73560`).
+6. OpenRouter max_tokens and live smoke (`504d600`).
+7. Docs: handoff, design notes, TASKS.md.
 
 ## Active step
-P0/P1 correctness work in `server/materials/*`.
+Done. Only the external gates remain (see the handoff §3).
+
+## Next exact action (for whoever continues)
+Upload the real subject program and textbook in Registry, confirm them, and run the smoke scenario on :3000 with 2–3 real teacher DOCX files; then run `scripts/docx-layout-check.ts` with Word.
 
 ## Blockers
-- Live provider: no credits (cannot top up — not authorised).
-- Real sources / real teacher DOCX: not supplied.
+- Real sources and real teacher DOCX: not supplied.
+- Word layout run: needs a person present (macOS automation prompt).
+- Armenian linguistic QA: needs a fluent reviewer.
