@@ -175,3 +175,113 @@ Before step 4, resolve the **real-model blocker** below.
 ## Production status
 
 `NOT DEPLOYED TO PRODUCTION`
+
+---
+
+## Final piece (after review): thinking levels, embeddings, real synthetic pilot
+
+Decisions from the review, implemented:
+- **thinking level per operation, not globally:** splitting `minimal`,
+  checks and judge `low`, fix proposals `medium`, everything else
+  unchanged;
+- **no token-limit increase;**
+- **no model change;**
+- **no user identity system:** outcome confirmation is recorded by name on
+  the human review sheet;
+- **explicit retrieval state:** `SEMANTIC_RETRIEVAL = GOOGLE_EMBEDDINGS`
+  or `KEYWORD_FALLBACK`, with no hidden fallback.
+
+Commits: `d9c4836` (thinking levels, per-call tokens and cost, embedding
+route), `c4bb155` (splitting fix), `ba13172` (pilot retrieval state, cost
+table, auto-confirm guard).
+
+### Embeddings
+
+The `GEMINI_API_KEY` in `.env` is not a standard Gemini API key (it lacks
+the `AIza…` form), so the Gemini API rejects it. New explicit route:
+`EMBEDDING_PROVIDER=openrouter` sends the same Google model
+(`google/gemini-embedding-001`, 768 dimensions, size-checked) through
+OpenRouter.
+
+**Semantic retrieval proven on synthetic passages.** Three paraphrased
+questions with no shared keywords each found the right passage:
+- similarity 0.59–0.64 for the right passage vs 0.45–0.53 for the others;
+- `retrievalMode: semantic`;
+- 4 calls, $0.000032.
+
+### Real-model synthetic pilot (`SYNTH-REAL-2`, synthetic case, `google/gemini-3.5-flash`)
+
+Run code: `4b565b0` plus the then-uncommitted changes above. The evidence
+records this as "tracked files modified: 16".
+
+Result:
+- `TECHNICAL_RUN_COMPLETE`, `modelExecution: real_external`;
+- **`SEMANTIC_RETRIEVAL = GOOGLE_EMBEDDINGS`**: 5 of 5 checks semantic;
+- **splitting now works in one call**: 710 output tokens, 0 of them
+  reasoning (it was cut off at 8192, with 7862 reasoning);
+- 4.5 minutes.
+
+| Operation | Thinking | Calls | In | Out | of which reasoning | Cost USD |
+|---|---|---|---|---|---|---|
+| embed:chunks | — | 2 | 181 | 0 | 0 | 0.000027 |
+| material:segment | minimal | 1 | 1762 | 710 | 0 | 0.009033 |
+| embed:query | — | 5 | 221 | 0 | 0 | 0.000033 |
+| material:program_scope | low | 5 | 2339 | 1746 | 1118 | 0.019223 |
+| judge:verifyClaim | low | 5 | 2908 | 1194 | 597 | 0.015108 |
+| material:answer_unambiguous | low | 3 | 1788 | 938 | 586 | 0.011124 |
+| material:suggest_fix | medium | 2 | 2502 | 4064 | 3393 | 0.040329 |
+| **Total** | | **23** | 11701 | 8652 | 5694 | **0.094877** |
+
+Per-call rows: `pilot-private/SYNTH-REAL-2/evidence/bundle-*/summary.md`.
+Fix proposals are the most expensive operation (43% of the cost, mostly
+reasoning).
+
+### What the real model got wrong (synthetic data)
+
+1. **The split miscopied an option.** In "ա) Վարդան Մամիկոնյան" it wrote
+   "Կարդան". The exact-copy check rejected the option, so question 2 lost
+   it. A comparison, 3 runs each on the same document:
+   - `minimal`: 3 of 3 runs miscopied the option («Կարդան» twice,
+     «Կարմիր Վարդան» once);
+   - `low`: same class of error in 3 of 3 runs: once «Կարմիր Վարդան»,
+     twice a doubled space that dropped all three options;
+   - both levels used 0 reasoning tokens, so **raising the level does not
+     help**.
+
+   **Fix (`c4bb155`):** when the named paragraph is exactly one option with
+   the same label, its text comes from the document, not from the model's
+   copy. Tests reproduce all three observed miscopies. **Not re-verified on
+   the real model**: the key hit its limit first.
+2. **A harmful fix followed.** With option ա missing, the model "fixed"
+   question 2 by rewriting option գ into «Վարդան Մամիկոնյան». The exported
+   copy had the correct answer twice, and the re-check could not see it.
+   Only the synthetic auto-accept let it through. Harness fix: synthetic
+   auto-confirm now refuses a structure with rejected parts. In a real
+   pilot the teacher sees the rejected part at `STRUCTURE_REVIEW_PENDING`
+   and decides every proposal.
+3. **A proposal changed the question's purpose.** It rewrote question 3
+   (why the battle mattered → when and who), and the re-check correctly
+   reported `program_scope: fail` against the outcome. Visible, not
+   hidden; the teacher would reject it.
+
+The case's expected-text check (`2-ա`, the key fix) failed, so the bundle
+is `EXPORT_FAILED`. The real model did not propose the key fix; that is
+correct reporting.
+
+### Blocker
+
+**The OpenRouter key has used its whole $2.00 limit** ($2.02 used; $0.33
+today). Every real call now fails with "Key limit exceeded". No top-up was
+made. The splitting fix and a clean real-model rerun wait for a key with
+credit. The expected cost of one synthetic run is about $0.10.
+
+### Tests after this piece
+
+| Command | Result |
+|---|---|
+| `npx tsc --noEmit` | clean |
+| `npm test` | **41 files, 504 tests passed** |
+| `npx vite build` | built |
+| Fixture browser E2E (`scripts/e2e-review.mjs`, fresh store) | `E2E OK`, corrected DOCX `58cc0b0e…` (unchanged) |
+
+**NOT DEPLOYED TO PRODUCTION.**

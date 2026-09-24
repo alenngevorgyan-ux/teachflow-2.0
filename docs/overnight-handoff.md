@@ -280,3 +280,20 @@ Unchanged gates: no real sources, no real teacher DOCX, no Word layout
 check, no Armenian linguistic QA, no successful real-model run.
 **NOT DEPLOYED TO PRODUCTION.** The pilot is not ready. The harness to run
 it is.
+
+### Pilot Readiness Sprint: final piece
+
+- Thinking level per operation (splitting `minimal`, checks and judge
+  `low`, fixes `medium`).
+- Tokens and cost of every call are recorded in the evidence.
+- Explicit `SEMANTIC_RETRIEVAL` state. Embeddings run through OpenRouter,
+  the same Google model; the Gemini key in `.env` is invalid.
+- Real-model synthetic pilot: `TECHNICAL_RUN_COMPLETE` for $0.095. Splitting
+  works: 710 output tokens, 0 reasoning. Retrieval is `GOOGLE_EMBEDDINGS`.
+- The real model miscopied an Armenian option at both `minimal` and `low`.
+  Now fixed: a single-option paragraph is taken from the document. Covered
+  by tests; not re-verified on the model, because the OpenRouter key has
+  used its $2 limit.
+- `npm test` 504 passing. Details: `docs/pilot-readiness-handoff.md`
+  ("Final piece"). **NOT DEPLOYED TO PRODUCTION.**
+

@@ -225,19 +225,56 @@ Then:
 Collect evidence after a failure too (`pilot:evidence`). The bundle then
 records the failure honestly.
 
+## Model and retrieval settings
+
+**Thinking level per operation** (`server/providers/reasoningPolicy.ts`, recorded in every result and in `run.json → provenance.reasoning`):
+
+| Operation | Level |
+|---|---|
+| `material:segment` (splitting into questions) | minimal |
+| `material:program_scope`, `material:answer_unambiguous`, `judge:verifyClaim` | low |
+| `material:suggest_fix` | medium |
+| everything else | provider default (unchanged) |
+
+For a recorded experiment, set `TEACHFLOW_REASONING_OVERRIDE="material:segment=low"`.
+It shows up in the evidence.
+
+**Semantic retrieval** is chosen explicitly and never falls back silently:
+
+```bash
+EMBEDDING_PROVIDER=openrouter   # google/gemini-embedding-001 via OpenRouter (OPENROUTER_API_KEY), 768 dims
+# unset -> Gemini API directly (GEMINI_API_KEY)
+```
+
+The run prints `SEMANTIC_RETRIEVAL = …` twice: the configured route, and
+what the checks actually used. `summary.md` shows the observed state:
+
+- `GOOGLE_EMBEDDINGS`: every check's passages were found semantically;
+- `KEYWORD_FALLBACK`: no semantic search;
+- `MIXED`: some passages had no embeddings;
+- `NOT_USED`: no source checks ran.
+
+With `GOOGLE_EMBEDDINGS`, source chunks and check queries go to Google's
+embedding model (through OpenRouter or directly). Decide this knowingly
+before real materials.
+
+**Cost.** `summary.md → Model calls` lists every call: operation, model,
+thinking level, attempts, tokens (including reasoning) and the cost as
+reported by OpenRouter. The Gemini API reports no cost, so those calls
+show `?`.
+
 ## Known blockers (as of this sprint)
 
-- **Real model: segmentation is cut off by reasoning tokens.** A synthetic run
-  with `google/gemini-3.5-flash` and `max_tokens` 8192 failed at segmentation
-  on a 13-paragraph test. Usage was 8177 completion tokens, 7862 of them
-  reasoning. A decision is needed before the pilot: raise
-  `OPENROUTER_MAX_TOKENS`, limit reasoning effort for this call, or choose
-  another model. Each option costs money or changes behaviour.
-- **Embeddings:** the configured `GEMINI_API_KEY` is rejected by the Gemini
-  embeddings API (401). Retrieval falls back to keyword-only, which is visible
-  in the ingest warnings and the audit log. In a real run, source chunks and
-  check queries are sent to Gemini embeddings whenever the key works; the
-  FIXTURE mode sends nothing.
+- **The OpenRouter key has used its whole spending limit** ($2.00; $2.02
+  used). Every real-model call now fails with "Key limit exceeded". Raise
+  the limit or use another key before a real run.
+- **Gemini key:** the `GEMINI_API_KEY` in `.env` is not a standard Gemini
+  API key and is rejected (401). Use `EMBEDDING_PROVIDER=openrouter`, or
+  replace the key.
+- **Splitting fix not yet re-verified on the real model.** The fix that
+  takes a miscopied single-option paragraph from the document is covered by
+  tests built from the model's actual miscopies. It could not be re-run
+  against the model because of the key limit.
 
 ## Commands at a glance
 
