@@ -68,6 +68,32 @@ export function locateUnique(text: string, quote: string): { start: number; end:
   return { start: first, end: first + quote.length };
 }
 
+const LEADING_OPTION_LABEL = /^\s*[([]?([ա-ֆԱ-Ֆa-zA-Z0-9]{1,2})[)\].]\s/u;
+const INLINE_OPTION_LABEL = /\s[([]?[ա-ֆԱ-Ֆa-zA-Z0-9]{1,2}[)\]]\s/u;
+
+/**
+ * A paragraph that is exactly one option carrying `label` (typed at its start,
+ * or Word's list label), with no second option inside it: its trimmed text is
+ * the option. Used when the model's copy of the option does not match: models
+ * miscopy Armenian text («Կարդան» for «Վարդան», doubled spaces), and the
+ * document itself is the source of truth. Several inline options in one
+ * paragraph still need an exact copy.
+ */
+export function wholeParagraphOption(paragraph: MaterialParagraph, label: string): { start: number; end: number } | null {
+  const want = normalizeLabel(label);
+  if (!want) return null;
+  const text = paragraph.text;
+  const lead = LEADING_OPTION_LABEL.exec(text);
+  const typed = lead ? normalizeLabel(lead[1]) : null;
+  const listed = paragraph.label ? normalizeLabel(paragraph.label) : null;
+  if (typed !== want && !(typed === null && listed === want)) return null;
+  const rest = lead ? text.slice(lead[0].length) : text;
+  if (INLINE_OPTION_LABEL.test(` ${rest}`)) return null;
+  const start = text.length - text.trimStart().length;
+  const end = text.trimEnd().length;
+  return end > start ? { start, end } : null;
+}
+
 export function buildSegmentPrompt(paragraphs: MaterialParagraph[]): string {
   const template = fs.readFileSync(path.resolve(process.cwd(), `server/prompts/${SEGMENT_PROMPT_VERSION}.txt`), 'utf-8');
   const lines = paragraphs
@@ -138,7 +164,8 @@ export function validateSegmentation(
       const p = byId.get(o.paragraphId);
       if (!p) { problems.push(`${label}. «${o.label}» տարբերակի պարբերությունը գոյություն չունի:`); continue; }
       if (keyIds.has(o.paragraphId)) { problems.push(`${label}. «${o.label}» տարբերակը բանալու պարբերությունում է:`); continue; }
-      const loc = locateUnique(p.text, fromPrompt(o.text));
+      let loc = locateUnique(p.text, fromPrompt(o.text));
+      if ('error' in loc) loc = wholeParagraphOption(p, o.label) ?? loc;
       if ('error' in loc) { problems.push(`${label}. «${o.label}» տարբերակ. ${loc.error}:`); continue; }
       const norm = normalizeLabel(o.label);
       if (!norm || seen.has(norm)) { problems.push(`${label}. «${o.label}» նշանը դատարկ է կամ կրկնվում է:`); continue; }
