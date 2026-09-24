@@ -4,14 +4,14 @@ import { ExtractedOutcomesSchema } from '../../shared/schemas.js';
 import { CurriculumOutcome } from '../../shared/types.js';
 import { IModelProvider } from '../providers/modelProvider.js';
 import { repository } from '../store/repository.js';
-import { isQuoteVerbatimInChunk, normalizeArmenianText } from './normalization.js';
+import { findCodeInText, isQuoteVerbatimInChunk } from './normalization.js';
 
 export const EXTRACT_OUTCOMES_PROMPT = 'extract_outcomes.v2.txt';
 
 export type SkipReason =
   | 'no_code_in_source' // model returned null: the document has no explicit code
   | 'code_not_in_source' // model returned a code that does not appear in the text
-  | 'text_not_verbatim' // description is not a verbatim copy of the text
+  | 'text_not_verbatim' // description is not a verbatim copy of the text under this code
   | 'duplicate_code' // the same code twice in one extraction
   | 'confirmed_exists'; // a confirmed outcome with this code already exists
 
@@ -29,24 +29,30 @@ export interface OutcomeExtractionResult {
   promptFile: string;
 }
 
-/**
- * True if `code` appears in `text` as a whole code (after Armenian
- * normalization): «ԲՆ-5-1» matches «ԲՆ-5-1.» but not «ԲՆ-5-12» or «ԱԲՆ-5-1».
- */
+/** True if `code` appears in `text` as a whole code (see findCodeInText). */
 export function codeAppearsInText(code: string, text: string): boolean {
-  const c = normalizeArmenianText(code);
-  if (!c || !/[\p{L}\p{N}]/u.test(c)) return false;
-  const t = ` ${normalizeArmenianText(text)} `;
-  let idx = t.indexOf(c);
-  while (idx >= 0) {
-    const before = t[idx - 1];
-    const after = t.slice(idx + c.length);
-    const boundaryBefore = before === ' ';
-    const boundaryAfter = /^\s/.test(after) && !/^ - \p{N}/u.test(after);
-    if (boundaryBefore && boundaryAfter) return true;
-    idx = t.indexOf(c, idx + 1);
-  }
-  return false;
+  return findCodeInText(code, text).length > 0;
+}
+
+// How far after its code an outcome description may start.
+const DESCRIPTION_WINDOW = 1500;
+
+/**
+ * The description must follow its own code: it is searched in the text after
+ * each occurrence of the code, up to the next occurrence of another extracted
+ * code (or DESCRIPTION_WINDOW characters). A description that only appears
+ * under a different code does not count.
+ */
+export function descriptionFollowsCode(code: string, description: string, text: string, otherCodes: string[]): boolean {
+  const t = text.normalize('NFC');
+  const others = otherCodes
+    .filter((c) => c !== code)
+    .flatMap((c) => findCodeInText(c, t).map((p) => p.start));
+  return findCodeInText(code, t).some(({ end }) => {
+    const next = others.filter((s) => s >= end).sort((x, y) => x - y)[0];
+    const segment = t.slice(end, Math.min(next ?? Infinity, end + DESCRIPTION_WINDOW));
+    return isQuoteVerbatimInChunk(description, segment);
+  });
 }
 
 /**
@@ -72,7 +78,15 @@ export async function extractOutcomes(params: {
     actionName: 'extractOutcomes',
   });
 
-  const existing = new Map(repository.getOutcomes().map((o) => [o.code, o]));
+  // Outcome identity is subject + grade + code: the same code in another
+  // subject or grade is a different outcome.
+  const existing = new Map(
+    repository
+      .getOutcomes()
+      .filter((o) => o.subject === subject && o.grade === grade)
+      .map((o) => [o.code, o])
+  );
+  const allCodes = res.output.outcomes.map((o) => o.code?.trim()).filter((c): c is string => Boolean(c));
   const seen = new Set<string>();
   const saved: CurriculumOutcome[] = [];
   const skipped: SkippedOutcome[] = [];
@@ -84,7 +98,7 @@ export async function extractOutcomes(params: {
 
     if (!code) skip('no_code_in_source');
     else if (!codeAppearsInText(code, text)) skip('code_not_in_source');
-    else if (!isQuoteVerbatimInChunk(desc, text)) skip('text_not_verbatim');
+    else if (!descriptionFollowsCode(code, desc, text, allCodes)) skip('text_not_verbatim');
     else if (seen.has(code)) skip('duplicate_code');
     else if (existing.get(code)?.confirmed) skip('confirmed_exists');
     else {

@@ -14,7 +14,7 @@ vi.mock('../server/store/repository.js', () => ({
   },
 }));
 
-import { codeAppearsInText, extractOutcomes } from '../server/pipeline/outcomeExtractor.js';
+import { codeAppearsInText, descriptionFollowsCode, extractOutcomes } from '../server/pipeline/outcomeExtractor.js';
 
 const SOURCE = [
   'Բնագիտություն, 5-րդ դասարան',
@@ -106,5 +106,33 @@ describe('extractOutcomes never invents codes', () => {
     expect(r.promptFile).toBe('extract_outcomes.v2.txt');
     expect(calls[0]).toContain('NEVER invent');
     expect(calls[0]).toContain(SOURCE);
+  });
+});
+
+describe('external review cases', () => {
+  it('whole codes only, on the original text', () => {
+    expect(codeAppearsInText('ԲՆ-5-1', 'X-ԲՆ-5-1. text')).toBe(false);
+    expect(codeAppearsInText('ԲՆ-5-1', 'ԲՆ-5-1-A. text')).toBe(false);
+    expect(codeAppearsInText('ԲՆ-5-1', '«ԲՆ-5-1» text')).toBe(true);
+    expect(codeAppearsInText('ԲՆ-5-1', 'ԲՆ-5-1 – Բացատրել')).toBe(true);
+    expect(codeAppearsInText('ԲՆ-5-1', 'բն֊5֊1 text')).toBe(true);
+    expect(codeAppearsInText('ԲՆ-5-1', 'ԲՆ - 5 - 1 text')).toBe(true);
+    expect(codeAppearsInText('1.1', 'Արդյունք 1.1 text, 1.10 other')).toBe(true);
+    expect(codeAppearsInText('1.1', 'only 1.10 here')).toBe(false);
+  });
+
+  it('a description must belong to its own code', () => {
+    const text = 'ԲՆ-5-1. Առաջին նկարագրություն:\nԲՆ-5-2. Երկրորդ նկարագրություն:';
+    const codes = ['ԲՆ-5-1', 'ԲՆ-5-2'];
+    expect(descriptionFollowsCode('ԲՆ-5-1', 'Առաջին նկարագրություն:', text, codes)).toBe(true);
+    expect(descriptionFollowsCode('ԲՆ-5-1', 'Երկրորդ նկարագրություն:', text, codes)).toBe(false);
+  });
+
+  it('same code in another subject is a different outcome', async () => {
+    store.outcomes = [
+      { code: 'ԲՆ-5-1', text: 'x', subject: 'Other subject', grade: 5, standardVersion: 'v1', sourceId: 's', confirmed: true },
+    ];
+    const r = await run([{ code: 'ԲՆ-5-1', text: 'Բացատրել լուսասինթեզի գործընթացը և դրա պայմանները:', grade: 5 }]);
+    expect(r.saved).toHaveLength(1);
   });
 });

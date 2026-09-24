@@ -248,16 +248,21 @@ export function createApiRouter(): Router {
 
   router.post('/sources/extract-outcomes', async (req: Request, res: Response) => {
     try {
-      const { text, subject, grade, sourceId } = req.body;
-      if (!text || !subject || !sourceId || grade === undefined || grade === null || grade === '') {
-        return res.status(400).json({ error: 'text, subject, grade and sourceId are required' });
+      // The source is loaded from the registry: outcomes are checked against
+      // its stored text, never against text sent by the client.
+      const { sourceId, grade } = req.body;
+      const source = sourceId ? repository.getSource(String(sourceId)) : undefined;
+      if (!source) return res.status(404).json({ error: 'Source not found' });
+      const g = Number(grade);
+      if (!source.grades.includes(g)) {
+        return res.status(400).json({ error: `grade must be one of the source's grades (${source.grades.join(', ')})` });
       }
       const result = await extractOutcomes({
         provider: getProvider(),
-        text: String(text),
-        subject: String(subject),
-        grade: Number(grade),
-        sourceId: String(sourceId),
+        text: source.chunks.map((c) => c.text).join('\n\n'),
+        subject: source.subject,
+        grade: g,
+        sourceId: source.id,
       });
       res.json({ outcomes: result.saved, ...result });
     } catch (err: unknown) {
@@ -272,13 +277,20 @@ export function createApiRouter(): Router {
   });
 
   router.post('/outcomes/confirm', (req: Request, res: Response) => {
-    const { code, confirmed } = req.body;
-    const ok = repository.confirmOutcome(code, Boolean(confirmed));
+    const { code, subject, grade, confirmed } = req.body;
+    if (!code || !subject || grade === undefined) {
+      return res.status(400).json({ error: 'code, subject and grade are required' });
+    }
+    const ok = repository.confirmOutcome({ code, subject, grade: Number(grade) }, Boolean(confirmed));
     res.json({ success: ok });
   });
 
   router.delete('/outcomes/:code', (req: Request, res: Response) => {
-    const ok = repository.deleteOutcome(req.params.code);
+    const { subject, grade } = req.query;
+    if (!subject || grade === undefined) {
+      return res.status(400).json({ error: 'subject and grade query parameters are required' });
+    }
+    const ok = repository.deleteOutcome({ code: req.params.code, subject: String(subject), grade: Number(grade) });
     res.json({ success: ok });
   });
 

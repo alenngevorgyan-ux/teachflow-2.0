@@ -197,15 +197,12 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
     setExtractingOutcomes(true);
     setExtractResult(null);
     try {
-      const textToExtract = src.chunks.map((c) => c.text).join('\n\n');
       const res = await fetch('/api/sources/extract-outcomes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sourceId: src.id,
-          subject: src.subject,
           grade,
-          text: textToExtract,
         }),
       });
       const data = await res.json();
@@ -229,25 +226,29 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
     }
   };
 
-  const handleConfirmOutcome = async (code: string, confirmed: boolean) => {
+  const sameOutcome = (a: CurriculumOutcome, b: CurriculumOutcome) =>
+    a.code === b.code && a.subject === b.subject && a.grade === b.grade;
+
+  const handleConfirmOutcome = async (outcome: CurriculumOutcome, confirmed: boolean) => {
     try {
-      await fetch('/api/outcomes/confirm', {
+      const res = await fetch('/api/outcomes/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, confirmed }),
+        body: JSON.stringify({ code: outcome.code, subject: outcome.subject, grade: outcome.grade, confirmed }),
       });
-      setOutcomes((prev) =>
-        prev.map((o) => (o.code === code ? { ...o, confirmed } : o))
-      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setOutcomes((prev) => prev.map((o) => (sameOutcome(o, outcome) ? { ...o, confirmed } : o)));
     } catch (err) {
       console.error('Failed to confirm outcome:', err);
     }
   };
 
-  const handleDeleteOutcome = async (code: string) => {
+  const handleDeleteOutcome = async (outcome: CurriculumOutcome) => {
     try {
-      await fetch(`/api/outcomes/${code}`, { method: 'DELETE' });
-      setOutcomes((prev) => prev.filter((o) => o.code !== code));
+      const q = new URLSearchParams({ subject: outcome.subject, grade: String(outcome.grade) });
+      const res = await fetch(`/api/outcomes/${encodeURIComponent(outcome.code)}?${q}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setOutcomes((prev) => prev.filter((o) => !sameOutcome(o, outcome)));
     } catch (err) {
       console.error('Failed to delete outcome:', err);
     }
@@ -729,7 +730,7 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
           <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
             {outcomes.map((out) => (
               <div
-                key={out.code}
+                key={`${out.subject}|${out.grade}|${out.code}`}
                 className="p-3.5 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
               >
                 <div className="space-y-1 flex-1">
@@ -749,7 +750,7 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
 
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => handleConfirmOutcome(out.code, !out.confirmed)}
+                    onClick={() => handleConfirmOutcome(out, !out.confirmed)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                       out.confirmed
                         ? 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
@@ -759,7 +760,7 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
                     {out.confirmed ? 'Չեղարկել հաստատումը' : 'Հաստատել օգտագործման համար'}
                   </button>
                   <button
-                    onClick={() => handleDeleteOutcome(out.code)}
+                    onClick={() => handleDeleteOutcome(out)}
                     className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
                     title={t.common.delete}
                   >

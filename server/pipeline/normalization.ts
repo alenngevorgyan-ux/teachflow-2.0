@@ -45,3 +45,34 @@ export function isQuoteVerbatimInChunk(quote: string, chunkText: string): boolea
   if (!/[\p{L}\p{N}]/u.test(normalizedQuote)) return false;
   return normalizedChunk.includes(normalizedQuote);
 }
+
+const CODE_SEP = '[-‐‑‒–—֊]';
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Positions where `code` occurs in `text` as a whole code, on the original
+ * text (not the normalized one, where hyphens become " - " and a code cannot
+ * be told apart from "code – description"):
+ * - hyphen variants (- ‐ – — ֊) and spaces around them are equivalent,
+ *   letters are compared case-insensitively;
+ * - not part of a longer code: no letter/digit, and no directly attached
+ *   "X-" / "-A", on either side. «ԲՆ-5-1» and "ԲՆ-5-1 – text" match;
+ *   "ԲՆ-5-12", "X-ԲՆ-5-1", "ԲՆ-5-1-A" do not.
+ */
+export function findCodeInText(code: string, text: string): Array<{ start: number; end: number }> {
+  const parts = code.normalize('NFC').trim().split(new RegExp(`\\s*${CODE_SEP}\\s*`, 'u')).filter(Boolean);
+  if (parts.length === 0 || !parts.some((p) => /[\p{L}\p{N}]/u.test(p))) return [];
+  const body = parts.map(escapeRegex).join(`\\s*${CODE_SEP}\\s*`);
+  const re = new RegExp(
+    `(?<![\\p{L}\\p{N}])(?<![\\p{L}\\p{N}]${CODE_SEP})${body}(?![\\p{L}\\p{N}])(?!${CODE_SEP}[\\p{L}\\p{N}])`,
+    'giu'
+  );
+  const out: Array<{ start: number; end: number }> = [];
+  const t = text.normalize('NFC');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t)) !== null) out.push({ start: m.index, end: m.index + m[0].length });
+  return out;
+}

@@ -57,8 +57,8 @@ export interface IRepository {
   getOutcomes(): CurriculumOutcome[];
   getConfirmedOutcomes(subject: string, grade: number): CurriculumOutcome[];
   saveOutcomes(outcomes: CurriculumOutcome[]): void;
-  confirmOutcome(code: string, confirmed: boolean): boolean;
-  deleteOutcome(code: string): boolean;
+  confirmOutcome(key: OutcomeKey, confirmed: boolean): boolean;
+  deleteOutcome(key: OutcomeKey): boolean;
 
   // Rules
   getRules(): MethodRule[];
@@ -174,6 +174,17 @@ export interface IRepository {
   clearNonDemoData(): void;
   clearDemoData(): void;
   resetDemoData(): void;
+}
+
+/** An outcome is identified by subject + grade + code (codes repeat across subjects/grades). */
+export interface OutcomeKey {
+  code: string;
+  subject: string;
+  grade: number;
+}
+
+function sameOutcome(a: OutcomeKey, b: OutcomeKey): boolean {
+  return a.code === b.code && a.subject === b.subject && a.grade === b.grade;
 }
 
 // Vercel serverless functions only allow writes under /tmp; data there does not
@@ -444,8 +455,10 @@ export class JsonFileRepository implements IRepository {
 
   saveOutcomes(outcomes: CurriculumOutcome[]): void {
     for (const o of outcomes) {
-      const idx = this.outcomes.findIndex((existing) => existing.code === o.code);
+      const idx = this.outcomes.findIndex((existing) => sameOutcome(existing, o));
       if (idx >= 0) {
+        // A confirmed outcome is never replaced by an unconfirmed one.
+        if (this.outcomes[idx].confirmed && !o.confirmed) continue;
         this.outcomes[idx] = o;
       } else {
         this.outcomes.push(o);
@@ -454,8 +467,8 @@ export class JsonFileRepository implements IRepository {
     this.saveToDisk();
   }
 
-  confirmOutcome(code: string, confirmed: boolean): boolean {
-    const outcome = this.outcomes.find((o) => o.code === code);
+  confirmOutcome(key: OutcomeKey, confirmed: boolean): boolean {
+    const outcome = this.outcomes.find((o) => sameOutcome(o, key));
     if (outcome) {
       outcome.confirmed = confirmed;
       this.saveToDisk();
@@ -464,8 +477,8 @@ export class JsonFileRepository implements IRepository {
     return false;
   }
 
-  deleteOutcome(code: string): boolean {
-    const idx = this.outcomes.findIndex((o) => o.code === code);
+  deleteOutcome(key: OutcomeKey): boolean {
+    const idx = this.outcomes.findIndex((o) => sameOutcome(o, key));
     if (idx >= 0) {
       this.outcomes.splice(idx, 1);
       this.saveToDisk();
