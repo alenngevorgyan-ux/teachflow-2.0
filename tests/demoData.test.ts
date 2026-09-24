@@ -52,7 +52,7 @@ describe('demo seeds (T16)', () => {
 describe('report review: program version check can fail', () => {
   const report = getDemoReports()[0];
   const source = (version: string): Source =>
-    ({ ...getDemoSources()[2], subject: report.subject, grades: [report.grade], version, status: 'active' }) as Source;
+    ({ ...getDemoSources()[2], docType: 'subject_program', subject: report.subject, grades: [report.grade], version, status: 'active' }) as Source;
   const plan = (programVersion: string): ThematicPlan => ({ ...getDemoThematicPlans()[0], programVersion });
   const versionCheck = () => runReportReview(report).checks.find((c) => c.id === 'reg-program-version')!;
 
@@ -95,5 +95,18 @@ describe('demo seeds pass the privacy guard (no false positives)', () => {
     ];
     for (const list of lists) for (const r of list) expect(() => assertNoPii(r, 'seed')).not.toThrow();
     for (const s of D.getDemoSources()) expect(() => assertNoPii(s, 'seed', { allowContacts: true })).not.toThrow();
+  });
+});
+
+describe('bundled template rules are wired to their evaluators', () => {
+  it('every rule with an evaluator uses exactly its expression', async () => {
+    const { getDemoReportTemplates } = await import('../server/store/demoData.js');
+    const { RULE_EVALUATORS } = await import('../server/pipeline/reportReviewer.js');
+    for (const t of getDemoReportTemplates()) {
+      for (const r of t.validationRules) {
+        expect(RULE_EVALUATORS[r.id], r.id).toBeDefined();
+        expect(r.expression, r.id).toBe(RULE_EVALUATORS[r.id].expression);
+      }
+    }
   });
 });
