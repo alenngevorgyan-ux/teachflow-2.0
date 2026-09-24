@@ -18,6 +18,13 @@ export type { PatchGroup, TextPatch };
 // that paragraph since. Patches on other, untouched paragraphs stay valid
 // after an unrelated group is applied.
 //
+// Formatting policy: the new text takes the run properties (w:rPr) of the
+// run it is written into. An edit may span several runs only if they all
+// have byte-identical w:rPr (Word often splits runs for revision ids or
+// spell-check state without any visible difference). An edit across runs
+// with different formatting (e.g. partly italic) is refused, because no
+// single run formatting would preserve it; the teacher edits that in Word.
+//
 // Groups: all patches of a group are validated against the current revision
 // before any is applied; if one fails, none is applied. Patches within a group
 // may not overlap. A patch only rewrites the text of existing w:t elements:
@@ -38,6 +45,7 @@ export type PatchErrorCode =
   | 'unsupported_replacement'
   | 'overlap'
   | 'noop'
+  | 'mixed_formatting'
   | 'privacy';
 
 export interface PatchError {
@@ -138,7 +146,27 @@ export class DocxWorkingCopy {
     if (this.hostSegment(st, patch.start, patch.end) === -1) {
       return err('no_text_run', 'No text run at this position to carry the new text');
     }
+    if (patch.start < patch.end) {
+      const formats = new Set<string>();
+      off = 0;
+      st.para.segments.forEach((seg, i) => {
+        const segStart = off;
+        off += st.texts[i].length;
+        if (seg.kind === 't' && patch.start < off && patch.end > segStart) formats.add(this.runFormat(seg.run));
+      });
+      if (formats.size > 1) {
+        return err('mixed_formatting', 'The range crosses runs with different formatting; the edit would change formatting');
+      }
+    }
     return null;
+  }
+
+  /** The run's w:rPr exactly as written ('' when the run has none). */
+  private runFormat(run: { children: unknown[] }): string {
+    const rPr = (run.children as { type: string; name?: string; start: number; end: number }[]).find(
+      (c) => c.type === 'element' && c.name === 'w:rPr'
+    );
+    return rPr ? this.doc.mainXml.slice(rPr.start, rPr.end) : '';
   }
 
   /** Index of the 't' segment that receives the replacement text (inherits its run formatting). */
@@ -257,6 +285,8 @@ export class DocxWorkingCopy {
    * reads back as expected. A file that does not verify is never returned.
    */
   async export(): Promise<Buffer> {
+    // Nothing accepted: the original file, byte for byte.
+    if (this.applied.length === 0) return Buffer.from(this.doc.original);
     const out = await writeDocx(this.doc, this.toMainXml());
     const reopened = await openDocx(out);
     const expected = this.doc.paragraphs.map((p) => this.paragraphText(p.id));

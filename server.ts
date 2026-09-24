@@ -8,7 +8,8 @@ import { createMcpRouter } from './server/mcp/index.js';
 
 dotenv.config();
 
-const PORT = 3000;
+// PORT lets a separate local instance (e.g. the labelled FIXTURE environment) run beside the normal one.
+const PORT = Number(process.env.PORT) || 3000;
 
 async function bootstrap() {
   const app = express();

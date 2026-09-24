@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
@@ -15,6 +16,7 @@ import { DocxWorkingCopy } from '../docx/patch.js';
 import { IModelProvider } from '../providers/modelProvider.js';
 import { itemText } from './checks.js';
 import { locateUnique, normalizeLabel } from './segmentation.js';
+import { ResolvedStructure } from './spans.js';
 import { mapSpan } from './workingCopy.js';
 
 export const SUGGEST_PROMPT_VERSION = 'suggest_fix.v1';
@@ -38,7 +40,9 @@ export type SuggestOutput = z.infer<typeof SuggestSchema>;
 
 /** Items with a fresh fail / needs_review on a check an edit could address. */
 export function itemsNeedingFixes(review: MaterialReview): MaterialItemResult[] {
-  return review.results.filter((r) => !r.stale && r.checks.some((c) => FIXABLE.includes(c.checkId) && (c.status === 'fail' || c.status === 'needs_review')));
+  return review.results.filter(
+    (r) => !r.stale && r.revision === review.revision && r.checks.some((c) => FIXABLE.includes(c.checkId) && (c.status === 'fail' || c.status === 'needs_review'))
+  );
 }
 
 function fromPrompt(s: string): string {
@@ -75,14 +79,14 @@ export interface ValidatedSuggestion {
 export function validateSuggestions(
   out: SuggestOutput,
   itemId: string,
-  review: MaterialReview,
+  structure: ResolvedStructure,
   paragraphs: MaterialParagraph[],
   result: MaterialItemResult,
   makeProbe: () => DocxWorkingCopy,
   model: MaterialSuggestion['model']
 ): { accepted: MaterialSuggestion[]; problems: string[] } {
-  const item = review.segmentation!.items.find((i) => i.id === itemId)!;
-  const key = review.answerKey.find((k) => k.itemId === itemId);
+  const item = structure.items.find((i) => i.id === itemId)!;
+  const key = structure.answerKey.find((k) => k.itemId === itemId);
   const byId = new Map(paragraphs.map((p) => [p.id, p]));
   const allowedParas = new Set([...item.stemParagraphIds, ...item.options.map((o) => o.paragraphId)]);
   if (key?.span) allowedParas.add(key.span.paragraphId);
@@ -172,9 +176,9 @@ export function validateSuggestions(
   return { accepted, problems };
 }
 
-export function buildSuggestPrompt(review: MaterialReview, itemId: string, paragraphs: MaterialParagraph[], result: MaterialItemResult): string {
-  const item = review.segmentation!.items.find((i) => i.id === itemId)!;
-  const key = review.answerKey.find((k) => k.itemId === itemId);
+export function buildSuggestPrompt(structure: ResolvedStructure, itemId: string, paragraphs: MaterialParagraph[], result: MaterialItemResult): string {
+  const item = structure.items.find((i) => i.id === itemId)!;
+  const key = structure.answerKey.find((k) => k.itemId === itemId);
   const byId = new Map(paragraphs.map((p) => [p.id, p]));
   const paraIds = [...new Set([...item.stemParagraphIds, ...item.options.map((o) => o.paragraphId)])];
   const t = itemText(item, paragraphs, key);
@@ -191,13 +195,14 @@ export function buildSuggestPrompt(review: MaterialReview, itemId: string, parag
     .replace('{{paragraphs}}', paraIds.map((id) => `[${id}] ${(byId.get(id)?.text ?? '').replace(/\t/g, '→')}`).join('\n'))
     .replace('{{key}}', keyDesc)
     .replace('{{keyParagraph}}', keyPara)
+    .replace('{{number}}', item.number)
     .replace('{{problems}}', problems || '- none')
     .replace('{{evidence}}', [...evidence].map(([id, text]) => `${id}: ${text}`).join('\n\n') || '(none)')
     .concat(t.options.length ? `\n\nOptions (label: text):\n${t.options.map((o) => `${o.label}: ${o.text}`).join('\n')}` : '');
 }
 
 export async function proposeSuggestions(
-  review: MaterialReview,
+  structure: ResolvedStructure,
   itemId: string,
   paragraphs: MaterialParagraph[],
   result: MaterialItemResult,
@@ -205,15 +210,18 @@ export async function proposeSuggestions(
   provider: IModelProvider,
   modelId?: string
 ) {
-  const res = await provider.generateStructured(buildSuggestPrompt(review, itemId, paragraphs, result), SuggestSchema, {
+  const prompt = buildSuggestPrompt(structure, itemId, paragraphs, result);
+  const res = await provider.generateStructured(prompt, SuggestSchema, {
     modelId,
     temperature: 0,
     actionName: 'material:suggest_fix',
   });
-  return validateSuggestions(res.output, itemId, review, paragraphs, result, makeProbe, {
+  return validateSuggestions(res.output, itemId, structure, paragraphs, result, makeProbe, {
     providerId: res.providerId,
     modelId: res.modelId,
     promptVersion: SUGGEST_PROMPT_VERSION,
     requestId: res.requestId,
+    latencyMs: res.latencyMs,
+    inputHash: crypto.createHash('sha256').update(prompt).digest('hex'),
   });
 }

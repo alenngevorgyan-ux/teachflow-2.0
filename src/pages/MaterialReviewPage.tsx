@@ -214,7 +214,7 @@ export const MaterialReviewPage: React.FC<Props> = ({ lang, pinnedContext }) => 
             </Badge>
           )}
           {s.status === 'rejected' && <Badge size="sm">{t.reject}</Badge>}
-          {s.status === 'stale' && <Badge size="sm">{t.stale}</Badge>}
+          {s.status === 'superseded' && <Badge size="sm">{t.stale}</Badge>}
         </div>
         {s.group.patches.map((p) => (
           <div key={p.id} className="space-y-1">
@@ -276,7 +276,7 @@ export const MaterialReviewPage: React.FC<Props> = ({ lang, pinnedContext }) => 
     const result = review!.results.find((r) => r.itemId === item.id);
     const state = itemState(result, review!.revision);
     const key = review!.answerKey.find((k) => k.itemId === item.id);
-    const suggestions = review!.suggestions.filter((s) => s.itemId === item.id && s.status !== 'stale');
+    const suggestions = review!.suggestions.filter((s) => s.itemId === item.id && s.status !== 'superseded');
     const problems = view?.suggestionProblems?.[item.id];
     const needsKey = (item.type === 'single_choice' || item.type === 'multiple_choice') && key?.origin !== 'document';
     return (

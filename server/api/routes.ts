@@ -19,14 +19,20 @@ import {
   confirmSegmentation,
   createReview,
   decide,
+  editSegmentation,
   getReview,
+  readConsistent,
   reviewStatus,
   runChecks,
   segment,
   selectSources,
   setTeacherKey,
   suggest,
+  unassignedParagraphs,
+  undoLast,
 } from '../materials/reviewService.js';
+import { resolveStructure } from '../materials/spans.js';
+import { isFixtureMode } from '../providers/fixtureProvider.js';
 import { buildChangeList, correctedFileName, exportReviewDocx } from '../materials/exportReview.js';
 import { currentParagraphs, loadWorkingCopy } from '../materials/workingCopy.js';
 import {
@@ -54,7 +60,8 @@ import { computeItemAnalysis, gradeSubmissionDeterministically } from '../pipeli
 import { runReportReview } from '../pipeline/reportReviewer.js';
 import { importLegacyReport } from '../pipeline/legacyReportImporter.js';
 import { extractOutcomes } from '../pipeline/outcomeExtractor.js';
-import { UserInputError, parseGradeInput } from '../pipeline/errors.js';
+import { ConflictError, DeclarationRequiredError, UserInputError, parseGradeInput } from '../pipeline/errors.js';
+import { DocxRejectedError } from '../docx/docxPackage.js';
 import {
   PrivacyViolationError,
   assertNoPii,
@@ -73,6 +80,15 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 
 // Privacy violations are client errors (422) with the findings attached so the
 // UI can show exactly what was blocked; everything else stays a 500.
 function sendError(res: Response, err: unknown) {
+  if (err instanceof ConflictError) {
+    return res.status(409).json({ error: err.message, code: 'conflict' });
+  }
+  if (err instanceof DeclarationRequiredError) {
+    return res.status(400).json({ error: err.message, code: 'declaration_required', parts: err.parts });
+  }
+  if (err instanceof DocxRejectedError) {
+    return res.status(400).json({ error: err.message, code: err.code });
+  }
   if (err instanceof UserInputError) {
     return res.status(400).json({ error: err.message });
   }
@@ -579,7 +595,8 @@ export function createApiRouter(): Router {
   // --- Validate Material ---
   // --- Material review: teacher DOCX -> checks -> accepted fixes -> DOCX ---
   // No defaults: subject, grade and sources are chosen explicitly; content
-  // checks use only the selected confirmed sources.
+  // checks use only the selected confirmed sources. Decisions carry the
+  // revision the teacher saw; conflicts are 409.
   const materialDeps = (body: { providerId?: unknown; judgeProviderId?: unknown } = {}) => ({
     provider: getProvider(typeof body.providerId === 'string' ? body.providerId : getDefaultProviderId()),
     judge: getJudgeProvider(typeof body.judgeProviderId === 'string' ? body.judgeProviderId : 'gemini'),
@@ -587,8 +604,23 @@ export function createApiRouter(): Router {
 
   const materialView = async (review: MaterialReview) => {
     const w = await loadWorkingCopy(review);
-    return { review, paragraphs: currentParagraphs(w), status: reviewStatus(review) };
+    const paragraphs = currentParagraphs(w);
+    return {
+      review,
+      paragraphs,
+      // Items and key spans at the current revision (stored spans are in segmentation coordinates).
+      structure: resolveStructure(review),
+      unassignedParagraphIds: unassignedParagraphs(review, paragraphs),
+      status: reviewStatus(review),
+    };
   };
+
+  const send = (res: Response, p: Promise<unknown>) =>
+    p.then((body) => res.json(body)).catch((err: unknown) => sendError(res, err));
+
+  router.get('/runtime', (_req: Request, res: Response) => {
+    res.json({ fixtureMode: isFixtureMode(), modelProvider: getDefaultProviderId() });
+  });
 
   router.get('/materials', (_req: Request, res: Response) => {
     const list = repository.getMaterialReviews().map((r) => ({
@@ -598,124 +630,140 @@ export function createApiRouter(): Router {
       grade: r.grade,
       uploadedAt: r.uploadedAt,
       revision: r.revision,
+      questions: r.segmentation?.items.length ?? null,
+      acceptedChanges: r.acceptedGroups.length,
       status: reviewStatus(r),
     }));
     res.json({ materials: list });
   });
 
-  router.post('/materials', upload.single('file'), async (req: Request, res: Response) => {
-    try {
-      if (!req.file) throw new UserInputError('Ֆայլը բացակայում է:');
-      const review = await createReview({
-        fileName: req.file.originalname,
+  router.post('/materials', upload.single('file'), (req: Request, res: Response) => {
+    if (!req.file) return sendError(res, new UserInputError('Ֆայլը բացակայում է:'));
+    // Multer decodes the filename as latin1; browsers send UTF-8.
+    const fileName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+    send(
+      res,
+      createReview({
+        fileName,
         subject: req.body.subject,
         grade: req.body.grade,
         bytes: new Uint8Array(req.file.buffer),
-      });
-      res.json(await materialView(review));
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+        declaredNoStudentData: req.body.declaredNoStudentData,
+      }).then(materialView)
+    );
   });
 
-  router.get('/materials/:id', async (req: Request, res: Response) => {
-    try {
-      res.json(await materialView(getReview(req.params.id)));
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+  router.get('/materials/:id', (req: Request, res: Response) => {
+    send(res, Promise.resolve().then(() => materialView(getReview(req.params.id))));
   });
 
-  router.put('/materials/:id/sources', async (req: Request, res: Response) => {
-    try {
-      res.json(await materialView(selectSources(req.params.id, req.body.programSourceIds, req.body.factSourceIds)));
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+  router.put('/materials/:id/sources', (req: Request, res: Response) => {
+    send(res, selectSources(req.params.id, req.body.programSourceIds, req.body.factSourceIds).then(materialView));
   });
 
-  router.post('/materials/:id/segment', async (req: Request, res: Response) => {
-    try {
-      res.json(await materialView(await segment(req.params.id, materialDeps(req.body))));
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+  router.post('/materials/:id/segment', (req: Request, res: Response) => {
+    send(res, Promise.resolve().then(() => segment(req.params.id, materialDeps(req.body))).then(materialView));
   });
 
-  router.post('/materials/:id/segmentation/confirm', async (req: Request, res: Response) => {
-    try {
-      res.json(await materialView(confirmSegmentation(req.params.id, req.body.expectedRevision)));
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+  router.put('/materials/:id/segmentation', (req: Request, res: Response) => {
+    send(
+      res,
+      editSegmentation(req.params.id, {
+        expectedRevision: req.body.expectedRevision,
+        items: req.body.items,
+        answerKeyParagraphIds: req.body.answerKeyParagraphIds,
+      }).then(materialView)
+    );
   });
 
-  router.put('/materials/:id/items/:itemId/key', async (req: Request, res: Response) => {
-    try {
-      res.json(await materialView(setTeacherKey(req.params.id, req.params.itemId, req.body.optionLabels)));
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+  router.post('/materials/:id/segmentation/confirm', (req: Request, res: Response) => {
+    send(res, confirmSegmentation(req.params.id, req.body.expectedRevision).then(materialView));
   });
 
-  router.post('/materials/:id/check', async (req: Request, res: Response) => {
-    try {
-      res.json(await materialView(await runChecks(req.params.id, materialDeps(req.body), { all: req.body.all === true })));
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+  router.put('/materials/:id/items/:itemId/key', (req: Request, res: Response) => {
+    send(res, setTeacherKey(req.params.id, req.params.itemId, req.body.optionLabels).then(materialView));
   });
 
-  router.post('/materials/:id/suggest', async (req: Request, res: Response) => {
-    try {
-      const { review, problems } = await suggest(req.params.id, materialDeps(req.body));
-      res.json({ ...(await materialView(review)), suggestionProblems: problems });
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+  router.post('/materials/:id/check', (req: Request, res: Response) => {
+    send(
+      res,
+      Promise.resolve()
+        .then(() => runChecks(req.params.id, materialDeps(req.body), { all: req.body.all === true, retryFailed: req.body.retryFailed === true }))
+        .then(materialView)
+    );
   });
 
-  router.post('/materials/:id/suggestions/:suggestionId/decision', async (req: Request, res: Response) => {
-    try {
-      const review = await decide(
-        req.params.id,
-        req.params.suggestionId,
-        { decision: req.body.decision, replacements: req.body.replacements, expectedRevision: req.body.expectedRevision },
-        materialDeps(req.body)
-      );
-      res.json(await materialView(review));
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+  router.post('/materials/:id/suggest', (req: Request, res: Response) => {
+    send(
+      res,
+      Promise.resolve()
+        .then(() => suggest(req.params.id, materialDeps(req.body)))
+        .then(async ({ review, problems }) => ({ ...(await materialView(review)), suggestionProblems: problems }))
+    );
   });
 
-  // Export is allowed at any time; a draft is labelled as such in the file
-  // name, the header and the change list.
-  router.get('/materials/:id/export.docx', async (req: Request, res: Response) => {
+  router.post('/materials/:id/suggestions/:suggestionId/decision', (req: Request, res: Response) => {
+    send(
+      res,
+      Promise.resolve()
+        .then(() =>
+          decide(
+            req.params.id,
+            req.params.suggestionId,
+            { decision: req.body.decision, replacements: req.body.replacements, expectedRevision: req.body.expectedRevision },
+            materialDeps(req.body)
+          )
+        )
+        .then(materialView)
+    );
+  });
+
+  router.post('/materials/:id/undo', (req: Request, res: Response) => {
+    send(res, Promise.resolve().then(() => undoLast(req.params.id, req.body.expectedRevision, materialDeps(req.body))).then(materialView));
+  });
+
+  const attachment = (res: Response, fallback: string, name: string) =>
+    res.setHeader('Content-Disposition', `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(name)}`);
+
+  // The corrected copy at the last persisted revision. Waits for an in-flight
+  // decision so it never exports half of one. Drafts are labelled as such.
+  router.get('/materials/:id/export.docx', (req: Request, res: Response) => {
+    readConsistent(req.params.id, async (review) => ({ review, buf: await exportReviewDocx(review) }))
+      .then(({ review, buf }) => {
+        const status = reviewStatus(review);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        attachment(res, 'corrected.docx', correctedFileName(review));
+        res.setHeader('X-TeachFlow-Status', status.final ? 'final' : 'draft');
+        res.setHeader('X-TeachFlow-Revision', review.revision);
+        res.setHeader('X-TeachFlow-Sha256', crypto.createHash('sha256').update(buf).digest('hex'));
+        res.send(buf);
+      })
+      .catch((err: unknown) => sendError(res, err));
+  });
+
+  // The uploaded file, byte for byte. Never modified.
+  router.get('/materials/:id/original.docx', (req: Request, res: Response) => {
     try {
       const review = getReview(req.params.id);
-      const buf = await exportReviewDocx(review);
-      const status = reviewStatus(review);
+      const bytes = repository.getMaterialFile(review.fileSha256);
+      if (!bytes) throw new Error('Original file is missing from storage');
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-      res.setHeader('Content-Disposition', `attachment; filename="material.docx"; filename*=UTF-8''${encodeURIComponent(correctedFileName(review))}`);
-      res.setHeader('X-TeachFlow-Status', status.final ? 'final' : 'draft');
-      res.setHeader('X-TeachFlow-Revision', review.revision);
-      res.send(buf);
+      attachment(res, 'original.docx', review.fileName);
+      res.setHeader('X-TeachFlow-Sha256', review.fileSha256);
+      res.send(Buffer.from(bytes));
     } catch (err: unknown) {
       sendError(res, err);
     }
   });
 
-  router.get('/materials/:id/changes.txt', async (req: Request, res: Response) => {
-    try {
-      const review = getReview(req.params.id);
-      const text = await buildChangeList(review);
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="changes.txt"; filename*=UTF-8''${encodeURIComponent(review.fileName.replace(/\.docx$/i, '') + ' — փոփոխություններ.txt')}`);
-      res.send(text);
-    } catch (err: unknown) {
-      sendError(res, err);
-    }
+  router.get('/materials/:id/changes.txt', (req: Request, res: Response) => {
+    readConsistent(req.params.id, async (review) => ({ review, text: await buildChangeList(review) }))
+      .then(({ review, text }) => {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        attachment(res, 'changes.txt', `${review.fileName.replace(/\.docx$/i, '')} — փոփոխություններ.txt`);
+        res.send(text);
+      })
+      .catch((err: unknown) => sendError(res, err));
   });
 
   router.post('/validate-material', async (req: Request, res: Response) => {

@@ -630,6 +630,11 @@ export interface MaterialItem {
   number: string;
   type: MaterialItemType;
   stemParagraphIds: string[];
+  /**
+   * When a paragraph holds more than one question, the part of it that is
+   * this question's text. Paragraphs without a span belong wholly to the item.
+   */
+  stemSpans?: TextSpan[];
   options: MaterialItemOption[];
 }
 
@@ -647,10 +652,19 @@ export interface ModelCallInfo {
   modelId: string;
   promptVersion: string;
   requestId?: string;
+  latencyMs?: number;
+  /** sha256 of the prompt sent (the prompt itself is not stored). */
+  inputHash?: string;
 }
 
 export interface MaterialSegmentation {
   status: 'proposed' | 'confirmed' | 'needs_reconfirmation';
+  /**
+   * Number of accepted groups applied when these spans were defined. All
+   * option / stem / key spans are in the text of that revision and are
+   * mapped forward through later groups when read (so undo is exact).
+   */
+  atGroupCount: number;
   items: MaterialItem[];
   /** Paragraphs that hold the document's answer key. */
   answerKeyParagraphIds: string[];
@@ -669,7 +683,8 @@ export type MaterialCheckId =
   | 'option_count'
   | 'program_scope'
   | 'fact_support'
-  | 'answer_unambiguous';
+  | 'answer_unambiguous'
+  | 'question_type';
 
 export interface MaterialEvidence {
   sourceId: string;
@@ -688,6 +703,8 @@ export interface MaterialCheck {
   outcomeCodes?: string[];
   confidence?: number;
   model?: ModelCallInfo;
+  /** The model / judge / search call failed: not_evaluated, and worth retrying. */
+  executionError?: boolean;
 }
 
 export interface MaterialItemResult {
@@ -697,9 +714,13 @@ export interface MaterialItemResult {
   /** True once something the checks depend on changed; re-run before trusting them. */
   stale: boolean;
   checks: MaterialCheck[];
+  /** Hash of everything the checks read (text, key, sources, prompts, models); identical inputs may reuse the result. */
+  inputHash?: string;
+  checkedAt?: string;
 }
 
-export type SuggestionStatus = 'proposed' | 'accepted' | 'rejected' | 'stale';
+/** 'superseded': no longer applies (its text or finding changed); a new proposal is needed. */
+export type SuggestionStatus = 'proposed' | 'accepted' | 'rejected' | 'superseded';
 
 export interface MaterialSuggestion {
   id: string;
@@ -710,6 +731,8 @@ export interface MaterialSuggestion {
   evidence?: MaterialEvidence[];
   /** New correct option label(s) for this question, when the fix changes the answer. */
   keyChange?: string[];
+  /** Key labels before this suggestion was accepted (restored by undo). */
+  keyBefore?: string[];
   status: SuggestionStatus;
   /** The teacher changed the proposed text before accepting. */
   editedByTeacher?: boolean;
@@ -732,8 +755,25 @@ export interface MaterialReviewLogEntry {
   detail: string;
 }
 
+export type MaterialRunKind = 'segment' | 'check' | 'suggest' | 'recheck';
+export type MaterialRunStatus = 'running' | 'succeeded' | 'failed' | 'obsolete';
+
+/** One model-backed operation. 'obsolete': finished after its inputs changed; its results were discarded. */
+export interface MaterialRun {
+  id: string;
+  kind: MaterialRunKind;
+  status: MaterialRunStatus;
+  startedAt: string;
+  finishedAt?: string;
+  baseRevision: string;
+  itemIds?: string[];
+  error?: string;
+}
+
 export interface MaterialReview {
   id: string;
+  /** Incremented on every save; used to detect concurrent writes. */
+  version: number;
   fileName: string;
   fileSha256: string;
   uploadedAt: string;
@@ -750,4 +790,10 @@ export interface MaterialReview {
   results: MaterialItemResult[];
   suggestions: MaterialSuggestion[];
   log: MaterialReviewLogEntry[];
+  runs: MaterialRun[];
+  /**
+   * Parts whose content could not be inspected (images, embedded objects):
+   * the uploader stated there is no student data in them.
+   */
+  noStudentDataDeclaration?: { declaredAt: string; parts: string[] };
 }

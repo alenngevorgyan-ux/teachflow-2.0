@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { OpenRouter } from '@openrouter/sdk';
 import { z } from 'zod';
 import { repository } from '../store/repository.js';
+import { FixtureJudgeProvider, isFixtureMode } from './fixtureProvider.js';
 import { IModelProvider, getDefaultProviderId, getProvider } from './modelProvider.js';
 
 export interface ClaimVerificationResult {
@@ -420,6 +421,10 @@ export function getJudgeProvider(providerId = 'gemini'): IJudgeProvider {
   }
   if (providerId === 'gemini' || providerId === 'default') {
     const defaultProvider = getDefaultProviderId();
+    if (defaultProvider === 'fixture') {
+      if (!isFixtureMode()) throw new Error('The fixture judge is only available in the separate FIXTURE environment.');
+      return new FixtureJudgeProvider();
+    }
     if (defaultProvider === 'gemini') return new GeminiJudgeProvider();
     const judgeModel = process.env.OPENROUTER_JUDGE_MODEL_ID?.trim() || undefined;
     return new ModelJudgeProvider(getProvider(defaultProvider), defaultProvider === 'openrouter' ? judgeModel : undefined);

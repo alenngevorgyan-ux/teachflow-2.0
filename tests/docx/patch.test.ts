@@ -52,16 +52,26 @@ describe('DocxWorkingCopy: edits', () => {
     expect(w.paragraphText(pid)).toBe('Ե՞րբ է տեղի ունեցել Ավարայրի (451 թ.) ճակատամարտը:');
   });
 
-  it('replaces across a run split: new text takes the first run, later runs keep their formatting', async () => {
+  it('refuses an edit across runs with different formatting (policy: no silent formatting change)', async () => {
     const { w, id } = await setup();
     const pid = id('Տիգրան');
-    expect(w.applyGroup(group('g', patchAt(w, pid, 'էր Տիգրան Մ', 'էր Արտաշես Մ'))).ok).toBe(true);
-    expect(w.paragraphText(pid)).toBe('Ո՞վ էր Արտաշես Մեծը:');
+    const r = w.applyGroup(group('g', patchAt(w, pid, 'էր Տիգրան Մ', 'էր Արտաշես Մ')));
+    expect(!r.ok && r.errors[0].code).toBe('mixed_formatting');
+    expect(w.toMainXml()).toBe(w.doc.mainXml);
+  });
 
+  it('edits across runs that Word split without any formatting difference; the text goes into the first run', async () => {
+    const body = para(run('Ավարայրի ', '<w:lang w:val="hy-AM"/>') + run('ճակատա', '<w:lang w:val="hy-AM"/>') + run('մարտը', '<w:lang w:val="hy-AM"/>'));
+    const doc = await openDocx(await buildDocx({ body }));
+    const w = new DocxWorkingCopy(doc);
+    const pid = doc.paragraphs[0].id;
+    const r = w.applyGroup(group('g', w.makePatch('x', pid, 9, 20, 'պատերազմը')));
+    expect(r.ok).toBe(true);
+    expect(w.paragraphText(pid)).toBe('Ավարայրի պատերազմը');
     const xml = w.toMainXml();
-    // Italic run still exists (now empty); its rPr is untouched.
-    expect(xml).toContain('<w:rPr><w:i/></w:rPr><w:t xml:space="preserve"></w:t>');
-    expect(xml).toContain('<w:t xml:space="preserve">Ո՞վ էր Արտաշես Մ</w:t>');
+    expect(xml).toContain('<w:rPr><w:lang w:val="hy-AM"/></w:rPr><w:t xml:space="preserve">պատերազմը</w:t>');
+    // Emptied runs stay (with their properties) rather than being removed.
+    expect(xml.match(/<w:t xml:space="preserve"><\/w:t>/g)).toHaveLength(1);
   });
 
   it('inserts at a boundary into the run before the point', async () => {
@@ -188,7 +198,7 @@ describe('DocxWorkingCopy: refusals', () => {
 describe('DocxWorkingCopy.export', () => {
   it('keeps every other part byte-identical and numbering labels unchanged', async () => {
     const { input, doc, w, id } = await setup();
-    w.applyGroup(group('g', patchAt(w, id('Տիգրան'), 'Տիգրան Մեծը', 'Արտաշես Առաջինը')));
+    w.applyGroup(group('g', patchAt(w, id('Տիգրան'), 'Մեծը', 'Առաջինը')));
     const out = await w.export();
 
     const a = await unzipParts(input);
@@ -203,10 +213,32 @@ describe('DocxWorkingCopy.export', () => {
     expect(reopened.paragraphs.map((p) => p.editable)).toEqual(doc.paragraphs.map((p) => p.editable));
   });
 
-  it('with no accepted groups, returns a file whose parts are all identical to the upload', async () => {
+  it('with no accepted groups, returns exactly the uploaded bytes', async () => {
     const { input, w } = await setup();
-    const a = await unzipParts(input);
-    const b = await unzipParts(await w.export());
-    for (const [name, data] of a) expect(Buffer.from(b.get(name)!).equals(Buffer.from(data)), name).toBe(true);
+    expect(Buffer.compare(await w.export(), input)).toBe(0);
+  });
+});
+
+describe('DocxWorkingCopy: explicit spans and Unicode', () => {
+  it('an explicit span disambiguates text that occurs twice', async () => {
+    const doc = await openDocx(await buildDocx({ body: para(run('Այո, Այո')) }));
+    const w = new DocxWorkingCopy(doc);
+    const pid = doc.paragraphs[0].id;
+    expect(w.applyGroup(group('g', w.makePatch('second', pid, 5, 8, 'Ոչ'))).ok).toBe(true);
+    expect(w.paragraphText(pid)).toBe('Այո, Ոչ');
+  });
+
+  it('never splits a surrogate pair; combining sequences are edited as whole units by the caller', async () => {
+    const doc = await openDocx(await buildDocx({ body: para(run('Ա𝒜Բ և ե́')) }));
+    const w = new DocxWorkingCopy(doc);
+    const pid = doc.paragraphs[0].id;
+    // 𝒜 is two UTF-16 units at [1,3); a boundary at 2 would split it.
+    const split = w.makePatch('s', pid, 1, 2, 'x');
+    expect(w.checkPatch(split)?.code).toBe('splits_character');
+    expect(w.applyGroup(group('g', w.makePatch('ok', pid, 1, 3, 'B'))).ok).toBe(true);
+    expect(w.paragraphText(pid)).toBe('ԱBԲ և ե́');
+    // և (one code point) and ե + combining acute survive a nearby edit untouched.
+    const out = await openDocx(await w.export());
+    expect(out.paragraphs[0].text).toBe('ԱBԲ և ե́');
   });
 });

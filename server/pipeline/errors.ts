@@ -19,3 +19,29 @@ export function parseGradeInput(grade: unknown): number {
   }
   return n;
 }
+
+/**
+ * The request was valid but conflicts with the current state: a stale
+ * revision, a decision already made, or the same operation already running.
+ * Mapped to HTTP 409. The client should reload and decide again.
+ */
+export class ConflictError extends UserInputError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}
+
+/**
+ * The upload contains content that could not be inspected for personal data
+ * (images, embedded objects). It is kept only if the uploader states it holds
+ * no student data. Mapped to HTTP 400 with the parts listed.
+ */
+export class DeclarationRequiredError extends UserInputError {
+  constructor(readonly parts: string[]) {
+    super(
+      `Ֆայլում կան մասեր, որոնց բովանդակությունը հնարավոր չէ ստուգել անձնական տվյալների համար (${parts.join(', ')}): Շարունակելու համար հաստատեք, որ դրանցում աշակերտների անձնական տվյալներ չկան:`
+    );
+    this.name = 'DeclarationRequiredError';
+  }
+}

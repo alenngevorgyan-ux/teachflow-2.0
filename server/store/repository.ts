@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import { isAuditRedacted, redactForAudit } from '../providers/auditContext.js';
 import path from 'path';
 import { UserInputError } from '../pipeline/errors.js';
 import {
@@ -199,7 +200,11 @@ function sameOutcome(a: OutcomeKey, b: OutcomeKey): boolean {
 
 // Vercel serverless functions only allow writes under /tmp; data there does not
 // persist across cold starts or separate instances.
-const DATA_DIR = process.env.VERCEL
+// TEACHFLOW_DATA_DIR selects a separate local store (used for the labelled
+// FIXTURE environment so test data never mixes with the normal app data).
+const DATA_DIR = process.env.TEACHFLOW_DATA_DIR
+  ? path.resolve(process.env.TEACHFLOW_DATA_DIR)
+  : process.env.VERCEL
   ? path.join('/tmp', 'teachflow-data')
   : path.resolve(process.cwd(), 'data');
 const STORE_FILE = path.join(DATA_DIR, 'teachflow_store.json');
@@ -1109,8 +1114,13 @@ export class JsonFileRepository implements IRepository {
 
   // --- Audit Logs ---
   logAIInteraction(log: Omit<AuditLog, 'id' | 'timestamp'>): AuditLog {
+    // Inside a redaction scope (material review), prompts and outputs carry
+    // a teacher's document text: only a hash and length are kept.
+    const redacted = isAuditRedacted()
+      ? { ...log, prompt: redactForAudit(log.prompt), output: redactForAudit(log.output) }
+      : log;
     const fullLog: AuditLog = {
-      ...log,
+      ...redacted,
       id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       timestamp: new Date().toISOString(),
     };

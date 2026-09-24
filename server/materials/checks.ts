@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
@@ -70,9 +71,14 @@ export interface ItemText {
 
 export function itemText(item: MaterialItem, paragraphs: MaterialParagraph[], key?: MaterialAnswerKeyEntry): ItemText {
   const byId = new Map(paragraphs.map((p) => [p.id, p]));
+  const stemPart = (id: string) => {
+    const text = byId.get(id)?.text ?? '';
+    const sp = item.stemSpans?.find((s) => s.paragraphId === id);
+    return sp ? text.slice(sp.start, sp.end) : text;
+  };
   return {
     item,
-    stem: item.stemParagraphIds.map((id) => byId.get(id)?.text ?? '').join('\n'),
+    stem: item.stemParagraphIds.map(stemPart).join('\n'),
     options: item.options.map((o) => ({ label: o.label, text: (byId.get(o.paragraphId)?.text ?? '').slice(o.start, o.end) })),
     key,
   };
@@ -95,13 +101,22 @@ function describeKey(t: ItemText): string {
 
 function deterministicChecks(t: ItemText): MaterialCheck[] {
   const checks: MaterialCheck[] = [];
-  const choice = t.item.type === 'single_choice' || t.item.type === 'multiple_choice';
+  const type = t.item.type;
 
-  // Open questions have no option key: key checks are not shown for them at
-  // all (reporting them as "not evaluated" would keep every such file a draft).
-  if (!choice) {
-    // no key checks
-  } else if (!t.key) {
+  // An unrecognised or ambiguous type is not judged: the teacher corrects the split.
+  if (type === 'other') {
+    checks.push({
+      checkId: 'question_type',
+      kind: 'deterministic',
+      status: 'not_evaluated',
+      detail: 'Հարցի տեսակը որոշված չէ կամ V1-ում չի աջակցվում: Ուղղեք բաժանումը՝ տեսակ ընտրելով:',
+    });
+    return checks;
+  }
+  // Open questions have no option key: key checks do not apply to them.
+  if (type === 'open') return checks;
+
+  if (!t.key) {
     checks.push({
       checkId: 'key_present',
       kind: 'deterministic',
@@ -115,9 +130,6 @@ function deterministicChecks(t: ItemText): MaterialCheck[] {
       status: 'pass',
       detail: t.key.origin === 'teacher' ? 'Բանալին նշել է ուսուցիչը:' : 'Բանալին գտնվել է փաստաթղթում:',
     });
-  }
-
-  if (choice && t.key) {
     const labels = new Set(t.options.map((o) => o.label));
     const missing = t.key.optionLabels.filter((l) => !labels.has(l));
     if (t.key.optionLabels.length === 0 || missing.length) {
@@ -127,7 +139,7 @@ function deterministicChecks(t: ItemText): MaterialCheck[] {
         status: 'fail',
         detail: missing.length ? `Բանալին նշում է «${missing.join(', ')}» տարբերակ(ներ), որոնք հարցում չկան:` : 'Բանալին ոչ մի տարբերակ չի նշում:',
       });
-    } else if (t.item.type === 'single_choice' && t.key.optionLabels.length > 1) {
+    } else if (type === 'single_choice' && t.key.optionLabels.length > 1) {
       checks.push({
         checkId: 'key_valid_option',
         kind: 'deterministic',
@@ -139,12 +151,12 @@ function deterministicChecks(t: ItemText): MaterialCheck[] {
     }
   }
 
-  if (choice) {
-    const rule = repository.getActiveRules().find((r) => r.id === 'rule-min-options' && r.kind === 'deterministic');
-    const min = rule?.params?.min_options;
-    if (!rule) {
+  // The option-count rule is defined for single-choice questions only.
+  if (type === 'single_choice') {
+    const min = minOptionsRule();
+    if (min === 'inactive') {
       checks.push({ checkId: 'option_count', kind: 'deterministic', status: 'not_evaluated', detail: 'Տարբերակների նվազագույն քանակի կանոնն ակտիվ չէ:' });
-    } else if (typeof min !== 'number' || !Number.isInteger(min) || min < 1) {
+    } else if (min === 'invalid') {
       checks.push({ checkId: 'option_count', kind: 'deterministic', status: 'not_evaluated', detail: 'Տարբերակների նվազագույն քանակի կանոնում min_options արժեքը բացակայում է կամ սխալ է:' });
     } else {
       checks.push({
@@ -156,6 +168,13 @@ function deterministicChecks(t: ItemText): MaterialCheck[] {
     }
   }
   return checks;
+}
+
+function minOptionsRule(): number | 'inactive' | 'invalid' {
+  const rule = repository.getActiveRules().find((r) => r.id === 'rule-min-options' && r.kind === 'deterministic');
+  if (!rule) return 'inactive';
+  const min = rule.params?.min_options;
+  return typeof min === 'number' && Number.isInteger(min) && min >= 1 ? min : 'invalid';
 }
 
 // -------------------------------------------------------------- model-based
@@ -196,9 +215,9 @@ async function programScope(t: ItemText, review: MaterialReview, sources: Resolv
   try {
     res = await deps.provider.generateStructured(prompt, ScopeSchema, { modelId: deps.modelId, temperature: 0, actionName: 'material:program_scope' });
   } catch (err) {
-    return { ...base, status: 'not_evaluated', detail: `Մոդելի կանչը ձախողվեց. ${errorText(err)}` };
+    return { ...base, status: 'not_evaluated', executionError: true, detail: `Մոդելի կանչը ձախողվեց. ${errorText(err)}` };
   }
-  const model = { providerId: res.providerId, modelId: res.modelId, promptVersion: PROGRAM_SCOPE_PROMPT_VERSION, requestId: res.requestId };
+  const model = { providerId: res.providerId, modelId: res.modelId, promptVersion: PROGRAM_SCOPE_PROMPT_VERSION, requestId: res.requestId, latencyMs: res.latencyMs, inputHash: hashText(prompt) };
   const known = new Set(outcomes.map((o) => o.code));
   const codes = res.output.outcomeCodes.filter((c) => known.has(c));
   const invented = res.output.outcomeCodes.filter((c) => !known.has(c));
@@ -237,7 +256,7 @@ function toEvidence(chunks: RetrievedChunk[]): MaterialEvidence[] {
 async function factSupport(t: ItemText, chunks: RetrievedChunk[] | Error, sources: ResolvedSources, deps: CheckDeps): Promise<MaterialCheck> {
   const base = { checkId: 'fact_support' as const, kind: 'llm_judged' as const };
   if (sources.fact.length === 0) return { ...base, status: 'not_evaluated', detail: 'Ընտրված չէ հաստատված ՓԱՍՏԱՑԻ աղբյուր:' };
-  if (chunks instanceof Error) return { ...base, status: 'not_evaluated', detail: `Ընտրված աղբյուրներում որոնումը ձախողվեց. ${chunks.message}` };
+  if (chunks instanceof Error) return { ...base, status: 'not_evaluated', executionError: true, detail: `Ընտրված աղբյուրներում որոնումը ձախողվեց. ${chunks.message}` };
   if (chunks.length === 0) {
     return { ...base, status: 'needs_review', detail: 'Ընտրված աղբյուրներում համապատասխան հատված չի գտնվել: Սա չի նշանակում, որ հարցը սխալ է:' };
   }
@@ -255,7 +274,7 @@ async function factSupport(t: ItemText, chunks: RetrievedChunk[] | Error, source
     if (v.verdict === 'partially_supported') return { ...common, status: 'needs_review', detail: v.reason };
     return { ...common, status: 'fail', detail: v.reason };
   } catch (err) {
-    return { ...base, evidence, model, status: 'not_evaluated', detail: `Դատավորի կանչը ձախողվեց. ${errorText(err)}` };
+    return { ...base, evidence, model, status: 'not_evaluated', executionError: true, detail: `Դատավորի կանչը ձախողվեց. ${errorText(err)}` };
   }
 }
 
@@ -268,10 +287,13 @@ const UnambiguousSchema = z.object({
 
 async function answerUnambiguous(t: ItemText, chunks: RetrievedChunk[] | Error, sources: ResolvedSources, deps: CheckDeps): Promise<MaterialCheck | null> {
   const base = { checkId: 'answer_unambiguous' as const, kind: 'llm_judged' as const };
-  if (t.item.type !== 'single_choice' && t.item.type !== 'multiple_choice') return null;
+  if (t.item.type === 'multiple_choice') {
+    return { ...base, status: 'not_evaluated', detail: 'V1-ում բազմակի ընտրությամբ հարցերի պատասխանների միանշանակությունը չի ստուգվում:' };
+  }
+  if (t.item.type !== 'single_choice') return null;
   if (!t.key) return { ...base, status: 'not_evaluated', detail: 'Բանալին չի գտնվել. հնարավոր չէ ստուգել՝ արդյոք նշված պատասխանը միակ ճիշտն է:' };
   if (sources.fact.length === 0) return { ...base, status: 'not_evaluated', detail: 'Ընտրված չէ հաստատված ՓԱՍՏԱՑԻ աղբյուր:' };
-  if (chunks instanceof Error) return { ...base, status: 'not_evaluated', detail: `Ընտրված աղբյուրներում որոնումը ձախողվեց. ${chunks.message}` };
+  if (chunks instanceof Error) return { ...base, status: 'not_evaluated', executionError: true, detail: `Ընտրված աղբյուրներում որոնումը ձախողվեց. ${chunks.message}` };
   if (chunks.length === 0) return { ...base, status: 'not_evaluated', detail: 'Ընտրված աղբյուրներում համապատասխան հատված չի գտնվել:' };
   const evidence = toEvidence(chunks);
   const prompt = loadPrompt(UNAMBIGUOUS_PROMPT_VERSION)
@@ -282,9 +304,9 @@ async function answerUnambiguous(t: ItemText, chunks: RetrievedChunk[] | Error, 
   try {
     res = await deps.provider.generateStructured(prompt, UnambiguousSchema, { modelId: deps.modelId, temperature: 0, actionName: 'material:answer_unambiguous' });
   } catch (err) {
-    return { ...base, evidence, status: 'not_evaluated', detail: `Մոդելի կանչը ձախողվեց. ${errorText(err)}` };
+    return { ...base, evidence, status: 'not_evaluated', executionError: true, detail: `Մոդելի կանչը ձախողվեց. ${errorText(err)}` };
   }
-  const model = { providerId: res.providerId, modelId: res.modelId, promptVersion: UNAMBIGUOUS_PROMPT_VERSION, requestId: res.requestId };
+  const model = { providerId: res.providerId, modelId: res.modelId, promptVersion: UNAMBIGUOUS_PROMPT_VERSION, requestId: res.requestId, latencyMs: res.latencyMs, inputHash: hashText(prompt) };
   const common = { ...base, evidence, model, confidence: res.output.confidence };
   const labels = new Set(t.options.map((o) => o.label));
   const named = res.output.defensibleLabels.map((l) => l.trim().replace(/[).]+$/, '').toLocaleLowerCase('hy'));
@@ -306,24 +328,69 @@ async function answerUnambiguous(t: ItemText, chunks: RetrievedChunk[] | Error, 
 
 // --------------------------------------------------------------------- run
 
+function hashText(text: string): string {
+  return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+/**
+ * Everything the checks of one item read. Two runs with the same hash would
+ * send the same prompts to the same models over the same passages, so a
+ * result without execution errors can be reused instead of paying again.
+ */
+export function itemInputHash(item: MaterialItem, key: MaterialAnswerKeyEntry | undefined, review: MaterialReview, paragraphs: MaterialParagraph[], deps: CheckDeps): string {
+  const t = itemText(item, paragraphs, key);
+  const programIds = new Set(review.selectedSources.filter((s) => s.purpose === 'program').map((s) => s.sourceId));
+  const outcomes = repository
+    .getOutcomes()
+    .filter((o) => o.confirmed && programIds.has(o.sourceId) && o.grade === review.grade && o.subject === review.subject)
+    .map((o) => [o.sourceId, o.code, o.text]);
+  return hashText(
+    JSON.stringify({
+      subject: review.subject,
+      grade: review.grade,
+      type: item.type,
+      number: item.number,
+      stem: t.stem,
+      options: t.options,
+      key: key ? [key.origin, key.optionLabels] : null,
+      sources: review.selectedSources.map((s) => [s.purpose, s.sourceId, s.version, s.contentHash]),
+      outcomes,
+      minOptions: minOptionsRule(),
+      prompts: [PROGRAM_SCOPE_PROMPT_VERSION, UNAMBIGUOUS_PROMPT_VERSION, 'judge:verifyClaim'],
+      model: [deps.provider.providerId, deps.modelId ?? deps.provider.defaultModelId ?? null],
+      judge: [deps.judge.providerId, deps.judge.modelId],
+    })
+  );
+}
+
 export async function checkItem(
   item: MaterialItem,
+  key: MaterialAnswerKeyEntry | undefined,
   review: MaterialReview,
   paragraphs: MaterialParagraph[],
   sources: ResolvedSources,
   deps: CheckDeps
 ): Promise<MaterialItemResult> {
-  const t = itemText(item, paragraphs, review.answerKey.find((k) => k.itemId === item.id));
+  const t = itemText(item, paragraphs, key);
   const checks = deterministicChecks(t);
-  let chunks: RetrievedChunk[] | Error;
-  try {
-    chunks = await findEvidence(t, review, sources, deps);
-  } catch (err) {
-    chunks = err instanceof Error ? err : new Error(String(err));
+  if (item.type !== 'other') {
+    let chunks: RetrievedChunk[] | Error;
+    try {
+      chunks = await findEvidence(t, review, sources, deps);
+    } catch (err) {
+      chunks = err instanceof Error ? err : new Error(String(err));
+    }
+    checks.push(await programScope(t, review, sources, deps));
+    checks.push(await factSupport(t, chunks, sources, deps));
+    const u = await answerUnambiguous(t, chunks, sources, deps);
+    if (u) checks.push(u);
   }
-  checks.push(await programScope(t, review, sources, deps));
-  checks.push(await factSupport(t, chunks, sources, deps));
-  const u = await answerUnambiguous(t, chunks, sources, deps);
-  if (u) checks.push(u);
-  return { itemId: item.id, revision: review.revision, stale: false, checks };
+  return {
+    itemId: item.id,
+    revision: review.revision,
+    stale: false,
+    checks,
+    inputHash: itemInputHash(item, key, review, paragraphs, deps),
+    checkedAt: new Date().toISOString(),
+  };
 }

@@ -38,6 +38,8 @@ export interface NumberingInfo {
 
 export interface DocxDocument {
   pkg: DocxPackage;
+  /** The uploaded bytes, untouched. A no-op export returns exactly these. */
+  original: Uint8Array;
   sha256: string; // of the uploaded bytes
   mainXml: string; // decoded main part (BOM stripped)
   mainHasBom: boolean;
@@ -583,6 +585,7 @@ export async function openDocx(buffer: Uint8Array): Promise<DocxDocument> {
 
   return {
     pkg,
+    original: buffer,
     sha256: sha256(buffer),
     mainXml,
     mainHasBom,

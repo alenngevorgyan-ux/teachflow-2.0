@@ -36,6 +36,8 @@ import { buildChangeList, exportReviewDocx } from '../../server/materials/export
 import {
   ReviewDeps,
   confirmSegmentation,
+  editSegmentation,
+  undoLast,
   createReview,
   decide,
   getReview,
@@ -46,7 +48,8 @@ import {
   setTeacherKey,
   suggest,
 } from '../../server/materials/reviewService.js';
-import { UserInputError } from '../../server/pipeline/errors.js';
+import { ConflictError, DeclarationRequiredError, UserInputError } from '../../server/pipeline/errors.js';
+import { resolveStructure } from '../../server/materials/spans.js';
 import { confirmSource, sourceContentHash } from '../../server/pipeline/sourceConfirmation.js';
 import type { RetrievedChunk } from '../../server/pipeline/retrieval.js';
 import type { IJudgeProvider } from '../../server/providers/judgeProvider.js';
@@ -118,6 +121,9 @@ interface FakeState {
   keyedTwo: string; // what the judge thinks about question 2
   failSuggest?: boolean;
   scopeThrows?: boolean;
+  /** Retrieval waits for this before answering (to hold a run open). */
+  gate?: Promise<void>;
+  scopeCalls?: number;
 }
 
 function fakes(state: FakeState): ReviewDeps {
@@ -154,18 +160,21 @@ function fakes(state: FakeState): ReviewDeps {
                 ],
               },
               // A heading claimed as a question AND by the key: dropped.
-              { number: '3', type: 'open', stemParagraphIds: [idOf(prompt, '1-ա, 2-գ')], options: [] },
+              ...(prompt.includes('1-ա, 2-գ') ? [{ number: '3', type: 'open', stemParagraphIds: [idOf(prompt, '1-ա, 2-գ')], options: [] }] : []),
             ],
-            answerKey: {
-              paragraphIds: [idOf(prompt, '1-ա, 2-գ')],
-              entries: [
-                { itemNumber: '1', optionLabels: ['ա'], paragraphId: idOf(prompt, '1-ա, 2-գ'), quote: '1-ա' },
-                { itemNumber: '2', optionLabels: ['գ'], paragraphId: idOf(prompt, '1-ա, 2-գ'), quote: '2-գ' },
-              ],
-            },
+            answerKey: prompt.includes('1-ա, 2-գ')
+              ? {
+                  paragraphIds: [idOf(prompt, '1-ա, 2-գ')],
+                  entries: [
+                    { itemNumber: '1', optionLabels: ['ա'], paragraphId: idOf(prompt, '1-ա, 2-գ'), quote: '1-ա' },
+                    { itemNumber: '2', optionLabels: ['գ'], paragraphId: idOf(prompt, '1-ա, 2-գ'), quote: '2-գ' },
+                  ],
+                }
+              : null,
           };
           break;
         case 'material:program_scope':
+          state.scopeCalls = (state.scopeCalls ?? 0) + 1;
           if (state.scopeThrows) throw new Error('provider out of credits');
           output = { verdict: 'in_scope', outcomeCodes: ['HP-7-1'], reason: 'Ծրագրում է', confidence: 0.95 };
           break;
@@ -218,7 +227,14 @@ function fakes(state: FakeState): ReviewDeps {
       return { verdict: 'supported', probability: 0.95, confidence: 0.95, reason: 'Հաստատված է' };
     },
   };
-  return { provider, judge, retrieve: async () => ({ factChunks: [chunk()], methodChunks: [], usedSemanticSearch: false }) };
+  return {
+    provider,
+    judge,
+    retrieve: async () => {
+      if (state.gate) await state.gate;
+      return { factChunks: [chunk()], methodChunks: [], usedSemanticSearch: false };
+    },
+  };
 }
 
 async function upload(body = BODY): Promise<MaterialReview> {
@@ -244,9 +260,9 @@ beforeEach(() => {
 async function readyForChecks(state: FakeState = { keyedTwo: 'գ' }) {
   const deps = fakes(state);
   let r = await upload();
-  r = selectSources(r.id, ['program-1'], ['fact-1']);
+  r = await selectSources(r.id, ['program-1'], ['fact-1']);
   r = await segment(r.id, deps);
-  r = confirmSegmentation(r.id, r.revision);
+  r = await confirmSegmentation(r.id, r.revision);
   return { r, deps };
 }
 
@@ -268,10 +284,10 @@ describe('material review: upload and sources', () => {
 
   it('accepts only explicitly selected, confirmed sources of the same subject and grade', async () => {
     const r = await upload();
-    expect(() => selectSources(r.id, [], ['fact-unconfirmed'])).toThrow(/հաստատված չէ/);
-    expect(() => selectSources(r.id, [], ['fact-grade-8'])).toThrow(/7-րդ դասարանի/);
-    expect(() => selectSources(r.id, ['fact-1'], [])).toThrow(/ծրագիր/); // a textbook is not a program
-    const ok = selectSources(r.id, ['program-1'], ['fact-1']);
+    await expect(selectSources(r.id, [], ['fact-unconfirmed'])).rejects.toThrow(/հաստատված չէ/);
+    await expect(selectSources(r.id, [], ['fact-grade-8'])).rejects.toThrow(/7-րդ դասարանի/);
+    await expect(selectSources(r.id, ['fact-1'], [])).rejects.toThrow(/ծրագիր/); // a textbook is not a program
+    const ok = await selectSources(r.id, ['program-1'], ['fact-1']);
     expect(ok.selectedSources.map((s) => `${s.purpose}:${s.sourceId}`)).toEqual(['program:program-1', 'fact:fact-1']);
   });
 });
@@ -330,7 +346,7 @@ describe('material review: checks', () => {
     const deps = fakes({ keyedTwo: 'գ' });
     let r = await upload();
     r = await segment(r.id, deps);
-    r = confirmSegmentation(r.id, r.revision);
+    r = await confirmSegmentation(r.id, r.revision);
     const checked = await runChecks(r.id, deps);
     const byId = Object.fromEntries(checked.results[0].checks.map((c) => [c.checkId, c.status]));
     expect(byId).toMatchObject({
@@ -358,12 +374,12 @@ describe('material review: checks', () => {
     // Pretend the document had no key.
     const stored = store.reviews.get(r.id)!;
     stored.answerKey = [];
-    r = confirmSegmentation(r.id, r.revision);
+    r = await confirmSegmentation(r.id, r.revision);
     let checked = await runChecks(r.id, deps);
     expect(checked.results[0].checks.find((c) => c.checkId === 'key_present')!.status).toBe('not_evaluated');
 
-    expect(() => setTeacherKey(r.id, 'item-1', ['ե'])).toThrow(UserInputError);
-    r = setTeacherKey(r.id, 'item-1', ['ա']);
+    await expect(setTeacherKey(r.id, 'item-1', ['ե'])).rejects.toThrow(UserInputError);
+    r = await setTeacherKey(r.id, 'item-1', ['ա']);
     expect(r.results.find((x) => x.itemId === 'item-1')!.stale).toBe(true);
     checked = await runChecks(r.id, deps);
     expect(checked.results.find((x) => x.itemId === 'item-1')!.checks.find((c) => c.checkId === 'key_present')!.status).toBe('pass');
@@ -438,7 +454,11 @@ describe('material review: suggestions and decisions', () => {
       decide(r.id, s.id, { decision: 'accept', expectedRevision: review.revision, replacements: { [patchId]: '2-բ' } }, deps)
     ).rejects.toThrow(/բանալու տեքստն/);
     const ok = await decide(r.id, s.id, { decision: 'accept', expectedRevision: review.revision, replacements: { [patchId]: '2 - ա' } }, deps);
-    expect(ok.suggestions[0].editedByTeacher).toBe(true);
+    // The edit is a new proposal revision; the original proposal is superseded, not rewritten.
+    expect(ok.suggestions.find((x) => x.id === s.id)!.status).toBe('superseded');
+    const edited = ok.suggestions.find((x) => x.id === `${s.id}-t1`)!;
+    expect(edited).toMatchObject({ status: 'accepted', editedByTeacher: true, recheck: 'done' });
+    expect(edited.group.patches[0].replacement).toBe('2 - ա');
   });
 
   it('refuses a decision made against an older revision', async () => {
@@ -493,9 +513,9 @@ describe('material review: typed question numbers', () => {
     );
     const deps = fakes({ keyedTwo: 'գ' });
     let r = await upload(typed);
-    r = selectSources(r.id, ['program-1'], ['fact-1']);
+    r = await selectSources(r.id, ['program-1'], ['fact-1']);
     r = await segment(r.id, deps);
-    r = confirmSegmentation(r.id, r.revision);
+    r = await confirmSegmentation(r.id, r.revision);
     r = await runChecks(r.id, deps);
 
     // A proposal that renumbers question 1 ("1." -> "3.").
@@ -521,8 +541,191 @@ describe('material review: typed question numbers', () => {
     expect(reviewStatus(after).final).toBe(false);
     await expect(runChecks(r.id, deps)).rejects.toThrow(/հաստատեք/);
 
-    const reconfirmed = confirmSegmentation(r.id, after.revision);
+    const reconfirmed = await confirmSegmentation(r.id, after.revision);
     const rechecked = await runChecks(reconfirmed.id, deps);
     expect(rechecked.suggestions.find((x) => x.id === 'sug-renumber')!.recheck).toBe('done');
+  });
+});
+
+describe('material review: concurrency and recovery', () => {
+  it('a double submit applies the fix once; the second request is a conflict', async () => {
+    const { r, deps } = await readyForChecks();
+    await runChecks(r.id, deps);
+    const { review } = await suggest(r.id, deps);
+    const sid = review.suggestions[0].id;
+    const results = await Promise.allSettled([
+      decide(r.id, sid, { decision: 'accept', expectedRevision: review.revision }, deps),
+      decide(r.id, sid, { decision: 'accept', expectedRevision: review.revision }, deps),
+    ]);
+    expect(results.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((x) => x.status === 'rejected') as PromiseRejectedResult;
+    expect(rejected.reason).toBeInstanceOf(ConflictError);
+    expect(getReview(r.id).acceptedGroups).toHaveLength(1);
+  });
+
+  it('a second check while one is running is refused, not duplicated', async () => {
+    let open!: () => void;
+    const state: FakeState = { keyedTwo: 'գ', gate: new Promise<void>((res) => (open = res)) };
+    const { r, deps } = await readyForChecks(state);
+    const first = runChecks(r.id, deps);
+    await new Promise((res) => setTimeout(res, 20));
+    await expect(runChecks(r.id, deps)).rejects.toBeInstanceOf(ConflictError);
+    open();
+    await first;
+    expect(getReview(r.id).runs.filter((x) => x.kind === 'check').map((x) => x.status)).toEqual(['succeeded']);
+  });
+
+  it('a late check result after the sources changed is discarded as obsolete', async () => {
+    let open!: () => void;
+    const state: FakeState = { keyedTwo: 'գ', gate: new Promise<void>((res) => (open = res)) };
+    const { r, deps } = await readyForChecks(state);
+    const running = runChecks(r.id, deps);
+    await new Promise((res) => setTimeout(res, 20));
+    await selectSources(r.id, ['program-1'], []); // inputs change mid-run
+    open();
+    const after = await running;
+    expect(after.runs.at(-1)!.status).toBe('obsolete');
+    expect(after.results.every((x) => x.stale || x.revision !== after.revision) || after.results.length === 0).toBe(true);
+  });
+
+  it('undo rebuilds the previous revision, restores the key and reopens the proposal', async () => {
+    const { r, deps } = await readyForChecks();
+    await runChecks(r.id, deps);
+    const { review } = await suggest(r.id, deps);
+    const accepted = await decide(r.id, review.suggestions[0].id, { decision: 'accept', expectedRevision: review.revision }, deps);
+    expect(accepted.revision).not.toBe(review.revision);
+
+    await expect(undoLast(r.id, review.revision, deps)).rejects.toBeInstanceOf(ConflictError); // stale revision
+    const undone = await undoLast(r.id, accepted.revision, deps);
+    expect(undone.revision).toBe(review.revision);
+    expect(undone.acceptedGroups).toHaveLength(0);
+    expect(undone.answerKey.find((k) => k.itemId === 'item-2')!.optionLabels).toEqual(['գ']);
+    expect(undone.suggestions[0].status).toBe('proposed');
+    // Rebuilt from the original: exporting now gives the uploaded bytes exactly.
+    const out = await exportReviewDocx(undone);
+    expect(Buffer.compare(out, Buffer.from(store.files.get(undone.fileSha256)!))).toBe(0);
+    // Checks were re-run for the affected items at the restored revision.
+    const q2 = undone.results.find((x) => x.itemId === 'item-2')!;
+    expect(q2.revision).toBe(undone.revision);
+    expect(q2.stale).toBe(false);
+  });
+
+  it('a reload returns the same revision, sources and decisions', async () => {
+    const { r, deps } = await readyForChecks();
+    await runChecks(r.id, deps);
+    const { review } = await suggest(r.id, deps);
+    const after = await decide(r.id, review.suggestions[0].id, { decision: 'reject', expectedRevision: review.revision }, deps);
+    const reloaded = getReview(r.id);
+    expect(reloaded.revision).toBe(after.revision);
+    expect(reloaded.selectedSources).toEqual(after.selectedSources);
+    expect(reloaded.suggestions.map((s) => s.status)).toEqual(['rejected']);
+    expect(reloaded.version).toBe(after.version);
+  });
+});
+
+describe('material review: model failures and reuse', () => {
+  it('a failed model call is not_evaluated with an execution error, and retryFailed re-runs only it', async () => {
+    const state: FakeState = { keyedTwo: 'գ', scopeThrows: true };
+    const { r, deps } = await readyForChecks(state);
+    let checked = await runChecks(r.id, deps);
+    const scope = checked.results[0].checks.find((c) => c.checkId === 'program_scope')!;
+    expect(scope).toMatchObject({ status: 'not_evaluated', executionError: true });
+    expect(reviewStatus(checked).counts.executionErrors).toBe(2);
+
+    state.scopeThrows = false;
+    const calls = state.scopeCalls!;
+    checked = await runChecks(r.id, deps); // nothing stale: no new calls
+    expect(state.scopeCalls).toBe(calls);
+    checked = await runChecks(r.id, deps, { retryFailed: true });
+    expect(state.scopeCalls).toBe(calls + 2);
+    expect(checked.results[0].checks.find((c) => c.checkId === 'program_scope')!.status).toBe('pass');
+  });
+
+  it('identical inputs reuse the previous result instead of calling the model again', async () => {
+    const state: FakeState = { keyedTwo: 'գ' };
+    const { r, deps } = await readyForChecks(state);
+    await runChecks(r.id, deps);
+    const calls = state.scopeCalls!;
+    // Re-selecting the same sources marks everything stale, but nothing the checks read changed.
+    await selectSources(r.id, ['program-1'], ['fact-1']);
+    const again = await runChecks(r.id, deps);
+    expect(state.scopeCalls).toBe(calls);
+    expect(again.results.every((x) => !x.stale && x.revision === again.revision)).toBe(true);
+  });
+});
+
+describe('material review: question types and structure', () => {
+  it('single-answer and option-count rules apply to single choice only; other types are not judged wrong', async () => {
+    const deps = fakes({ keyedTwo: 'գ' });
+    let r = await upload();
+    r = await segment(r.id, deps);
+    const items = resolveStructure(r).items.map((it, i) => ({ ...it, type: i === 0 ? 'multiple_choice' : 'other' }));
+    r = await editSegmentation(r.id, { expectedRevision: r.revision, items, answerKeyParagraphIds: r.segmentation!.answerKeyParagraphIds });
+    r = await confirmSegmentation(r.id, r.revision);
+    r = await selectSources(r.id, ['program-1'], ['fact-1']);
+    const checked = await runChecks(r.id, deps);
+    const q1 = Object.fromEntries(checked.results.find((x) => x.itemId === 'item-1')!.checks.map((c) => [c.checkId, c.status]));
+    expect(q1.option_count).toBeUndefined();
+    expect(q1.answer_unambiguous).toBe('not_evaluated');
+    expect(q1.key_valid_option).toBe('pass');
+    const q2 = checked.results.find((x) => x.itemId === 'item-2')!.checks;
+    expect(q2.map((c) => [c.checkId, c.status])).toEqual([['question_type', 'not_evaluated']]);
+  });
+
+  it('a teacher correction of the split is validated whole and requires confirming again', async () => {
+    const deps = fakes({ keyedTwo: 'գ' });
+    let r = await upload();
+    r = await segment(r.id, deps);
+    r = await confirmSegmentation(r.id, r.revision);
+    const items = resolveStructure(r).items;
+    // Overlapping options: rejected with a reason, nothing changes.
+    const bad = items.map((it, i) => (i === 0 ? { ...it, options: [it.options[0], { ...it.options[1], start: it.options[0].start }] } : it));
+    await expect(editSegmentation(r.id, { expectedRevision: r.revision, items: bad, answerKeyParagraphIds: [] })).rejects.toThrow(/հատվում/);
+    expect(getReview(r.id).segmentation!.status).toBe('confirmed');
+    // Removing a wrong option is accepted and needs a new confirmation.
+    const fixed = items.map((it, i) => (i === 1 ? { ...it, options: it.options.slice(0, 2) } : it));
+    r = await editSegmentation(r.id, { expectedRevision: r.revision, items: fixed, answerKeyParagraphIds: r.segmentation!.answerKeyParagraphIds });
+    expect(r.segmentation!.status).toBe('proposed');
+    expect(r.segmentation!.model.providerId).toBe('teacher');
+    expect(r.segmentation!.items[1].options.map((o) => o.label)).toEqual(['ա', 'բ']);
+    await expect(runChecks(r.id, deps)).rejects.toThrow(/հաստատեք/);
+  });
+});
+
+describe('material review: uninspected content and keys', () => {
+  it('a file with images needs a no-student-data declaration before it is stored', async () => {
+    const bytes = new Uint8Array(await buildDocx({ body: BODY, extraParts: { 'word/media/image1.png': new Uint8Array([0x89, 0x50, 0x4e, 0x47]) } }));
+    await expect(createReview({ fileName: 'x.docx', subject: SUBJECT, grade: '7', bytes })).rejects.toBeInstanceOf(DeclarationRequiredError);
+    expect(store.files.size).toBe(0);
+    const r = await createReview({ fileName: 'x.docx', subject: SUBJECT, grade: '7', bytes, declaredNoStudentData: 'true' });
+    expect(r.noStudentDataDeclaration?.parts).toEqual(['word/media/image1.png']);
+  });
+
+  it('a fix for a teacher-set key changes only that key; the document gets no new key text', async () => {
+    const deps = fakes({ keyedTwo: 'գ' });
+    let r = await upload(BODY.replace(para(run('1-ա, 2-գ')), ''));
+    r = await selectSources(r.id, ['program-1'], ['fact-1']);
+    r = await segment(r.id, deps);
+    r = await confirmSegmentation(r.id, r.revision);
+    r = await setTeacherKey(r.id, 'item-2', ['գ']);
+    r = await runChecks(r.id, deps);
+    // A key-only proposal, as the model would give for a key that is not in the document.
+    const stored = store.reviews.get(r.id)!;
+    stored.suggestions.push({
+      id: 'sug-key-only',
+      itemId: 'item-2',
+      addresses: ['answer_unambiguous'],
+      group: { id: 'grp-key-only', patches: [] },
+      keyChange: ['ա'],
+      rationale: 'test',
+      status: 'proposed',
+      model: { providerId: 'fake', modelId: 'fake-model', promptVersion: 'test' },
+    });
+    const after = await decide(r.id, 'sug-key-only', { decision: 'accept', expectedRevision: r.revision }, deps);
+    expect(after.revision).toBe(r.revision);
+    expect(after.acceptedGroups).toHaveLength(0);
+    expect(after.answerKey.find((k) => k.itemId === 'item-2')).toMatchObject({ origin: 'teacher', optionLabels: ['ա'] });
+    const out = await exportReviewDocx(after);
+    expect(Buffer.compare(out, Buffer.from(store.files.get(after.fileSha256)!))).toBe(0);
   });
 });

@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
+import { FixtureModelProvider, isFixtureMode } from './fixtureProvider.js';
 import { repository } from '../store/repository.js';
 
 export interface ProviderOptions {
@@ -391,6 +392,11 @@ export function getProvider(providerId = getDefaultProviderId()): IModelProvider
   }
   if (providerId === 'openai') {
     return new OpenAIProviderStub();
+  }
+  if (providerId === 'fixture') {
+    // Deterministic stand-in, only in the separate labelled fixture environment.
+    if (!isFixtureMode()) throw new Error('The fixture provider is only available in the separate FIXTURE environment.');
+    return new FixtureModelProvider();
   }
   throw new Error(`Unsupported model provider requested: "${providerId}"`);
 }
