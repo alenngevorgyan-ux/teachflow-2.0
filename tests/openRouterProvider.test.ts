@@ -184,3 +184,47 @@ describe('Gemini truncation', () => {
     expect(() => assertGeminiNotTruncated({ candidates: [{ finishReason: 'STOP' }] }, 'g')).not.toThrow();
   });
 });
+
+describe('per-operation thinking level and call cost (pilot)', () => {
+  const Out = z.object({ ok: z.boolean() });
+  const body = (i: number) => JSON.parse(fetchMock.mock.calls[i][1].body);
+
+  it.each([
+    ['material:segment', 'minimal'],
+    ['material:program_scope', 'low'],
+    ['material:answer_unambiguous', 'low'],
+    ['judge:verifyClaim', 'low'],
+    ['material:suggest_fix', 'medium'],
+  ])('%s is sent with reasoning.effort=%s and the level is recorded', async (action, effort) => {
+    fetchMock.mockImplementation(async () => reply({ choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 20, completion_tokens_details: { reasoning_tokens: 5 }, cost: 0.00012 } }));
+    const res = await new OpenRouterProvider().generateStructured('q', Out, { actionName: action });
+    expect(body(0).reasoning).toEqual({ effort });
+    expect(res.reasoningEffort).toBe(effort);
+    expect(res.usage).toEqual({ attempts: 1, promptTokens: 100, completionTokens: 20, reasoningTokens: 5, costUsd: 0.00012 });
+    expect(logs.at(-1)).toMatchObject({ action, reasoningEffort: effort, usage: { costUsd: 0.00012 } });
+  });
+
+  it('operations outside the policy keep the provider default (no reasoning parameter)', async () => {
+    fetchMock.mockImplementation(async () => reply({ choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }] }));
+    const res = await new OpenRouterProvider().generateStructured('q', Out, { actionName: 'thematic_plan' });
+    expect(body(0).reasoning).toBeUndefined();
+    expect(res.reasoningEffort).toBeUndefined();
+    expect(res.usage).toMatchObject({ attempts: 1, costUsd: null }); // not reported -> unknown, never 0
+  });
+
+  it('a retried call records the usage and cost of both attempts', async () => {
+    let n = 0;
+    fetchMock.mockImplementation(async () =>
+      reply({ choices: [{ message: { content: n++ === 0 ? 'not json' : '{"ok":true}' }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 10, completion_tokens_details: { reasoning_tokens: 0 }, cost: 0.0001 } })
+    );
+    const res = await new OpenRouterProvider().generateStructured('q', Out, { actionName: 'material:segment' });
+    expect(res.usage).toMatchObject({ attempts: 2, promptTokens: 200, completionTokens: 20 });
+    expect(res.usage!.costUsd).toBeCloseTo(0.0002, 10);
+  });
+
+  it('a cut-off answer is still counted (it was paid for)', async () => {
+    fetchMock.mockImplementation(async () => reply({ choices: [{ message: { content: '{' }, finish_reason: 'length' }], usage: { prompt_tokens: 900, completion_tokens: 8192, completion_tokens_details: { reasoning_tokens: 8000 }, cost: 0.02 } }));
+    await expect(new OpenRouterProvider().generateStructured('q', Out, { actionName: 'material:segment' })).rejects.toThrow(/output-token limit/);
+    expect(logs.at(-1)).toMatchObject({ action: 'material:segment:FAILED', usage: { attempts: 1, reasoningTokens: 8000, costUsd: 0.02 } });
+  });
+});

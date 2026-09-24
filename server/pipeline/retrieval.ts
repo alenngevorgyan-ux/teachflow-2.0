@@ -45,6 +45,8 @@ export async function retrieveChunks(
   factChunks: RetrievedChunk[];
   methodChunks: RetrievedChunk[];
   usedSemanticSearch: boolean;
+  /** semantic: query and every searched chunk embedded; mixed: some chunks without; keyword: no semantic scoring at all. */
+  retrievalMode: 'semantic' | 'keyword' | 'mixed';
 }> {
   const sources = repository.getSources();
   const eligibleSources = sources.filter((s) => {
@@ -77,6 +79,8 @@ export async function retrieveChunks(
 
   const allFactChunks: RetrievedChunk[] = [];
   const allMethodChunks: RetrievedChunk[] = [];
+  let embeddedChunks = 0;
+  let searchedChunks = 0;
 
   for (const source of eligibleSources) {
     for (const chunk of source.chunks) {
@@ -86,6 +90,8 @@ export async function retrieveChunks(
 
       let semanticScore: number | undefined;
       let score: number;
+      searchedChunks++;
+      if (chunk.embedding) embeddedChunks++;
       if (queryEmbedding && chunk.embedding) {
         semanticScore = Math.max(0, cosineSimilarity(queryEmbedding, chunk.embedding));
         score = SEMANTIC_WEIGHT * semanticScore + KEYWORD_WEIGHT * normalizedKeywordScore;
@@ -118,5 +124,6 @@ export async function retrieveChunks(
     factChunks: allFactChunks.slice(0, TOP_K_FACT),
     methodChunks: allMethodChunks.slice(0, TOP_K_METHOD),
     usedSemanticSearch: Boolean(queryEmbedding),
+    retrievalMode: !queryEmbedding || embeddedChunks === 0 ? 'keyword' : embeddedChunks === searchedChunks ? 'semantic' : 'mixed',
   };
 }

@@ -678,6 +678,8 @@ export interface ModelCallInfo {
   latencyMs?: number;
   /** sha256 of the prompt sent (the prompt itself is not stored). */
   inputHash?: string;
+  /** Thinking level requested (server/providers/reasoningPolicy.ts); absent = provider default or not a reasoning call. */
+  reasoningEffort?: string;
 }
 
 export interface MaterialSegmentation {
@@ -728,6 +730,13 @@ export interface MaterialCheck {
   model?: ModelCallInfo;
   /** The model / judge / search call failed: not_evaluated, and worth retrying. */
   executionError?: boolean;
+  /**
+   * How the source passages for this check were found: 'semantic' (embeddings
+   * for the query and every searched passage), 'keyword' (no embeddings: the
+   * visible fallback) or 'mixed' (some passages without embeddings).
+   * embedding = provider/model@dims used, null for keyword.
+   */
+  retrieval?: { mode: 'semantic' | 'keyword' | 'mixed'; embedding: string | null };
 }
 
 export interface MaterialItemResult {

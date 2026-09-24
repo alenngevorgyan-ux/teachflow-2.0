@@ -12,12 +12,15 @@ import type {
   MaterialParagraph,
   MaterialReview,
   Source,
+  ModelCallInfo,
 } from '../../shared/types.js';
 import { COVERAGE_SIMILARITY_THRESHOLD } from '../pipeline/coverage.js';
 import { RetrievedChunk, retrieveChunks } from '../pipeline/retrieval.js';
 import { isSourceConfirmed, sourceContentHash } from '../pipeline/sourceConfirmation.js';
 import { IJudgeProvider } from '../providers/judgeProvider.js';
+import { embeddingIdentity } from '../providers/embeddingProvider.js';
 import { IModelProvider } from '../providers/modelProvider.js';
+import { reasoningPolicyId } from '../providers/reasoningPolicy.js';
 import { repository } from '../store/repository.js';
 
 export const PROGRAM_SCOPE_PROMPT_VERSION = 'program_scope.v1';
@@ -29,7 +32,8 @@ export interface CheckDeps {
   provider: IModelProvider;
   judge: IJudgeProvider;
   modelId?: string;
-  retrieve?: typeof retrieveChunks;
+  /** Test seam; retrievalMode may be omitted (then derived from usedSemanticSearch). */
+  retrieve?: (...args: Parameters<typeof retrieveChunks>) => Promise<Omit<Awaited<ReturnType<typeof retrieveChunks>>, 'retrievalMode'> & { retrievalMode?: 'semantic' | 'keyword' | 'mixed' }>;
 }
 
 // ------------------------------------------------------------------ sources
@@ -227,7 +231,7 @@ async function programScope(t: ItemText, review: MaterialReview, sources: Resolv
   } catch (err) {
     return { ...base, status: 'not_evaluated', executionError: true, detail: `Մոդելի կանչը ձախողվեց. ${errorText(err)}` };
   }
-  const model = { providerId: res.providerId, modelId: res.modelId, promptVersion: PROGRAM_SCOPE_PROMPT_VERSION, requestId: res.requestId, latencyMs: res.latencyMs, inputHash: hashText(prompt) };
+  const model = { providerId: res.providerId, modelId: res.modelId, promptVersion: PROGRAM_SCOPE_PROMPT_VERSION, requestId: res.requestId, latencyMs: res.latencyMs, inputHash: hashText(prompt), ...(res.reasoningEffort ? { reasoningEffort: res.reasoningEffort } : {}) };
   const known = new Set(outcomes.map((o) => o.code));
   const codes = res.output.outcomeCodes.filter((c) => known.has(c));
   const invented = res.output.outcomeCodes.filter((c) => !known.has(c));
@@ -246,17 +250,26 @@ async function programScope(t: ItemText, review: MaterialReview, sources: Resolv
   return { ...common, status: 'fail', detail: res.output.reason };
 }
 
-async function findEvidence(t: ItemText, review: MaterialReview, sources: ResolvedSources, deps: CheckDeps): Promise<RetrievedChunk[]> {
+async function findEvidence(
+  t: ItemText,
+  review: MaterialReview,
+  sources: ResolvedSources,
+  deps: CheckDeps
+): Promise<{ chunks: RetrievedChunk[]; retrieval?: MaterialCheck['retrieval'] }> {
   // Never call retrieval with an empty selection: it would search every source of the subject.
-  if (sources.fact.length === 0) return [];
+  if (sources.fact.length === 0) return { chunks: [] };
   const retrieve = deps.retrieve ?? retrieveChunks;
   const query = `${t.stem}\n${describeKey(t)}`;
-  const { factChunks } = await retrieve(review.subject, review.grade, query, sources.fact.map((s) => s.id));
+  const res = await retrieve(review.subject, review.grade, query, sources.fact.map((s) => s.id));
   const allowed = new Set(sources.fact.map((s) => s.id));
-  return factChunks
-    .filter((c) => allowed.has(c.sourceId) && c.score >= COVERAGE_SIMILARITY_THRESHOLD)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, EVIDENCE_CHUNKS);
+  const mode = res.retrievalMode ?? (res.usedSemanticSearch ? 'semantic' : 'keyword');
+  return {
+    chunks: res.factChunks
+      .filter((c) => allowed.has(c.sourceId) && c.score >= COVERAGE_SIMILARITY_THRESHOLD)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, EVIDENCE_CHUNKS),
+    retrieval: { mode, embedding: mode === 'keyword' ? null : embeddingIdentity() },
+  };
 }
 
 function toEvidence(chunks: RetrievedChunk[]): MaterialEvidence[] {
@@ -271,13 +284,14 @@ async function factSupport(t: ItemText, chunks: RetrievedChunk[] | Error, source
     return { ...base, status: 'needs_review', detail: 'Ընտրված աղբյուրներում համապատասխան հատված չի գտնվել: Սա չի նշանակում, որ հարցը սխալ է:' };
   }
   const evidence = toEvidence(chunks);
-  const model = { providerId: deps.judge.providerId, modelId: deps.judge.modelId, promptVersion: 'judge:verifyClaim' };
+  let model: ModelCallInfo = { providerId: deps.judge.providerId, modelId: deps.judge.modelId, promptVersion: 'judge:verifyClaim' };
   try {
     const v = await deps.judge.verifyClaim(
       `${describeItem(t)}\nAnswer key: ${describeKey(t)}`,
       chunks.map((c) => `[${c.chunk.id}] ${c.chunk.text}`).join('\n\n'),
       { stem: t.stem, options: t.options.map((o) => o.text), answerKey: t.key ? describeKey(t) : undefined }
     );
+    if (v.reasoningEffort) model = { ...model, reasoningEffort: v.reasoningEffort };
     const common = { ...base, evidence, model, confidence: v.confidence };
     if (v.confidence < JUDGE_CONFIDENCE_THRESHOLD) return { ...common, status: 'needs_review', detail: v.reason };
     if (v.verdict === 'supported') return { ...common, status: 'pass', detail: v.reason };
@@ -316,7 +330,7 @@ async function answerUnambiguous(t: ItemText, chunks: RetrievedChunk[] | Error, 
   } catch (err) {
     return { ...base, evidence, status: 'not_evaluated', executionError: true, detail: `Մոդելի կանչը ձախողվեց. ${errorText(err)}` };
   }
-  const model = { providerId: res.providerId, modelId: res.modelId, promptVersion: UNAMBIGUOUS_PROMPT_VERSION, requestId: res.requestId, latencyMs: res.latencyMs, inputHash: hashText(prompt) };
+  const model = { providerId: res.providerId, modelId: res.modelId, promptVersion: UNAMBIGUOUS_PROMPT_VERSION, requestId: res.requestId, latencyMs: res.latencyMs, inputHash: hashText(prompt), ...(res.reasoningEffort ? { reasoningEffort: res.reasoningEffort } : {}) };
   const common = { ...base, evidence, model, confidence: res.output.confidence };
   const labels = new Set(t.options.map((o) => o.label));
   const named = res.output.defensibleLabels.map((l) => l.trim().replace(/[).]+$/, '').toLocaleLowerCase('hy'));
@@ -374,6 +388,9 @@ export function itemInputHash(item: MaterialItem, key: MaterialAnswerKeyEntry | 
       outcomes,
       optionBounds: optionBoundsRule(),
       prompts: [PROGRAM_SCOPE_PROMPT_VERSION, UNAMBIGUOUS_PROMPT_VERSION, 'judge:verifyClaim'],
+      // A result made with other thinking levels or another retrieval route is not reused.
+      reasoning: reasoningPolicyId(),
+      embedding: embeddingIdentity(),
       model: [deps.provider.providerId, deps.modelId ?? deps.provider.defaultModelId ?? null],
       judge: [deps.judge.providerId, deps.judge.modelId],
     })
@@ -426,14 +443,18 @@ export async function checkItem(
   const checks = deterministicChecks(t);
   if (item.type !== 'other') {
     let chunks: RetrievedChunk[] | Error;
+    let retrieval: MaterialCheck['retrieval'];
     try {
-      chunks = await findEvidence(t, review, sources, deps);
+      ({ chunks, retrieval } = await findEvidence(t, review, sources, deps));
     } catch (err) {
       chunks = err instanceof Error ? err : new Error(String(err));
     }
     checks.push(await programScope(t, review, sources, deps));
-    checks.push(await factSupport(t, chunks, sources, deps));
+    const fact = await factSupport(t, chunks, sources, deps);
     const u = await answerUnambiguous(t, chunks, sources, deps);
+    // Every check that used the passages says how they were found (no hidden keyword fallback).
+    for (const c of [fact, u]) if (c && retrieval) c.retrieval = retrieval;
+    checks.push(fact);
     if (u) checks.push(u);
   }
   return {

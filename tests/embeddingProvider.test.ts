@@ -13,7 +13,9 @@ vi.mock('../server/store/repository.js', () => ({
   repository: { logAIInteraction: logSpy },
 }));
 
-import { cosineSimilarity, embedChunksInPlace, embedQuery, isEmbeddingProviderConfigured } from '../server/providers/embeddingProvider.js';
+import { OPENROUTER_EMBEDDINGS_URL, cosineSimilarity, embedChunksInPlace, embedQuery, embeddingIdentity, isEmbeddingProviderConfigured } from '../server/providers/embeddingProvider.js';
+
+const vec = (seed: number) => Array.from({ length: 768 }, (_, i) => ((i + seed) % 7) / 7);
 
 describe('cosineSimilarity', () => {
   it('is 1 for identical vectors', () => {
@@ -92,14 +94,14 @@ describe('embedding audit: every real call once, no text, no double counting', (
   });
 
   it('logs a successful query embedding with model and size, without the text', async () => {
-    embedMock.mockResolvedValue({ embeddings: [{ values: [0.1, 0.2, 0.3] }] });
+    embedMock.mockResolvedValue({ embeddings: [{ values: vec(1) }] });
     await embedQuery('Ավարայրի ճակատամարտ');
     expect(logSpy).toHaveBeenCalledTimes(1);
     const entry = logSpy.mock.calls[0][0];
     expect(entry).toMatchObject({ providerId: 'gemini', modelId: 'gemini-embedding-001', action: 'embed:query' });
     expect(entry.prompt).not.toContain('Ավարայր');
     expect(entry.prompt).toContain('usage: unknown');
-    expect(entry.output).toContain('3 dims');
+    expect(entry.output).toContain('768 dims');
   });
 
   it('logs a failed query embedding once (retrieval then degrades to keywords)', async () => {
@@ -110,7 +112,7 @@ describe('embedding audit: every real call once, no text, no double counting', (
   });
 
   it('logs a chunk batch once on success and once on failure (not twice)', async () => {
-    embedMock.mockResolvedValue({ embeddings: [{ values: [1] }, { values: [2] }] });
+    embedMock.mockResolvedValue({ embeddings: [{ values: vec(1) }, { values: vec(2) }] });
     await embedChunksInPlace([{ id: 'a', text: 'a' }, { id: 'b', text: 'b' }]);
     expect(logSpy).toHaveBeenCalledTimes(1);
     expect(logSpy.mock.calls[0][0].action).toBe('embed:chunks');
@@ -151,5 +153,57 @@ describe('fixture mode (pilot audit)', () => {
     expect(embedMock).not.toHaveBeenCalled();
     expect(logSpy).not.toHaveBeenCalledWith(expect.objectContaining({ providerId: 'gemini' }));
     expect(isEmbeddingProviderConfigured()).toBe(false);
+  });
+});
+
+describe('embedding route and dimensions (pilot audit)', () => {
+  const saved = { ...process.env };
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockReset();
+    logSpy.mockReset();
+    embedMock.mockReset();
+    delete process.env.TEACHFLOW_FIXTURE_MODE;
+    delete process.env.MODEL_PROVIDER;
+  });
+  afterEach(() => {
+    process.env = { ...saved };
+    vi.unstubAllGlobals();
+  });
+
+  it('a vector of another size is rejected, never mixed into retrieval', async () => {
+    process.env.GEMINI_API_KEY = 'test-key';
+    delete process.env.EMBEDDING_PROVIDER;
+    embedMock.mockResolvedValue({ embeddings: [{ values: [0.1, 0.2, 0.3] }] });
+    await expect(embedQuery('x')).rejects.toThrow(/3 dimensions, expected 768/);
+    expect(logSpy.mock.calls[0][0].action).toBe('embed:query:FAILED');
+  });
+
+  it('EMBEDDING_PROVIDER=openrouter uses the same Google model through OpenRouter, with usage and cost audited', async () => {
+    process.env.EMBEDDING_PROVIDER = 'openrouter';
+    process.env.OPENROUTER_API_KEY = 'or-test-key';
+    delete process.env.GEMINI_API_KEY;
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ data: [{ index: 1, embedding: vec(2) }, { index: 0, embedding: vec(1) }], usage: { prompt_tokens: 12, cost: 0.0000018 } }), { status: 200 }));
+    expect(isEmbeddingProviderConfigured()).toBe(true);
+    expect(embeddingIdentity()).toBe('openrouter/google/gemini-embedding-001@768');
+    const chunks: { id: string; text: string; embedding?: number[] }[] = [{ id: 'a', text: 'Ավարայր' }, { id: 'b', text: '451' }];
+    expect((await embedChunksInPlace(chunks)).embedded).toBe(2);
+    expect(chunks[0].embedding).toEqual(vec(1)); // ordered by index
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(OPENROUTER_EMBEDDINGS_URL);
+    expect(JSON.parse(init.body)).toMatchObject({ model: 'google/gemini-embedding-001', dimensions: 768 });
+    expect(embedMock).not.toHaveBeenCalled();
+    const entry = logSpy.mock.calls[0][0];
+    expect(entry).toMatchObject({ providerId: 'openrouter', modelId: 'google/gemini-embedding-001', action: 'embed:chunks', usage: { promptTokens: 12, costUsd: 0.0000018 } });
+    expect(entry.prompt).not.toContain('Ավարայր');
+  });
+
+  it('no silent fallback: the openrouter route without its key is not configured, even with a Gemini key', () => {
+    process.env.EMBEDDING_PROVIDER = 'openrouter';
+    delete process.env.OPENROUTER_API_KEY;
+    process.env.GEMINI_API_KEY = 'test-key';
+    expect(isEmbeddingProviderConfigured()).toBe(false);
+    expect(embeddingIdentity()).toBeNull();
   });
 });

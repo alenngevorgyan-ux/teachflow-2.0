@@ -327,6 +327,7 @@ export async function proposeSegmentation(
         requestId: res.requestId,
         latencyMs: res.latencyMs,
         inputHash: crypto.createHash('sha256').update(prompt).digest('hex'),
+        ...(res.reasoningEffort ? { reasoningEffort: res.reasoningEffort } : {}),
       },
       proposedAtRevision: revision,
       atGroupCount,

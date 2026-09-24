@@ -1,7 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import { FixtureModelProvider, isFixtureMode } from './fixtureProvider.js';
-import { repository } from '../store/repository.js';
+import { CallUsage, repository } from '../store/repository.js';
+import { geminiThinkingConfig, reasoningEffortFor } from './reasoningPolicy.js';
 
 export interface ProviderOptions {
   modelId?: string;
@@ -16,7 +17,34 @@ export interface ProviderResponse<T> {
   modelId: string;
   latencyMs: number;
   requestId: string;
+  /** Thinking level requested for this operation (reasoningPolicy); absent = provider default. */
+  reasoningEffort?: string;
+  usage?: CallUsage;
 }
+
+type RawUsage = { promptTokens: number | null; completionTokens: number | null; reasoningTokens: number | null; costUsd: number | null };
+
+/** Sums the usage of several attempts; a value unknown in any attempt stays unknown. */
+export function sumUsage(parts: RawUsage[]): CallUsage {
+  const add = (k: keyof RawUsage) => (parts.length && parts.every((p) => typeof p[k] === 'number') ? parts.reduce((n, p) => n + (p[k] as number), 0) : null);
+  return { attempts: parts.length, promptTokens: add('promptTokens'), completionTokens: add('completionTokens'), reasoningTokens: add('reasoningTokens'), costUsd: add('costUsd') };
+}
+
+function openRouterUsage(u: OpenRouterUsage | undefined): RawUsage {
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  return { promptTokens: num(u?.prompt_tokens), completionTokens: num(u?.completion_tokens), reasoningTokens: num(u?.completion_tokens_details?.reasoning_tokens), costUsd: num(u?.cost) };
+}
+
+function geminiUsage(r: { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number } }): RawUsage {
+  const m = r.usageMetadata;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const out = num(m?.candidatesTokenCount);
+  const thoughts = num(m?.thoughtsTokenCount) ?? (m ? 0 : null);
+  // Gemini reports thoughts separately from the answer; completion = answer + thoughts. Cost is not reported.
+  return { promptTokens: num(m?.promptTokenCount), completionTokens: out !== null && thoughts !== null ? out + thoughts : null, reasoningTokens: thoughts, costUsd: null };
+}
+
+type OpenRouterUsage = { prompt_tokens?: number; completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number }; cost?: number };
 
 export interface IModelProvider {
   providerId: string;
@@ -66,6 +94,9 @@ export class GeminiProvider implements IModelProvider {
     let attempts = 0;
     let lastError: Error | null = null;
     let rawText = '';
+    const thinkingConfig = geminiThinkingConfig(model, options?.actionName);
+    const reasoningEffort = thinkingConfig ? reasoningEffortFor(options?.actionName) : undefined;
+    const usages: RawUsage[] = [];
 
     while (attempts < 2) {
       attempts++;
@@ -79,8 +110,10 @@ export class GeminiProvider implements IModelProvider {
               'You are a precise educational assistant. Output only strictly valid JSON matching the requested structure.',
             temperature: options?.temperature !== undefined ? options?.temperature : 0.1,
             responseMimeType: 'application/json',
+            ...(thinkingConfig ? { thinkingConfig } : {}),
           },
         });
+        usages.push(geminiUsage(response));
 
         assertGeminiNotTruncated(response, model);
         rawText = response.text || '';
@@ -103,6 +136,7 @@ export class GeminiProvider implements IModelProvider {
         const latencyMs = Date.now() - start;
 
         // Log for audit
+        const usage = sumUsage(usages);
         repository.logAIInteraction({
           providerId: this.providerId,
           modelId: model,
@@ -110,6 +144,8 @@ export class GeminiProvider implements IModelProvider {
           prompt,
           output: rawText,
           latencyMs,
+          reasoningEffort,
+          usage,
         });
 
         return {
@@ -118,6 +154,8 @@ export class GeminiProvider implements IModelProvider {
           modelId: model,
           latencyMs,
           requestId,
+          reasoningEffort,
+          usage,
         };
       } catch (err: unknown) {
         lastError = err instanceof Error ? err : new Error(String(err));
@@ -134,6 +172,8 @@ export class GeminiProvider implements IModelProvider {
       prompt,
       output: rawText || `Error: ${lastError?.message}`,
       latencyMs,
+      reasoningEffort,
+      usage: sumUsage(usages),
     });
 
     throw new Error(
@@ -261,6 +301,7 @@ export function openRouterMaxTokens(): number {
  * is not a complete answer and is never accepted.
  */
 export class TruncatedOutputError extends Error {
+  usage?: RawUsage;
   constructor(providerModel: string, limit: number | string, usage?: string) {
     super(`${providerModel}: the response was cut off at the output-token limit (${limit})${usage ? `; usage: ${usage}` : ''}; an incomplete answer is not accepted.`);
     this.name = 'TruncatedOutputError';
@@ -281,7 +322,7 @@ export class OpenRouterProvider implements IModelProvider {
     options: ProviderOptions | undefined,
     extra: Record<string, unknown>,
     defaultSystem?: string
-  ): Promise<{ text: string; model: string }> {
+  ): Promise<{ text: string; model: string; usage: RawUsage }> {
     const apiKey = process.env.OPENROUTER_API_KEY?.trim();
     if (!apiKey) {
       throw new Error('OpenRouter Provider Error: OPENROUTER_API_KEY is not set in environment.');
@@ -307,33 +348,37 @@ export class OpenRouterProvider implements IModelProvider {
         // cannot afford even for a small structured answer. Bounded here;
         // a too-small limit yields invalid JSON and a visible error.
         max_tokens: maxTokens,
+        ...(reasoningEffortFor(options?.actionName) ? { reasoning: { effort: reasoningEffortFor(options?.actionName) } } : {}),
         ...extra,
       }),
     });
     const body = (await res.json().catch(() => null)) as {
       model?: string;
       choices?: { message?: { content?: string | null }; finish_reason?: string | null; native_finish_reason?: string | null }[];
-      usage?: { completion_tokens?: number; completion_tokens_details?: { reasoning_tokens?: number } };
+      usage?: OpenRouterUsage;
       error?: { message?: string; code?: number | string };
     } | null;
     if (!res.ok || !body || body.error) {
       const msg = body?.error?.message || `HTTP ${res.status}`;
       throw new Error(`OpenRouter (${model}) error: ${msg}`);
     }
+    const usage = openRouterUsage(body.usage);
     const finish = body.choices?.[0]?.finish_reason;
     const nativeFinish = body.choices?.[0]?.native_finish_reason;
     if (finish === 'length' || nativeFinish === 'MAX_TOKENS' || nativeFinish === 'max_tokens') {
       // Reasoning tokens count toward max_tokens: the usage shows whether thinking used up the budget.
       const u = body.usage;
-      const usage =
+      const usageText =
         typeof u?.completion_tokens === 'number'
           ? `completion ${u.completion_tokens} tokens${typeof u.completion_tokens_details?.reasoning_tokens === 'number' ? `, of which reasoning ${u.completion_tokens_details.reasoning_tokens}` : ''}`
           : undefined;
-      throw new TruncatedOutputError(`OpenRouter (${body.model || model})`, maxTokens, usage);
+      const cut = new TruncatedOutputError(`OpenRouter (${body.model || model})`, maxTokens, usageText);
+      cut.usage = usage; // a cut-off answer is still paid for
+      throw cut;
     }
     const text = body.choices?.[0]?.message?.content || '';
     if (!text) throw new Error(`OpenRouter (${model}) returned an empty response`);
-    return { text, model: body.model || model };
+    return { text, model: body.model || model, usage };
   }
 
   async generateStructured<T>(
@@ -349,10 +394,12 @@ export class OpenRouterProvider implements IModelProvider {
     let lastError: Error | null = null;
 
     let attempts = 0;
+    const reasoningEffort = reasoningEffortFor(options?.actionName);
+    const usages: RawUsage[] = [];
     for (let attempt = 1; attempt <= 2; attempt++) {
       attempts = attempt;
       try {
-        const { text, model } = await this.complete(
+        const { text, model, usage: u } = await this.complete(
           prompt,
           options,
           {
@@ -364,10 +411,12 @@ export class OpenRouterProvider implements IModelProvider {
           },
           'You are a precise educational assistant. Output only strictly valid JSON matching the requested structure.'
         );
+        usages.push(u);
         rawText = text;
         modelUsed = model;
         const validated = schema.parse(JSON.parse(stripJsonFences(text)));
         const latencyMs = Date.now() - start;
+        const usage = sumUsage(usages);
         repository.logAIInteraction({
           providerId: this.providerId,
           modelId: modelUsed,
@@ -375,10 +424,13 @@ export class OpenRouterProvider implements IModelProvider {
           prompt,
           output: rawText,
           latencyMs,
+          reasoningEffort,
+          usage,
         });
-        return { output: validated, providerId: this.providerId, modelId: modelUsed, latencyMs, requestId };
+        return { output: validated, providerId: this.providerId, modelId: modelUsed, latencyMs, requestId, reasoningEffort, usage };
       } catch (err: unknown) {
         lastError = err instanceof Error ? err : new Error(String(err));
+        if (err instanceof TruncatedOutputError && err.usage) usages.push(err.usage);
         console.warn(`[OpenRouterProvider] Attempt ${attempt} failed:`, lastError.message);
         // The same limit would cut the answer again: do not pay for a retry.
         if (err instanceof TruncatedOutputError || /OPENROUTER_MAX_TOKENS=/.test(lastError.message)) break;
@@ -392,6 +444,8 @@ export class OpenRouterProvider implements IModelProvider {
       prompt,
       output: rawText || `Error: ${lastError?.message}`,
       latencyMs: Date.now() - start,
+      reasoningEffort,
+      usage: sumUsage(usages),
     });
     throw new Error(
       `OpenRouter Provider (${modelUsed}) failed to generate valid structured output after ${attempts} attempt${attempts === 1 ? '' : 's'}: ${lastError?.message}`
@@ -403,8 +457,10 @@ export class OpenRouterProvider implements IModelProvider {
     const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const requested = options?.modelId || this.defaultModelId || 'n/a';
     try {
-      const { text, model } = await this.complete(prompt, options, { temperature: options?.temperature ?? 0.2 });
+      const { text, model, usage: u } = await this.complete(prompt, options, { temperature: options?.temperature ?? 0.2 });
       const latencyMs = Date.now() - start;
+      const reasoningEffort = reasoningEffortFor(options?.actionName);
+      const usage = sumUsage([u]);
       repository.logAIInteraction({
         providerId: this.providerId,
         modelId: model,
@@ -412,8 +468,10 @@ export class OpenRouterProvider implements IModelProvider {
         prompt,
         output: text,
         latencyMs,
+        reasoningEffort,
+        usage,
       });
-      return { output: text, providerId: this.providerId, modelId: model, latencyMs, requestId };
+      return { output: text, providerId: this.providerId, modelId: model, latencyMs, requestId, reasoningEffort, usage };
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       repository.logAIInteraction({

@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { OpenRouter } from '@openrouter/sdk';
+import { geminiThinkingConfig, reasoningEffortFor } from './reasoningPolicy.js';
 import { z } from 'zod';
 import { repository } from '../store/repository.js';
 import { FixtureJudgeProvider, isFixtureMode } from './fixtureProvider.js';
@@ -10,6 +11,8 @@ export interface ClaimVerificationResult {
   probability: number;
   confidence: number;
   reason: string;
+  /** Thinking level the judge call requested; absent = provider default. */
+  reasoningEffort?: string;
 }
 
 export interface ClassificationResult {
@@ -129,6 +132,7 @@ export class GeminiJudgeProvider implements IJudgeProvider {
             'You are a rigorous factual verification judge. Respond strictly in valid JSON matching schema.',
           temperature: 0.0,
           responseMimeType: 'application/json',
+          ...(geminiThinkingConfig(this.modelId, 'judge:verifyClaim') ? { thinkingConfig: geminiThinkingConfig(this.modelId, 'judge:verifyClaim') } : {}),
         },
       });
 
@@ -151,9 +155,11 @@ export class GeminiJudgeProvider implements IJudgeProvider {
         prompt,
         output: raw,
         latencyMs: Date.now() - start,
+        ...(geminiThinkingConfig(this.modelId, 'judge:verifyClaim') ? { reasoningEffort: reasoningEffortFor('judge:verifyClaim') } : {}),
       });
 
-      return validated;
+      const effort = geminiThinkingConfig(this.modelId, 'judge:verifyClaim') ? reasoningEffortFor('judge:verifyClaim') : undefined;
+      return effort ? { ...validated, reasoningEffort: effort } : validated;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       repository.logAIInteraction({
@@ -391,7 +397,7 @@ export class ModelJudgeProvider implements IJudgeProvider {
     try {
       const res = await this.provider.generateStructured(prompt, GeminiJudgeVerifySchema, this.opts('judge:verifyClaim'));
       this.modelId = res.modelId;
-      return res.output;
+      return res.reasoningEffort ? { ...res.output, reasoningEffort: res.reasoningEffort } : res.output;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`${this.providerId} judge error: ${msg}`);

@@ -223,5 +223,6 @@ export async function proposeSuggestions(
     requestId: res.requestId,
     latencyMs: res.latencyMs,
     inputHash: crypto.createHash('sha256').update(prompt).digest('hex'),
+    ...(res.reasoningEffort ? { reasoningEffort: res.reasoningEffort } : {}),
   });
 }

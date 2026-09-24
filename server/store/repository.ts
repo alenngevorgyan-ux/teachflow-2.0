@@ -38,6 +38,16 @@ import {
   getDemoThematicPlans,
 } from './demoData.js';
 
+/** Token usage and cost of one logged call (all attempts summed). Unknown values stay null. */
+export interface CallUsage {
+  attempts: number;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  reasoningTokens: number | null;
+  /** USD as reported by the provider (OpenRouter); null when the provider does not report it. */
+  costUsd: number | null;
+}
+
 export interface AuditLog {
   id: string;
   timestamp: string;
@@ -47,6 +57,9 @@ export interface AuditLog {
   prompt: string;
   output: string;
   latencyMs: number;
+  /** Thinking level requested (reasoningPolicy); absent = provider default. */
+  reasoningEffort?: string;
+  usage?: CallUsage;
 }
 
 export interface IRepository {

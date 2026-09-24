@@ -142,3 +142,30 @@ describe('retrieveChunks: hybrid semantic + keyword scoring', () => {
     expect(factChunks[0].score).toBeGreaterThan(0);
   });
 });
+
+describe('retrievalMode: semantic retrieval is reported, never assumed (pilot)', () => {
+  const chunk = (id: string, embedding?: number[]) => ({ id, sourceId: 'src-1', page: 1, text: 'Ավարայրի ճակատամարտ 451', ...(embedding ? { embedding } : {}) });
+  beforeEach(() => {
+    store.embeddingConfigured = true;
+    store.queryEmbedding = [1, 0];
+  });
+
+  it('semantic: query and every searched chunk embedded', async () => {
+    store.sources = [source({ chunks: [chunk('a', [1, 0]), chunk('b', [0, 1])] })];
+    expect((await retrieveChunks('history', 7, 'Ավարայր')).retrievalMode).toBe('semantic');
+  });
+
+  it('mixed: some chunks without embeddings', async () => {
+    store.sources = [source({ chunks: [chunk('a', [1, 0]), chunk('b')] })];
+    expect((await retrieveChunks('history', 7, 'Ավարայր')).retrievalMode).toBe('mixed');
+  });
+
+  it('keyword: the query could not be embedded, or no chunk has an embedding', async () => {
+    store.sources = [source({ chunks: [chunk('a', [1, 0])] })];
+    store.queryEmbedding = null;
+    expect((await retrieveChunks('history', 7, 'Ավարայր')).retrievalMode).toBe('keyword');
+    store.queryEmbedding = [1, 0];
+    store.sources = [source({ chunks: [chunk('a')] })];
+    expect((await retrieveChunks('history', 7, 'Ավարայր')).retrievalMode).toBe('keyword');
+  });
+});
