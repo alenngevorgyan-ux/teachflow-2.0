@@ -995,6 +995,7 @@ export function createApiRouter(): Router {
         academicYear,
         schoolId,
         schoolName: school.name,
+        schoolIsDemo: school.isDemo,
         teacherName,
         // Not coerced with Number(): generateThematicPlan rejects anything
         // that is not a positive integer, and Number('') === 0 / Number(null)

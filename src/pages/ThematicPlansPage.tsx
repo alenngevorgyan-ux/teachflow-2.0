@@ -45,11 +45,17 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
   const calendarGiven = term1Weeks.trim() !== '' || term2Weeks.trim() !== '';
   const calendarValid = !calendarGiven || (/^[1-9][0-9]*$/.test(term1Weeks.trim()) && /^[1-9][0-9]*$/.test(term2Weeks.trim()));
   const [teacherName, setTeacherName] = useState('');
+  // Program version and academic year are stated for this plan; the app's
+  // starting context holds demo values and is not used for them.
+  const [programVersion, setProgramVersion] = useState('');
+  const [academicYear, setAcademicYear] = useState('');
 
   const generateReady =
     /^[1-9][0-9]*$/.test(weeklyHours.trim()) &&
     /^[1-9][0-9]*$/.test(totalAnnualHours.trim()) &&
     calendarValid &&
+    programVersion.trim() !== '' &&
+    /^\d{4}-\d{4}$/.test(academicYear.trim()) &&
     teacherName.trim() !== '';
 
   useEffect(() => {
@@ -93,8 +99,8 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
         body: JSON.stringify({
           subject: pinnedContext.subject,
           grade: pinnedContext.grade,
-          programVersion: pinnedContext.programVersion,
-          academicYear: pinnedContext.academicYear,
+          programVersion: programVersion.trim(),
+          academicYear: academicYear.trim(),
           schoolId: pinnedContext.schoolId,
           teacherName: teacherName.trim(),
           weeklyHours: Number(weeklyHours),
@@ -196,6 +202,25 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
                 className="w-full p-2 bg-gray-50 border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
               />
             </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-gray-900">{t.thematicPlan.programVersionInput}</span>
+              <input
+                type="text"
+                value={programVersion}
+                onChange={(e) => setProgramVersion(e.target.value)}
+                className="w-full p-2 bg-gray-50 border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-gray-900">{t.thematicPlan.academicYearInput}</span>
+              <input
+                type="text"
+                value={academicYear}
+                onChange={(e) => setAcademicYear(e.target.value)}
+                className="w-full p-2 bg-gray-50 border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+            </label>
+            <p className="sm:col-span-3 text-amber-800">{t.thematicPlan.demoSchoolNote}</p>
             <label className="space-y-1">
               <span className="font-semibold text-gray-900">{t.thematicPlan.term1Weeks}</span>
               <input
@@ -308,6 +333,7 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
               <div className="text-gray-900 line-clamp-1">{p.title}</div>
               <div className="text-[11px] text-gray-700">
                 {p.academicYear} | {p.totalAnnualHours} ժամ
+                {p.isDemoContext && <span className="tf-badge" data-tone="info" style={{ marginInlineStart: 6 }}>{t.thematicPlan.demoContextBadge}</span>}
               </div>
             </button>
           ))}

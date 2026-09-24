@@ -197,6 +197,7 @@ describe('generateThematicPlan', () => {
         academicYear: '2026-2027',
         schoolId: 's',
         schoolName: 's',
+        schoolIsDemo: false,
         teacherName: 't',
         weeklyHours: 2,
         totalAnnualHours: 4,
@@ -222,6 +223,7 @@ describe('generateThematicPlan', () => {
       academicYear: '2026-2027',
       schoolId: 's',
       schoolName: 's',
+      schoolIsDemo: false,
       teacherName: 't',
       weeklyHours: 2,
       totalAnnualHours: 4,
@@ -245,6 +247,7 @@ describe('generateThematicPlan', () => {
       academicYear: '2026-2027',
       schoolId: 's',
       schoolName: 's',
+      schoolIsDemo: false,
       teacherName: 't',
       weeklyHours: 2,
       totalAnnualHours: 4,
@@ -268,6 +271,7 @@ describe('generateThematicPlan input requirements', () => {
     academicYear: '2026-2027',
     schoolId: 's',
     schoolName: 's',
+    schoolIsDemo: false,
     teacherName: 't',
   };
 
@@ -322,5 +326,26 @@ describe('generateThematicPlan input requirements', () => {
     });
     expect(plan.programTargetHours).toBe(51);
     expect(plan.totalAnnualHours).toBe(51);
+  });
+});
+
+describe('demo school context is explicit, never silent', () => {
+  it('a plan for a demo school is marked, and its EMIS export says so', async () => {
+    const { emisAdapter } = await import('../server/pipeline/emisAdapter.js');
+    const p = { ...plan(validRows(), 4), isDemoContext: true };
+    expect(emisAdapter.exportThematicPlanCsv(p)).toContain('# DEMO context: the school is a demo record');
+    expect(emisAdapter.exportThematicPlanCsv({ ...p, isDemoContext: false })).not.toContain('DEMO context');
+  });
+});
+
+describe('generateThematicPlan: demo school', () => {
+  it('stores isDemoContext from the school record', async () => {
+    const provider = providerReturningTopics([
+      { topic: 'A', outcomeCodes: ['T7-1'], plannedHours: 2, hasAssessment: false },
+      { topic: 'B', outcomeCodes: ['T7-2'], plannedHours: 2, hasAssessment: false },
+    ]);
+    const base = { subject: 'history', grade: 7, programVersion: 'v', academicYear: '2026-2027', schoolId: 's', schoolName: 's', teacherName: 't', weeklyHours: 2, totalAnnualHours: 4, provider };
+    expect((await generateThematicPlan({ ...base, schoolIsDemo: true })).isDemoContext).toBe(true);
+    expect((await generateThematicPlan({ ...base, schoolIsDemo: false })).isDemoContext).toBe(false);
   });
 });

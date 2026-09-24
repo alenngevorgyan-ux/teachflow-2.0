@@ -13,6 +13,8 @@ export interface GenerateThematicPlanParams {
   academicYear: string;
   schoolId: string;
   schoolName: string;
+  /** The chosen school is a demo record: the plan is marked as demo context. */
+  schoolIsDemo: boolean;
   teacherName: string;
   weeklyHours: number;
   /**
@@ -245,6 +247,7 @@ export async function generateThematicPlan(params: GenerateThematicPlanParams): 
     schoolId,
     schoolName,
     teacherName,
+    isDemoContext: params.schoolIsDemo,
     weeklyHours,
     totalAnnualHours: targetHours,
     programTargetHours: targetHours,

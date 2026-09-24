@@ -205,10 +205,14 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
   // Generation parameters for a thematic plan confirmed from chat. Asked for
   // in the confirmation chip — the previous 2 h/week · 68 h/year were invented
   // and ended up inside the generated plan as if they came from the program.
-  const [planParams, setPlanParams] = useState({ weeklyHours: '', totalAnnualHours: '', teacherName: '' });
+  // Program version and academic year are stated here, not taken from the
+  // app's starting context (which holds demo values).
+  const [planParams, setPlanParams] = useState({ weeklyHours: '', totalAnnualHours: '', teacherName: '', programVersion: '', academicYear: '' });
   const planParamsReady =
     /^[1-9][0-9]*$/.test(planParams.weeklyHours.trim()) &&
     /^[1-9][0-9]*$/.test(planParams.totalAnnualHours.trim()) &&
+    planParams.programVersion.trim() !== '' &&
+    /^\d{4}-\d{4}$/.test(planParams.academicYear.trim()) &&
     planParams.teacherName.trim() !== '';
 
   const handleCancelIntent = (msgId: string) => {
@@ -236,8 +240,8 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
           body: JSON.stringify({
             subject: pendingIntent.resolvedSubject,
             grade: pendingIntent.resolvedGrade,
-            programVersion: pinnedContext.programVersion,
-            academicYear: pinnedContext.academicYear,
+            programVersion: planParams.programVersion.trim(),
+            academicYear: planParams.academicYear.trim(),
             schoolId: pinnedContext.schoolId,
             teacherName: planParams.teacherName.trim(),
             weeklyHours: Number(planParams.weeklyHours),
@@ -516,6 +520,22 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
                             value={planParams.totalAnnualHours}
                             onChange={(e) => setPlanParams((p) => ({ ...p, totalAnnualHours: e.target.value }))}
                             placeholder="Տարեկան ժամ *"
+                            className="p-1.5 bg-gray-50 border border-gray-300 rounded-lg text-[11px] focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <input
+                            type="text"
+                            value={planParams.programVersion}
+                            onChange={(e) => setPlanParams((p) => ({ ...p, programVersion: e.target.value }))}
+                            placeholder={t.thematicPlan.programVersionInput}
+                            aria-label={t.thematicPlan.programVersionInput}
+                            className="p-1.5 bg-gray-50 border border-gray-300 rounded-lg text-[11px] focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <input
+                            type="text"
+                            value={planParams.academicYear}
+                            onChange={(e) => setPlanParams((p) => ({ ...p, academicYear: e.target.value }))}
+                            placeholder={t.thematicPlan.academicYearInput}
+                            aria-label={t.thematicPlan.academicYearInput}
                             className="p-1.5 bg-gray-50 border border-gray-300 rounded-lg text-[11px] focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                           />
                           <input

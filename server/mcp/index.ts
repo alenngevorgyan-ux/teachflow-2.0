@@ -203,6 +203,7 @@ export function createMcpServer(): McpServer {
         academicYear,
         schoolId,
         schoolName: school.name,
+        schoolIsDemo: school.isDemo,
         teacherName,
         weeklyHours,
         totalAnnualHours,

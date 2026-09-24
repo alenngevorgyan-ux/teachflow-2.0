@@ -313,6 +313,8 @@ export interface ThematicPlan {
   schoolId: string;
   schoolName: string;
   teacherName: string;
+  /** The plan is attached to a demo school record (no real school registry yet); shown and exported as demo. */
+  isDemoContext?: boolean;
   weeklyHours: number;
   totalAnnualHours: number;
   programTargetHours: number;

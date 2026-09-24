@@ -47,6 +47,7 @@ export class StandardEmisExportAdapter implements EmisExportAdapter {
     lines.push(`# TeachFlow Thematic Plan Export`);
     lines.push(`# Subject: ${plan.subject}, Grade: ${plan.grade}`);
     lines.push(`# School: ${plan.schoolName}, Teacher: ${plan.teacherName}`);
+    if (plan.isDemoContext) lines.push('# DEMO context: the school is a demo record, not a real school');
     lines.push(`# Program Target Hours: ${plan.programTargetHours}, Total Planned: ${plan.totalAnnualHours}`);
     lines.push(EMIS_MISSING_VALUE_NOTE);
     lines.push(`WeekNumber,Topic,OutcomeCodes,PlannedHours,PlannedDates,HasAssessment,Taught,ActualHours,TeacherNote`);
