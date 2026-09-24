@@ -31,6 +31,19 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
   const [selectedPlan, setSelectedPlan] = useState<ThematicPlan | null>(null);
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors: string[] } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  // Hours and teacher are asked for, never assumed: the weekly and annual
+  // hour counts come from the subject program, and 2 h/week · 68 h/year was
+  // an invented default that silently became part of the generated plan.
+  const [showGenerateForm, setShowGenerateForm] = useState(false);
+  const [weeklyHours, setWeeklyHours] = useState('');
+  const [totalAnnualHours, setTotalAnnualHours] = useState('');
+  const [teacherName, setTeacherName] = useState('');
+
+  const generateReady =
+    /^[1-9][0-9]*$/.test(weeklyHours.trim()) &&
+    /^[1-9][0-9]*$/.test(totalAnnualHours.trim()) &&
+    teacherName.trim() !== '';
 
   useEffect(() => {
     fetchPlans();
@@ -63,7 +76,9 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
   };
 
   const handleGenerateNew = async () => {
+    if (!generateReady) return;
     setIsGenerating(true);
+    setGenerateError(null);
     try {
       const res = await fetch('/api/thematic-plans', {
         method: 'POST',
@@ -74,17 +89,22 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
           programVersion: pinnedContext.programVersion,
           academicYear: pinnedContext.academicYear,
           schoolId: pinnedContext.schoolId,
-          weeklyHours: 2,
-          totalAnnualHours: 68,
+          teacherName: teacherName.trim(),
+          weeklyHours: Number(weeklyHours),
+          totalAnnualHours: Number(totalAnnualHours),
         }),
       });
       const data = await res.json();
-      if (data.plan) {
+      if (res.ok && data.plan) {
         setPlans((prev) => [data.plan, ...prev]);
         setSelectedPlan(data.plan);
+        setShowGenerateForm(false);
+      } else {
+        setGenerateError(data.error || 'Պլանի գեներացումը ձախողվեց:');
       }
     } catch (err) {
       console.error(err);
+      setGenerateError(err instanceof Error ? err.message : 'Ցանցային սխալ:');
     } finally {
       setIsGenerating(false);
     }
@@ -132,15 +152,69 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
           </button>
 
           <button
-            onClick={handleGenerateNew}
-            disabled={isGenerating}
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
+            onClick={() => setShowGenerateForm((v) => !v)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" />
             {t.thematicPlan.generatePlan}
           </button>
         </div>
       </div>
+
+      {/* Generation parameters — nothing is prefilled with an assumed value */}
+      {showGenerateForm && (
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-4 text-xs">
+          <p className="text-gray-700">
+            Ժամաքանակը վերցվում է առարկայական ծրագրից: TeachFlow-ը լռելյայն արժեքներ չի ենթադրում:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label className="space-y-1">
+              <span className="font-semibold text-gray-900">{t.thematicPlan.weeklyHours} *</span>
+              <input
+                type="number"
+                min={1}
+                value={weeklyHours}
+                onChange={(e) => setWeeklyHours(e.target.value)}
+                className="w-full p-2 bg-gray-50 border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-gray-900">{t.thematicPlan.programHours} *</span>
+              <input
+                type="number"
+                min={1}
+                value={totalAnnualHours}
+                onChange={(e) => setTotalAnnualHours(e.target.value)}
+                className="w-full p-2 bg-gray-50 border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="font-semibold text-gray-900">Ուսուցիչ *</span>
+              <input
+                type="text"
+                value={teacherName}
+                onChange={(e) => setTeacherName(e.target.value)}
+                placeholder="Անուն ազգանուն"
+                className="w-full p-2 bg-gray-50 border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              />
+            </label>
+          </div>
+          {generateError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 font-medium">
+              {generateError}
+            </div>
+          )}
+          <div className="flex justify-end">
+            <button
+              onClick={handleGenerateNew}
+              disabled={isGenerating || !generateReady}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold"
+            >
+              {isGenerating ? 'Գեներացվում է...' : t.thematicPlan.generatePlan}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Validation Result Banner */}
       {validationResult && (
@@ -238,7 +312,10 @@ export const ThematicPlansPage: React.FC<ThematicPlansPageProps> = ({
                 <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
                   <span className="text-gray-700 block">Փաստացի անցած</span>
                   <span className="text-base font-bold text-emerald-700">
-                    {selectedPlan.rows.filter((r) => r.taught).reduce((s, r) => s + (r.actualHours ?? 0), 0)} ժամ
+                    {/* A taught row without actual hours makes the sum unknowable — n/a, not a total that silently counts it as 0. */}
+                    {selectedPlan.rows.filter((r) => r.taught).some((r) => r.actualHours == null)
+                      ? 'n/a'
+                      : `${selectedPlan.rows.filter((r) => r.taught).reduce((s, r) => s + (r.actualHours as number), 0)} ժամ`}
                   </span>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">

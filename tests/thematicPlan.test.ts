@@ -239,8 +239,74 @@ describe('generateThematicPlan', () => {
 
     for (const row of plan.rows) {
       expect(row.taught).toBe(false);
-      expect(row.actualHours).toBe(0);
+      // No hours claimed for a row nobody has taught yet — undefined, not 0.
+      expect(row.actualHours).toBeUndefined();
       expect(row.taughtDate).toBeUndefined();
     }
+  });
+});
+
+describe('generateThematicPlan input requirements', () => {
+  const baseParams = {
+    subject: 'history',
+    grade: 7,
+    programVersion: 'v',
+    academicYear: '2026-2027',
+    schoolId: 's',
+    schoolName: 's',
+    teacherName: 't',
+  };
+
+  function provider() {
+    return providerReturningTopics([
+      { topic: 'A', outcomeCodes: ['T7-1'], plannedHours: 2, hasAssessment: false },
+    ]);
+  }
+
+  // Was: `params.totalAnnualHours || weeklyHours * 34` — a missing program
+  // hour count silently became "weekly hours x 34 study weeks", an invented
+  // number that then drove the deterministic hours check.
+  it('refuses when the program hour count is missing', async () => {
+    await expect(
+      generateThematicPlan({
+        ...baseParams,
+        weeklyHours: 2,
+        totalAnnualHours: undefined as unknown as number,
+        provider: provider(),
+      })
+    ).rejects.toThrow(/totalAnnualHours/);
+  });
+
+  it.each([0, -4, 2.5, NaN])('refuses a program hour count of %s', async (hours) => {
+    await expect(
+      generateThematicPlan({
+        ...baseParams,
+        weeklyHours: 2,
+        totalAnnualHours: hours,
+        provider: provider(),
+      })
+    ).rejects.toThrow(/totalAnnualHours/);
+  });
+
+  it.each([0, -1, '2' as unknown as number])('refuses a weekly hour count of %s', async (hours) => {
+    await expect(
+      generateThematicPlan({
+        ...baseParams,
+        weeklyHours: hours,
+        totalAnnualHours: 68,
+        provider: provider(),
+      })
+    ).rejects.toThrow(/weeklyHours/);
+  });
+
+  it('uses the program hour count it was given as the target, unchanged', async () => {
+    const plan = await generateThematicPlan({
+      ...baseParams,
+      weeklyHours: 2,
+      totalAnnualHours: 51,
+      provider: provider(),
+    });
+    expect(plan.programTargetHours).toBe(51);
+    expect(plan.totalAnnualHours).toBe(51);
   });
 });

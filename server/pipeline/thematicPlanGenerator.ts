@@ -4,6 +4,7 @@ import { ThematicPlanGenerationOutputSchema } from '../../shared/schemas.js';
 import { CurriculumOutcome, ThematicPlan, ThematicPlanRow } from '../../shared/types.js';
 import { IModelProvider, getProvider } from '../providers/modelProvider.js';
 import { repository } from '../store/repository.js';
+import { UserInputError } from './errors.js';
 
 export interface GenerateThematicPlanParams {
   subject: string;
@@ -14,7 +15,12 @@ export interface GenerateThematicPlanParams {
   schoolName: string;
   teacherName: string;
   weeklyHours: number;
-  totalAnnualHours?: number;
+  /**
+   * Hours the program requires for the year. There is no safe default: the
+   * number comes from the subject program, never from an assumed number of
+   * study weeks, so the caller must supply it.
+   */
+  totalAnnualHours: number;
   provider?: IModelProvider;
   modelId?: string;
 }
@@ -103,6 +109,14 @@ function getFactChunksForSubjectGrade(subject: string, grade: number) {
   );
 }
 
+function requirePositiveInt(value: unknown, field: string, labelHy: string): void {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new UserInputError(
+      `«${field}» դաշտը պարտադիր է. ${labelHy} պետք է լինի դրական ամբողջ թիվ (ստացվել է՝ ${value === undefined ? 'բացակայում է' : JSON.stringify(value)}):`
+    );
+  }
+}
+
 export async function generateThematicPlan(params: GenerateThematicPlanParams): Promise<ThematicPlan> {
   const {
     subject,
@@ -115,7 +129,9 @@ export async function generateThematicPlan(params: GenerateThematicPlanParams): 
     weeklyHours,
   } = params;
 
-  const targetHours = params.totalAnnualHours || weeklyHours * 34; // 34 study weeks in RA schools
+  requirePositiveInt(weeklyHours, 'weeklyHours', 'շաբաթական ժամաքանակը');
+  requirePositiveInt(params.totalAnnualHours, 'totalAnnualHours', 'ծրագրով պահանջվող տարեկան ժամաքանակը');
+  const targetHours = params.totalAnnualHours;
   const outcomes = repository.getConfirmedOutcomes(subject, grade);
 
   // SPEC: refuse rather than fabricate a plan grounded in nothing.
@@ -189,7 +205,9 @@ export async function generateThematicPlan(params: GenerateThematicPlanParams): 
       // A freshly generated plan has nothing taught yet — no fabricated
       // "already taught" state. Demo history lives only in demo seeding.
       taught: false,
-      actualHours: 0,
+      // Nothing is taught yet, so there are no actual hours. Left undefined
+      // rather than 0 — a checked "0 hours taught" is a claim we cannot make.
+      actualHours: undefined,
     };
   });
 

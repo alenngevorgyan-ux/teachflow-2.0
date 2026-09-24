@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReportInstance, ReportTemplate } from '../shared/types.js';
 
@@ -146,5 +147,104 @@ describe('importLegacyReport successful extraction', () => {
 
     expect(report.data.subject).toBeNull();
     expect(report.fieldConfidences?.subject).toBe(0);
+  });
+});
+
+describe('importLegacyReport invents nothing outside the document', () => {
+  it('leaves grade and academicYear null when the document does not state them', async () => {
+    const rawText = 'Հաշվետվություն: Առարկան Հայոց պատմություն է:';
+    const provider = providerReturning({
+      fields: [
+        { key: 'subject', value: 'Հայոց պատմություն', confidence: 0.9, sourceQuote: 'Հայոց պատմություն', lineNumber: 1 },
+        { key: 'grade', value: null, confidence: 0, sourceQuote: '', lineNumber: 1 },
+      ],
+    });
+
+    const report = await importLegacyReport({
+      rawText,
+      fileName: 'f.txt',
+      templateId: 'tpl-1',
+      schoolId: 'sch-1',
+      schoolName: 'Դպրոց Ա',
+      authorName: 'Ուսուցիչ',
+      provider,
+    });
+
+    // Was: grade 0 and academicYear '2026-2027' — both invented.
+    expect(report.grade).toBeNull();
+    expect(report.academicYear).toBeNull();
+  });
+
+  it('uses the extracted grade and academic year when the document does state them', async () => {
+    store.template!.fields.push({
+      key: 'academicYear',
+      label: { hy: 'Ուսումնական տարի', ru: 'x' },
+      type: 'text',
+      source: 'manual',
+      required: true,
+    });
+    const rawText = '2024-2025 ուսումնական տարի, 7-րդ դասարան:';
+    const provider = providerReturning({
+      fields: [
+        { key: 'grade', value: 7, confidence: 0.9, sourceQuote: '7-րդ դասարան', lineNumber: 1 },
+        { key: 'academicYear', value: '2024-2025', confidence: 0.9, sourceQuote: '2024-2025', lineNumber: 1 },
+      ],
+    });
+
+    const report = await importLegacyReport({
+      rawText,
+      fileName: 'f.txt',
+      templateId: 'tpl-1',
+      schoolId: 'sch-1',
+      schoolName: 'Դպրոց Ա',
+      authorName: 'Ուսուցիչ',
+      provider,
+    });
+
+    expect(report.grade).toBe(7);
+    expect(report.academicYear).toBe('2024-2025');
+  });
+
+  it('rejects an unknown template instead of filing the data against the first one', async () => {
+    store.template = null;
+    const provider = providerReturning({ fields: [] });
+
+    await expect(
+      importLegacyReport({
+        rawText: 'text',
+        fileName: 'f.txt',
+        templateId: 'tpl-does-not-exist',
+        schoolId: 'sch-1',
+        schoolName: 'Դպրոց Ա',
+        authorName: 'Ուսուցիչ',
+        provider,
+      })
+    ).rejects.toThrow(/tpl-does-not-exist/);
+    expect(store.saved).toHaveLength(0);
+  });
+
+  it('stores a real sha256 of the extracted data as dataSnapshotHash', async () => {
+    const rawText = 'Առարկան Հայոց պատմություն է:';
+    const provider = providerReturning({
+      fields: [
+        { key: 'subject', value: 'Հայոց պատմություն', confidence: 0.9, sourceQuote: 'Հայոց պատմություն', lineNumber: 1 },
+      ],
+    });
+
+    const report = await importLegacyReport({
+      rawText,
+      fileName: 'f.txt',
+      templateId: 'tpl-1',
+      schoolId: 'sch-1',
+      schoolName: 'Դպրոց Ա',
+      authorName: 'Ուսուցիչ',
+      provider,
+    });
+
+    // Was: `hash-${Date.now()}`, which proved nothing about the data.
+    expect(report.dataSnapshotHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(report.dataSnapshotHash).toBe(
+      crypto.createHash('sha256').update(JSON.stringify(report.data)).digest('hex')
+    );
   });
 });

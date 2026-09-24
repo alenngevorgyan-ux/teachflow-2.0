@@ -65,6 +65,17 @@ function sendError(res: Response, err: unknown) {
   return res.status(500).json({ error: msg });
 }
 
+// Every listed field must be a non-empty string. Missing input is a client
+// error, never a value we invent on the server.
+function requireText(fields: Record<string, unknown>): void {
+  const missing = Object.entries(fields)
+    .filter(([, v]) => typeof v !== 'string' || v.trim() === '')
+    .map(([k]) => k);
+  if (missing.length > 0) {
+    throw new UserInputError(`Պարտադիր դաշտերը բացակայում են՝ ${missing.join(', ')}:`);
+  }
+}
+
 // Paths whose bodies are official sources: an institution's phone / e-mail
 // there is not student data (names near student markers are still blocked).
 const CONTACTS_ALLOWED = [/^\/sources(\/|$)/];
@@ -750,28 +761,34 @@ export function createApiRouter(): Router {
 
   router.post('/thematic-plans', async (req: Request, res: Response) => {
     try {
-      const {
-        subject = 'Հայոց պատմություն',
-        grade = 7,
-        programVersion = 'demo-v1',
-        academicYear = '2026-2027',
-        schoolId = 'sch-1',
-        schoolName = 'Դպրոց Ա',
-        teacherName = 'Ուսուցիչ Ա',
-        weeklyHours = 2,
-        totalAnnualHours = 68,
-      } = req.body;
+      // No defaults: a plan built on an assumed subject, grade, program
+      // version, school or hour count would carry invented curriculum facts.
+      const { subject, grade, programVersion, academicYear, schoolId, teacherName } = req.body;
+      requireText({ subject, programVersion, academicYear, schoolId, teacherName });
+
+      const gradeNum = Number(grade);
+      if (!Number.isInteger(gradeNum) || gradeNum < 1) {
+        throw new UserInputError(`«grade» դաշտը պարտադիր է և պետք է լինի դասարանի համար (ստացվել է՝ ${JSON.stringify(grade)}):`);
+      }
+
+      const school = repository.getSchools().find((s) => s.id === schoolId);
+      if (!school) {
+        throw new UserInputError(`Անհայտ դպրոց՝ «${schoolId}»:`);
+      }
 
       const plan = await generateThematicPlan({
         subject,
-        grade: Number(grade),
+        grade: gradeNum,
         programVersion,
         academicYear,
         schoolId,
-        schoolName,
+        schoolName: school.name,
         teacherName,
-        weeklyHours: Number(weeklyHours),
-        totalAnnualHours: Number(totalAnnualHours),
+        // Not coerced with Number(): generateThematicPlan rejects anything
+        // that is not a positive integer, and Number('') === 0 / Number(null)
+        // === 0 must not slip through as a value.
+        weeklyHours: req.body.weeklyHours,
+        totalAnnualHours: req.body.totalAnnualHours,
       });
 
       res.json({ plan });
@@ -1017,17 +1034,14 @@ export function createApiRouter(): Router {
 
   router.post('/reports/legacy-import', async (req: Request, res: Response) => {
     try {
-      const {
-        rawText,
-        fileName = 'legacy_report.txt',
-        templateId = 'tpl-program-progress',
-        schoolId = 'sch-1',
-        schoolName = 'Դպրոց Ա',
-        authorName = 'Ուսուցիչ (ներմուծված)',
-      } = req.body;
+      // No defaults: the file name, the form, the school and the author are
+      // facts about the imported document, not values the server may invent.
+      const { rawText, fileName, templateId, schoolId, authorName } = req.body;
+      requireText({ rawText, fileName, templateId, schoolId, authorName });
 
-      if (!rawText) {
-        return res.status(400).json({ error: 'Missing rawText to import' });
+      const school = repository.getSchools().find((s) => s.id === schoolId);
+      if (!school) {
+        throw new UserInputError(`Անհայտ դպրոց՝ «${schoolId}»:`);
       }
 
       const report = await importLegacyReport({
@@ -1035,7 +1049,7 @@ export function createApiRouter(): Router {
         fileName,
         templateId,
         schoolId,
-        schoolName,
+        schoolName: school.name,
         authorName,
       });
 

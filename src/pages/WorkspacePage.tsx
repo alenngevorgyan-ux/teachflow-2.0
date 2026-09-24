@@ -202,6 +202,15 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
     }
   };
 
+  // Generation parameters for a thematic plan confirmed from chat. Asked for
+  // in the confirmation chip — the previous 2 h/week · 68 h/year were invented
+  // and ended up inside the generated plan as if they came from the program.
+  const [planParams, setPlanParams] = useState({ weeklyHours: '', totalAnnualHours: '', teacherName: '' });
+  const planParamsReady =
+    /^[1-9][0-9]*$/.test(planParams.weeklyHours.trim()) &&
+    /^[1-9][0-9]*$/.test(planParams.totalAnnualHours.trim()) &&
+    planParams.teacherName.trim() !== '';
+
   const handleCancelIntent = (msgId: string) => {
     setMessages((prev) =>
       prev.map((m) =>
@@ -211,6 +220,7 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
   };
 
   const handleConfirmIntent = async (msgId: string, pendingIntent: PendingIntent) => {
+    if (pendingIntent.intent === 'generate_thematic_plan' && !planParamsReady) return;
     setMessages((prev) =>
       prev.map((m) =>
         m.id === msgId && m.pendingIntent ? { ...m, pendingIntent: { ...m.pendingIntent, resolved: true } } : m
@@ -229,8 +239,9 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
             programVersion: pinnedContext.programVersion,
             academicYear: pinnedContext.academicYear,
             schoolId: pinnedContext.schoolId,
-            weeklyHours: 2,
-            totalAnnualHours: 68,
+            teacherName: planParams.teacherName.trim(),
+            weeklyHours: Number(planParams.weeklyHours),
+            totalAnnualHours: Number(planParams.totalAnnualHours),
           }),
         });
         const resData = await res.json();
@@ -485,10 +496,43 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
                         ))}
                       </div>
                     )}
+                    {m.pendingIntent.intent === 'generate_thematic_plan' && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-gray-700">
+                          Ժամաքանակը վերցվում է առարկայական ծրագրից — լռելյայն արժեքներ չկան:
+                        </p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <input
+                            type="number"
+                            min={1}
+                            value={planParams.weeklyHours}
+                            onChange={(e) => setPlanParams((p) => ({ ...p, weeklyHours: e.target.value }))}
+                            placeholder="Շաբ. ժամ *"
+                            className="p-1.5 bg-gray-50 border border-gray-300 rounded-lg text-[11px] focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <input
+                            type="number"
+                            min={1}
+                            value={planParams.totalAnnualHours}
+                            onChange={(e) => setPlanParams((p) => ({ ...p, totalAnnualHours: e.target.value }))}
+                            placeholder="Տարեկան ժամ *"
+                            className="p-1.5 bg-gray-50 border border-gray-300 rounded-lg text-[11px] focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <input
+                            type="text"
+                            value={planParams.teacherName}
+                            onChange={(e) => setPlanParams((p) => ({ ...p, teacherName: e.target.value }))}
+                            placeholder="Ուսուցիչ *"
+                            className="p-1.5 bg-gray-50 border border-gray-300 rounded-lg text-[11px] focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleConfirmIntent(m.id, m.pendingIntent!)}
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-semibold"
+                        disabled={m.pendingIntent.intent === 'generate_thematic_plan' && !planParamsReady}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-[11px] font-semibold"
                       >
                         {t.common.confirm}
                       </button>
@@ -838,7 +882,7 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
                   <div>
                     <h2 className="text-lg font-bold text-gray-900">{activeReport.title}</h2>
                     <p className="text-xs text-gray-700">
-                      {activeReport.schoolName} | Հեղինակ՝ {activeReport.authorName} ({activeReport.academicYear})
+                      {activeReport.schoolName} | Հեղինակ՝ {activeReport.authorName} ({activeReport.academicYear ?? 'n/a'})
                     </p>
                   </div>
                   <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full font-semibold text-xs">
@@ -853,7 +897,7 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
                   </div>
                   <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                     <span className="text-gray-700 block">Փաստացի անցած</span>
-                    <span className="text-base font-bold text-gray-900">{activeReport.data.actualHours || 32} ժամ</span>
+                    <span className="text-base font-bold text-gray-900">{activeReport.data.actualHours != null ? `${activeReport.data.actualHours} ժամ` : 'n/a'}</span>
                   </div>
                   <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                     <span className="text-gray-700 block">Կատարողական (%)</span>

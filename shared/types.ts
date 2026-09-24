@@ -437,7 +437,7 @@ export interface ReportInstance {
   subject: string;
   grade: number | null; // null for school-level reports spanning several grades
   period: 'term' | 'half_year' | 'year' | 'on_demand';
-  academicYear: string;
+  academicYear: string | null; // null when an imported document does not state it
   status:
     | 'draft'
     | 'submitted_to_director'

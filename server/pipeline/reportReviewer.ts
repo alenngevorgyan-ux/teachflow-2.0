@@ -68,6 +68,7 @@ function readAll(
  */
 export function planForReport(report: ReportInstance): { plan: ThematicPlan } | { reason: string } {
   if (report.grade === null) return { reason: 'հաշվետվությունը չի վերաբերում մեկ դասարանի' };
+  if (!report.academicYear) return { reason: 'հաշվետվության ուսումնական տարին նշված չէ' };
   const plans = repository
     .getThematicPlans(report.schoolId, report.subject, report.grade)
     .filter((p) => p.academicYear === report.academicYear);

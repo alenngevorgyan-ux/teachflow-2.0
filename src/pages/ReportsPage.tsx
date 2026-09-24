@@ -36,6 +36,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [legacyText, setLegacyText] = useState('');
   const [showLegacyModal, setShowLegacyModal] = useState(false);
+  // No invented file name / author: both describe the imported document and
+  // are typed by the teacher who imports it.
+  const [legacyFileName, setLegacyFileName] = useState('');
+  const [legacyAuthorName, setLegacyAuthorName] = useState('');
   const [legacyImportError, setLegacyImportError] = useState<string | null>(null);
   const [commentText, setCommentText] = useState('');
 
@@ -115,8 +119,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
     }
   };
 
+  const legacyImportReady =
+    legacyText.trim() !== '' && legacyFileName.trim() !== '' && legacyAuthorName.trim() !== '';
+
   const handleLegacyImport = async () => {
-    if (!legacyText.trim()) return;
+    if (!legacyImportReady) return;
     setIsImporting(true);
     setLegacyImportError(null);
     try {
@@ -125,9 +132,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rawText: legacyText,
+          fileName: legacyFileName.trim(),
           templateId: 'tpl-program-progress',
           schoolId: pinnedContext.schoolId,
-          schoolName: 'Դպրոց Ա',
+          authorName: legacyAuthorName.trim(),
         }),
       });
       const data = await res.json();
@@ -136,6 +144,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
         setSelectedReport(data.report);
         setShowLegacyModal(false);
         setLegacyText('');
+        setLegacyFileName('');
+        setLegacyAuthorName('');
       } else {
         setLegacyImportError(data.error || 'Ներմուծումը ձախողվեց: Անհայտ սխալ:');
       }
@@ -221,7 +231,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                 <div className="text-gray-900 font-bold line-clamp-1">{r.title}</div>
                 <div className="text-[11px] text-gray-700 flex items-center justify-between">
                   <span>{r.authorName}</span>
-                  <span className="text-indigo-700 font-mono">{r.academicYear}</span>
+                  <span className="text-indigo-700 font-mono">{r.academicYear ?? 'n/a'}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-200 text-gray-800 font-medium">
@@ -479,6 +489,29 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
               </div>
             )}
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="space-y-1">
+                <span className="font-semibold text-gray-900">Ֆայլի անունը *</span>
+                <input
+                  type="text"
+                  value={legacyFileName}
+                  onChange={(e) => setLegacyFileName(e.target.value)}
+                  placeholder="hashvetvutyun_2025_1.docx"
+                  className="w-full p-2 bg-gray-50 border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="font-semibold text-gray-900">Հաշվետվության հեղինակը *</span>
+                <input
+                  type="text"
+                  value={legacyAuthorName}
+                  onChange={(e) => setLegacyAuthorName(e.target.value)}
+                  placeholder="Ուսուցչի անուն ազգանուն"
+                  className="w-full p-2 bg-gray-50 border border-gray-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                />
+              </label>
+            </div>
+
             <textarea
               rows={8}
               value={legacyText}
@@ -496,7 +529,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
               </button>
               <button
                 onClick={handleLegacyImport}
-                disabled={isImporting || !legacyText.trim()}
+                disabled={isImporting || !legacyImportReady}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-semibold"
               >
                 {isImporting ? 'Կատարվում է ներմուծում...' : 'Քաղել և ստեղծել'}

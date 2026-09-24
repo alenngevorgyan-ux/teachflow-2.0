@@ -1,7 +1,9 @@
+import crypto from 'crypto';
 import { ReportField, ReportInstance, ReportTemplate } from '../../shared/types.js';
 import { IModelProvider, getProvider } from '../providers/modelProvider.js';
 import { repository } from '../store/repository.js';
 import { assertNoPii } from './privacyGuard.js';
+import { UserInputError } from './errors.js';
 import { z } from 'zod';
 
 export interface LegacyImportParams {
@@ -31,7 +33,12 @@ export async function importLegacyReport(params: LegacyImportParams): Promise<Re
   const { rawText, fileName, templateId, schoolId, schoolName, authorName, modelId } = params;
   // Check before the text reaches a model or the store.
   assertNoPii(rawText, 'legacyImport.rawText');
-  const template = repository.getReportTemplate(templateId) || repository.getReportTemplates()[0];
+  // An unknown template id is a client error. Falling back to "the first
+  // template" would file the imported data against a form nobody asked for.
+  const template = repository.getReportTemplate(templateId);
+  if (!template) {
+    throw new UserInputError(`Անհայտ հաշվետվության ձևանմուշ՝ «${templateId}»:`);
+  }
 
   const extractedData: Record<string, any> = {};
   const fieldConfidences: Record<string, number> = {};
@@ -132,6 +139,13 @@ Instructions:
     fieldProvenance[field.key] = provenance;
   }
 
+  const gradeRaw = extractedData.grade;
+  const gradeNum = typeof gradeRaw === 'number' ? gradeRaw : typeof gradeRaw === 'string' && gradeRaw.trim() !== '' ? Number(gradeRaw) : NaN;
+  const extractedGrade = Number.isInteger(gradeNum) && gradeNum > 0 ? gradeNum : null;
+
+  const yearRaw = extractedData.academicYear;
+  const extractedAcademicYear = typeof yearRaw === 'string' && yearRaw.trim() !== '' ? yearRaw.trim() : null;
+
   const reportId = `rep-imported-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
   const importedReport: ReportInstance = {
     id: reportId,
@@ -143,9 +157,12 @@ Instructions:
     authorRole: template.authorRole,
     authorName,
     subject: extractedData.subject || '',
-    grade: extractedData.grade !== null && extractedData.grade !== undefined ? Number(extractedData.grade) : 0,
+    // Nothing here is assumed: a grade or an academic year the document does
+    // not state stays null and is shown as "n/a" for manual confirmation.
+    // Grade 0 and the current year were both invented values.
+    grade: extractedGrade,
     period: template.period,
-    academicYear: '2026-2027',
+    academicYear: extractedAcademicYear,
     status: 'draft',
     data: extractedData,
     fieldConfidences,
@@ -162,7 +179,9 @@ Instructions:
     isLegacyImported: true,
     importedFromLegacy: true,
     legacySourceFile: fileName,
-    dataSnapshotHash: `hash-${Date.now()}`,
+    // A real hash of what was extracted, so a later change to the data is
+    // detectable. `hash-<timestamp>` proved nothing.
+    dataSnapshotHash: crypto.createHash('sha256').update(JSON.stringify(extractedData)).digest('hex'),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

@@ -103,7 +103,7 @@ export const AboutDataPage: React.FC<AboutDataPageProps> = ({ lang }) => {
           <p>&bull; <code>get_source_fragment(subject, grade, query)</code></p>
           <p>&bull; <code>generate_assessment_with_trace(subject, grade, topic, sourceIds)</code></p>
           <p>&bull; <code>validate_material(subject, grade, text, sourceIds)</code></p>
-          <p>&bull; <code>thematic_plan_generate(subject, grade, academicYear, schoolId, weeklyHours, totalAnnualHours)</code></p>
+          <p>&bull; <code>thematic_plan_generate(subject, grade, programVersion, academicYear, schoolId, teacherName, weeklyHours, totalAnnualHours)</code></p>
           <p>&bull; <code>thematic_plan_validate(planId)</code></p>
           <p>&bull; <code>lesson_plan_generate(thematicPlanId, rowId, durationMinutes)</code></p>
           <p>&bull; <code>answer_sheet_grade(assessmentId, variant, studentCode, answers)</code></p>

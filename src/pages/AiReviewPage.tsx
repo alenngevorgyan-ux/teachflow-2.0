@@ -272,7 +272,7 @@ export const AiReviewPage: React.FC<AiReviewPageProps> = ({
                 <div>Վերնագիր՝ {activeReport.title}</div>
                 <div>Դպրոց՝ {activeReport.schoolName}</div>
                 <div>Հեղինակ՝ {activeReport.authorName}</div>
-                <div>Ուսումնական տարի՝ {activeReport.academicYear}</div>
+                <div>Ուսումնական տարի՝ {activeReport.academicYear ?? 'n/a'}</div>
                 <div>Ընթացիկ կարգավիճակ՝ {activeReport.status}</div>
               </div>
             </div>

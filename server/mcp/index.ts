@@ -164,22 +164,39 @@ export function createMcpServer(): McpServer {
     'thematic_plan_generate',
     'Generate a curriculum-aligned annual thematic plan grounded in confirmed outcomes and FACT sources',
     {
-      subject: z.string(),
-      grade: z.number(),
-      academicYear: z.string().default('2026-2027'),
-      schoolId: z.string().default('sch-1'),
-      weeklyHours: z.number().default(2),
-      totalAnnualHours: z.number().default(68),
+      // No defaults: the caller states the program version, school, teacher
+      // and hour counts, or the tool call fails. Guessing them would put
+      // invented curriculum facts into the generated plan.
+      subject: z.string().min(1),
+      grade: z.number().int().positive(),
+      programVersion: z.string().min(1),
+      academicYear: z.string().min(1),
+      schoolId: z.string().min(1),
+      teacherName: z.string().min(1),
+      weeklyHours: z.number().int().positive(),
+      totalAnnualHours: z.number().int().positive(),
     },
-    async ({ subject, grade, academicYear, schoolId, weeklyHours, totalAnnualHours }) => {
+    async ({
+      subject,
+      grade,
+      programVersion,
+      academicYear,
+      schoolId,
+      teacherName,
+      weeklyHours,
+      totalAnnualHours,
+    }) => {
+      const school = repository.getSchools().find((s) => s.id === schoolId);
+      if (!school) throw new Error(`Unknown school: ${schoolId}`);
+
       const plan = await generateThematicPlan({
         subject,
         grade,
-        programVersion: 'demo-v1',
+        programVersion,
         academicYear,
         schoolId,
-        schoolName: 'Դպրոց Ա (ցուցադրական, Երևան)',
-        teacherName: 'Ուսուցիչ Ա',
+        schoolName: school.name,
+        teacherName,
         weeklyHours,
         totalAnnualHours,
       });
