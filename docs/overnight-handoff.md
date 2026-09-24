@@ -125,3 +125,10 @@ OCR, PDF and scans, tracked-changes export, a separate key file, authentication 
 - `server/pipeline/emisAdapter.ts` fills confidence `1.0` and provenance "System recorded" for fields without them.
 - `POST /sources/:id/supersede` invents a version (`<old>-next`) and today's date when none is given.
 - The pinned context in `App.tsx` still starts with demo values (program version `demo-v1`, year `2026-2027`, demo school); they are shown as demo in the shell.
+
+## Final state
+
+- Branch `claude/docx-material-fix`, pushed to `origin` (new remote branch). Code HEAD at push: `f070ea8ab555b78937ed7703f6d1c35525a4f0a9`; this note is the only later commit.
+- `main` untouched, nothing merged, no force push.
+- **Deployment:** the push triggered Vercel's GitHub integration: status "Vercel — Deployment has completed" on `f070ea8` (https://vercel.com/mentaliser21-4868s-projects/teachflow-2.0/5AU8Uf9G4m4XXGW9WERdzUgikQyZ). Vercel's default makes only the repository's default branch (`main`) production, and `vercel.json` sets no other production branch, so this is expected to be a **preview** deployment, **not production**. The environment label was not visible through the GitHub API; confirm it in the Vercel dashboard. On Vercel the JSON store lives in `/tmp` and is not persistent.
+- Final checks at `f070ea8`: `tsc --noEmit` clean; `npm test` 35 files / 388 tests passing; `vite build` OK; fixture E2E OK.
