@@ -299,6 +299,9 @@ export async function segment(id: string, deps: ReviewDeps): Promise<MaterialRev
     runId = startRun(r, 'segment').id;
     snapshot = structuredClone(r);
   });
+  // Structure work (edits, confirmation, keys) done while the model splits
+  // must not be overwritten by the late proposal.
+  const structureAtStart = hash([snapshot.segmentation ?? null, snapshot.answerKey]);
   let proposal: Awaited<ReturnType<typeof proposeSegmentation>>;
   try {
     const w = (await workingCopyFactory(snapshot))();
@@ -311,6 +314,10 @@ export async function segment(id: string, deps: ReviewDeps): Promise<MaterialRev
   return mutate(id, (r) => {
     if (r.revision !== snapshot.revision) {
       finishRun(r, runId, 'obsolete', 'Փաստաթուղթը փոխվել է բաժանման ընթացքում. արդյունքը չի պահպանվել:');
+      return;
+    }
+    if (hash([r.segmentation ?? null, r.answerKey]) !== structureAtStart) {
+      finishRun(r, runId, 'obsolete', 'Կառուցվածքը կամ բանալին փոխվել է բաժանման ընթացքում. ձեր աշխատանքը պահպանվել է, նոր առաջարկը՝ ոչ:');
       return;
     }
     const { segmentation, answerKey } = proposal;

@@ -1019,3 +1019,42 @@ describe('independent race (review 963fb4b): dependencies change while a check w
     expect(again.results.every((x) => !x.stale)).toBe(true);
   });
 });
+
+describe('pilot audit: a split proposal must not overwrite structure work done while it ran', () => {
+  it('teacher edits/confirms the structure while a re-split waits: the late split is obsolete, the teacher work survives', async () => {
+    const deps = fakes({ keyedTwo: 'գ' });
+    let r = await upload();
+    r = await segment(r.id, deps);
+    // Hold the next split at the model call.
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((res) => (release = res));
+    const started = new Promise<void>((res) => (entered = res));
+    const inner = deps.provider.generateStructured.bind(deps.provider);
+    const held: ReviewDeps = {
+      ...deps,
+      provider: {
+        ...deps.provider,
+        generateStructured: (async (...args: Parameters<typeof inner>) => {
+          if (args[2]?.actionName === 'material:segment') {
+            entered();
+            await gate;
+          }
+          return inner(...args);
+        }) as typeof inner,
+      },
+    };
+    const pending = segment(r.id, held);
+    await started;
+    // Meanwhile the teacher corrects question 2 (drops option գ) and confirms.
+    const items = resolveStructure(getReview(r.id)).items.map((it, i) => (i === 1 ? { ...it, options: it.options.slice(0, 2) } : it));
+    let edited = await editSegmentation(r.id, { expectedRevision: r.revision, items, answerKeyParagraphIds: getReview(r.id).segmentation!.answerKeyParagraphIds });
+    edited = await confirmSegmentation(r.id, edited.revision);
+    release();
+    const after = await pending;
+    expect(after.runs.at(-1)!.status).toBe('obsolete');
+    expect(after.segmentation!.status).toBe('confirmed');
+    expect(after.segmentation!.model.providerId).toBe('teacher');
+    expect(after.segmentation!.items[1].options.map((o) => o.label)).toEqual(['ա', 'բ']);
+  });
+});
