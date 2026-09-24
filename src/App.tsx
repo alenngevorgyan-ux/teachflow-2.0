@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Language, Role, PinnedContext } from '../shared/types';
-import { Header } from './components/Header';
+import { AppShell } from './components/shell/AppShell';
+import { HomePage } from './pages/HomePage';
+import { translations } from './i18n/translations';
 import { Footer } from './components/Footer';
 
 // TeachFlow 3.0 Pages
@@ -29,7 +31,17 @@ import { AboutDataPage } from './pages/AboutDataPage';
 export function App() {
   const [lang, setLang] = useState<Language>('hy');
   const [role, setRole] = useState<Role>('teacher');
-  const [currentTab, setCurrentTab] = useState<string>('workspace');
+  // The tab (and an open material) live in the URL hash so a reload returns
+  // to the same place: #/<tab> or #/materials/<id>.
+  const initial = parseHash(window.location.hash);
+  const [currentTab, setCurrentTabState] = useState<string>(initial.tab);
+  const [materialId, setMaterialId] = useState<string | null>(initial.materialId);
+  const [navOpen, setNavOpen] = useState(false);
+  const [fixtureMode, setFixtureMode] = useState(false);
+  const setCurrentTab = (tab: string) => {
+    setCurrentTabState(tab);
+    if (tab !== 'materialReview') setMaterialId(null);
+  };
   const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null);
   const [policyVersion, setPolicyVersion] = useState<string>('');
 
@@ -42,6 +54,33 @@ export function App() {
     schoolId: 'sch-1',
     term: 1,
   });
+
+  useEffect(() => {
+    const hash = currentTab === 'materialReview' && materialId ? `#/materials/${materialId}` : `#/${currentTab}`;
+    if (window.location.hash !== hash) window.history.pushState(null, '', hash);
+  }, [currentTab, materialId]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const h = parseHash(window.location.hash);
+      setCurrentTabState(h.tab);
+      setMaterialId(h.materialId);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = 'ltr';
+  }, [lang]);
+
+  useEffect(() => {
+    fetch('/api/runtime')
+      .then((r) => r.json())
+      .then((d) => setFixtureMode(d.fixtureMode === true))
+      .catch(() => setFixtureMode(false));
+  }, []);
 
   useEffect(() => {
     fetch('/api/system/policy-version')
@@ -65,7 +104,7 @@ export function App() {
     } else if (newRole === 'admin') {
       setCurrentTab('dashboards');
     } else {
-      setCurrentTab('workspace');
+      setCurrentTab('home');
     }
   };
 
@@ -79,7 +118,7 @@ export function App() {
   };
 
   const handleResetDemoData = async () => {
-    if (window.confirm('Վերակայե՞լ ցուցադրական սինթետիկ տվյալները:')) {
+    if (window.confirm(translations[lang].shell.resetConfirm)) {
       try {
         await fetch('/api/system/reset-demo', { method: 'POST' });
         window.location.reload();
@@ -90,24 +129,35 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900 selection:bg-indigo-100 font-sans">
-      <Header
-        currentTab={currentTab}
-        onTabChange={(tab) => {
-          setSelectedAssessmentId(null);
-          setCurrentTab(tab);
-        }}
-        currentRole={role}
-        onRoleChange={handleRoleChange}
-        lang={lang}
-        onLangChange={setLang}
-        pinnedContext={pinnedContext}
-        onContextChange={handleContextChange}
-        policyVersion={policyVersion}
-        onResetDemo={handleResetDemoData}
-      />
-
-      <main className="flex-1">
+    <AppShell
+      lang={lang}
+      onLangChange={setLang}
+      role={role}
+      onRoleChange={handleRoleChange}
+      currentTab={currentTab}
+      onTabChange={(tab) => {
+        setSelectedAssessmentId(null);
+        setCurrentTab(tab);
+      }}
+      pinnedContext={pinnedContext}
+      onContextChange={handleContextChange}
+      policyVersion={policyVersion}
+      onResetDemo={handleResetDemoData}
+      fixtureMode={fixtureMode}
+      navOpen={navOpen}
+      onNavOpenChange={setNavOpen}
+    >
+        {currentTab === 'home' && (
+          <HomePage
+            lang={lang}
+            role={role}
+            onNavigate={(tab) => setCurrentTab(tab)}
+            onOpenMaterial={(id) => {
+              setCurrentTabState('materialReview');
+              setMaterialId(id);
+            }}
+          />
+        )}
         {/* TeachFlow 3.0 Modules */}
         {currentTab === 'workspace' && (
           <WorkspacePage
@@ -177,7 +227,9 @@ export function App() {
           />
         )}
         {currentTab === 'validateMaterial' && <ValidateMaterialPage lang={lang} />}
-        {currentTab === 'materialReview' && <MaterialReviewPage lang={lang} pinnedContext={pinnedContext} />}
+        {currentTab === 'materialReview' && (
+          <MaterialReviewPage lang={lang} pinnedContext={pinnedContext} materialId={materialId} onOpenMaterial={setMaterialId} />
+        )}
         {currentTab === 'assessments' && (
           <AssessmentsListPage
             lang={lang}
@@ -204,11 +256,21 @@ export function App() {
           />
         )}
         {currentTab === 'aboutData' && <AboutDataPage lang={lang} />}
-      </main>
-
-      <Footer lang={lang} />
-    </div>
+        <Footer lang={lang} />
+    </AppShell>
   );
+}
+
+const KNOWN_TABS = new Set([
+  'home', 'workspace', 'thematicPlans', 'autoGrading', 'reports', 'aiReview', 'dashboards', 'glossary', 'armenianEval',
+  'registry', 'rules', 'generate', 'validateMaterial', 'materialReview', 'assessments', 'compare', 'regression', 'reviewQueue', 'aboutData',
+]);
+
+function parseHash(hash: string): { tab: string; materialId: string | null } {
+  const m = /^#\/materials\/([\w-]+)$/.exec(hash);
+  if (m) return { tab: 'materialReview', materialId: m[1] };
+  const tab = hash.replace(/^#\//, '');
+  return { tab: KNOWN_TABS.has(tab) ? tab : 'home', materialId: null };
 }
 
 export default App;

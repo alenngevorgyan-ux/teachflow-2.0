@@ -638,9 +638,9 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
                             variant={src.confirmationState === 'confirmed' ? 'pass' : src.confirmationState === 'invalidated' ? 'fail' : 'neutral'}
                             title={src.confirmationReason}
                           >
-                            {t.materialReview.confirmation[src.confirmationState]}
+                            {(t.materialReview as Record<string, string>)[src.confirmationState]}
                             {src.confirmationState === 'confirmed' && src.confirmation
-                              ? ` · ${src.confirmation.confirmedByName} (նշված անուն)`
+                              ? ` · ${src.confirmation.confirmedByName} (${t.materialReview.statedName})`
                               : ''}
                           </Badge>
                         )}
@@ -683,8 +683,9 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
                             <input
                               value={confirmName}
                               onChange={(e) => setConfirmName(e.target.value)}
-                              placeholder="Ձեր անունը"
-                              title="Առանց մուտքի համակարգի սա միայն նշված անուն է, ոչ ստուգված ինքնություն"
+                              placeholder={t.materialReview.yourName}
+                              aria-label={t.materialReview.yourName}
+                              title={t.materialReview.nameIsStated}
                               className="border border-gray-300 rounded px-1.5 py-1 w-28"
                             />
                             <button
@@ -705,9 +706,9 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
                               setConfirmError(null);
                             }}
                             className="px-2.5 py-1.5 border border-emerald-300 rounded-lg text-xs font-medium text-emerald-800 hover:bg-emerald-50"
-                            title={`Հաստատել v${src.version} տարբերակը բովանդակային ստուգումների համար`}
+                            title={t.materialReview.confirmationNote}
                           >
-                            Հաստատել v{src.version}
+                            {t.materialReview.confirmVersion.replace('{v}', src.version)}
                           </button>
                         ))}
                       {src.confirmationState === 'confirmed' && (
@@ -715,7 +716,7 @@ export const RegistryPage: React.FC<RegistryPageProps> = ({ lang }) => {
                           onClick={() => handleRevokeConfirmation(src.id)}
                           className="px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-700 hover:bg-gray-100"
                         >
-                          Չեղարկել հաստատումը
+                          {t.materialReview.revokeConfirmation}
                         </button>
                       )}
                       {src.status === 'active' && (

@@ -1,0 +1,5 @@
+original download == uploaded fixture bytes: true 5167fb305948d67ce640c52b9a66513635f5ef668ce098d78c6803d35c4c84bf
+paragraphs 13 13 changed: [["1-ա, 2-գ","1-ա, 2-ա"]]
+parts 6 6 differing parts: [ 'word/document.xml' ]
+document.xml differs only in: "<w:r w:rsidRPr=\"00D4E5F6\"><w:t>1-ա, 2-գ</w:t></w:" => "<w:r w:rsidRPr=\"00D4E5F6\"><w:t xml:space=\"preserve\">1-ա, 2-ա</w:t></w:"
+numbering labels equal: true

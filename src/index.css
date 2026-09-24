@@ -1,1 +1,36 @@
 @import "tailwindcss";
+@import "./styles/teachflow.css";
+
+/* Existing screens use Tailwind's indigo and gray scales. They are remapped to
+   the TeachFlow palette (deep teal brand, warm graphite neutrals) so every
+   screen shares one visual system. gray-400/500 are dark enough for text
+   (>= 4.5:1 on white and on the page background). */
+@theme {
+  --font-sans: 'Noto Sans Armenian', 'Noto Sans', system-ui, sans-serif;
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.5;
+
+  --color-indigo-50: #eef6f2;
+  --color-indigo-100: #e6f2eb;
+  --color-indigo-200: #c7e2d4;
+  --color-indigo-300: #9ccbb4;
+  --color-indigo-400: #4f937a;
+  --color-indigo-500: #2f8367;
+  --color-indigo-600: #17624e;
+  --color-indigo-700: #104b3b;
+  --color-indigo-800: #0d3c30;
+  --color-indigo-900: #0a2f26;
+  --color-indigo-950: #061d17;
+
+  --color-gray-50: #f5f6f3;
+  --color-gray-100: #f0f3ef;
+  --color-gray-200: #d7dfd9;
+  --color-gray-300: #b9c5be;
+  --color-gray-400: #5f6f67;
+  --color-gray-500: #576760;
+  --color-gray-600: #4a5953;
+  --color-gray-700: #3d4a45;
+  --color-gray-800: #2a3532;
+  --color-gray-900: #202b29;
+  --color-gray-950: #141b1a;
+}

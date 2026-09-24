@@ -1,0 +1,29 @@
+fixture banner visible
+uploaded -> mat-muew8tqw-b4811e; URL #/materials/mat-muew8tqw-b4811e
+structure proposed
+structure corrected by the teacher (question 3 -> open, wrong option removed) and saved
+without sources: content checks reported not evaluated, structural checks ran
+selected 2 confirmed FIXTURE sources
+checks ran: question 2 flagged
+selected finding highlights: ["Ո՞վ էր հայոց զորավարը Ավարայրի ճակատամարտում:","ա) Վարդան Մամիկոնյան","բ) Տիգրան Մեծ","գ) Արտաշես Առաջին","2-գ"]
+rejected: question 2 still has failed checks (fact_support, answer_unambiguous)
+re-checked at the new revision (items keyed in the edited key line): item-1, item-2; untouched item kept: item-3
+accepted linked key fix «2-գ→2-ա», key now ["ա"]; re-check done at r1-bbc9e095d749
+repeated/stale accept -> HTTP 409
+reload restored revision r1-bbc9e095d749, 2 sources, decisions rejected/accepted
+download links: ["/api/materials/mat-muew8tqw-b4811e/export.docx","/api/materials/mat-muew8tqw-b4811e/changes.txt","/api/materials/mat-muew8tqw-b4811e/original.docx"]
+downloaded corrected.docx (2970 bytes; status header draft; sha256 58cc0b0ed9b3c0d427f2cd1e45c7ce42548b61582d42206d6b49642beb50c1b6)
+downloaded original.docx (3321 bytes; status header -; sha256 5167fb305948d67ce640c52b9a66513635f5ef668ce098d78c6803d35c4c84bf)
+downloaded changes.txt (3156 bytes; status header -; sha256 -)
+workbench 1440px: horizontal overflow 0px
+materials 1440px: horizontal overflow 0px
+home 1440px: horizontal overflow 0px
+workbench 1024px: horizontal overflow 0px
+materials 1024px: horizontal overflow 0px
+home 1024px: horizontal overflow 0px
+workbench 390px: horizontal overflow 0px
+materials 390px: horizontal overflow 0px
+home 390px: horizontal overflow 0px
+200% zoom: horizontal overflow 0px
+200% zoom: navigation menu button display=flex
+keyboard drawer: open=true, after Escape open=false, focus on tf-sidebar
