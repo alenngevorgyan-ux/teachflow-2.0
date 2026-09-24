@@ -47,7 +47,7 @@ node scripts/screens-audit.mjs   # main routes on :3000, screenshots + horizonta
   - the finding highlights exactly the question's spans;
   - keyboard selection and jump to the document, and Tab reaches accept then decline;
   - reject leaves the check failed;
-  - accept of the linked key fix, with re-check of the dependent items only;
+  - accept of the key fix, with re-check of the dependent items only. **Correction (second pass):** that fix was ONE text patch (the key line `2-գ` → `2-ա`) plus a structured `keyChange` in the review; the question text was not edited. A two-patch question + key group was not exercised by this run; it is covered by tests (see `docs/e2e/README.md`);
   - a stale or repeated decision gets **HTTP 409**;
   - reload restores the state;
   - three downloads;
@@ -119,16 +119,52 @@ OCR, PDF and scans, tracked-changes export, a separate key file, authentication 
 - Audit log: one entry from before the redaction fix (01:30 UTC) contains the synthetic test's prompt text. It is not real data.
 - "Reset demo data" (sidebar) restores all of these.
 
-## Known issues outside tonight's scope (not changed)
+## Known issues found overnight — fixed in the second pass
 
-- `server/pipeline/validator.ts` (generated items) checks a rule id `rule-min-options` that does not exist in the seeded rules, so its option-count rule never runs.
-- `server/pipeline/emisAdapter.ts` fills confidence `1.0` and provenance "System recorded" for fields without them.
-- `POST /sources/:id/supersede` invents a version (`<old>-next`) and today's date when none is given.
-- The pinned context in `App.tsx` still starts with demo values (program version `demo-v1`, year `2026-2027`, demo school); they are shown as demo in the shell.
+- The generator's validator: the seeded deterministic rules were never evaluated (wrong rule ids) → fixed in `8dee294`.
+- EMIS export: invented confidence `1.0` and provenance "System recorded" → fixed in `d9354ab`.
+- Source supersede: invented version and date, old chunks kept, demo flag lost → fixed in `e46a92b`.
+- Still open: the pinned context in `App.tsx` starts with demo values (program version `demo-v1`, year `2026-2027`, demo school); they are shown as demo in the shell.
 
 ## Final state
 
 - Branch `claude/docx-material-fix`, pushed to `origin` (new remote branch). Code HEAD at push: `f070ea8ab555b78937ed7703f6d1c35525a4f0a9`; this note is the only later commit.
 - `main` untouched, nothing merged, no force push.
-- **Deployment:** the push triggered Vercel's GitHub integration: status "Vercel — Deployment has completed" on `f070ea8` (https://vercel.com/mentaliser21-4868s-projects/teachflow-2.0/5AU8Uf9G4m4XXGW9WERdzUgikQyZ). Vercel's default makes only the repository's default branch (`main`) production, and `vercel.json` sets no other production branch, so this is expected to be a **preview** deployment, **not production**. The environment label was not visible through the GitHub API; confirm it in the Vercel dashboard. On Vercel the JSON store lives in `/tmp` and is not persistent.
+- **Deployment:** see "Second pass" below. Verified through GitHub deployment records: Preview, not production.
 - Final checks at `f070ea8`: `tsc --noEmit` clean; `npm test` 35 files / 388 tests passing; `vite build` OK; fixture E2E OK.
+
+## Second pass (reliability fixes, no new features)
+
+Commits: `3b75159` (next-pass file), `8dee294`, `d9354ab`, `e46a92b`, `5033129`, `7ff35bb`, plus this documentation commit.
+
+1. **Generator validator (`8dee294`).** The seed defines `rule-single-correct-answer` (minOptions/maxOptions) and `rule-factual-grounding` (minCitations), but the validator only knew `rule-min-options`, `rule-allowed-item-types` and `rule-max-items`. Both seeded rules were skipped without a trace, while `methodRulesApplied` listed every active rule.
+   - Now: evaluators for both seeded rules, and every evaluated rule leaves a check.
+   - An active rule with no evaluator or with bad parameters gives a visible "not checked" and appears in `methodRulesNotEvaluated`; there is no default of 3.
+   - Guarded by tests through `validateAllItems` with the real seed (`getDemoRules()`); the four new tests fail on the old validator.
+2. **EMIS export (`d9354ab`).** An empty cell means unknown / not recorded, stated in every file's header.
+   - No `1.0`, no `0`, no "System recorded", no "null" or "undefined".
+   - The plan export no longer writes untaught hours as `0`. A recorded `0` stays `0`.
+3. **Source supersede (`e46a92b`).**
+   - The version and effective date are stated by the person, with the same rules as a new upload, or the request gets a 400. The internal revision id and upload time are system facts.
+   - New text is really used; without new text the old chunks, pages and file hash are carried over.
+   - The demo flag is inherited, and the confirmation is dropped.
+   - The old record gets `supersededAt` / `supersededBy` instead of an invented `effectiveTo`.
+   - Dependent material-review results go stale when a selected source is superseded, changed or unconfirmed. This test also exposed and fixed a reuse bug: an old passing result used to be reused after the source was superseded.
+   - Verified over HTTP: missing particulars → 400, source count unchanged. A successful supersede was **not** run against the local data, to preserve it.
+4. **Output-token limit (`5033129`).**
+   - `OPENROUTER_MAX_TOKENS`: unset → 8192; an invalid value → a configuration error on every call, before any request.
+   - A response cut at the limit is refused (`finish_reason: length` / native `MAX_TOKENS`; Gemini `MAX_TOKENS`, including the judge), even when the cut text parses as JSON, with no retry.
+5. **DOCX evidence (`7ff35bb`).** `docs/e2e/proposals.txt` and `docs/e2e/README.md` record, from the actual data, that each fixture proposal was one key-line patch plus a structured key change. New review-level tests cover the atomic question + key group: both edits apply; a failing second edit applies neither; a teacher edit still applies both.
+6. **Vercel deployment (read-only, GitHub deployment records written by `vercel[bot]`):**
+   - `f070ea8`: deployment 6628798751, environment **Preview**, `production_environment: false`, https://teachflow-20-c5baajssm-mentaliser21-4868s-projects.vercel.app.
+   - `33662bc`: deployment 6628811537, **Preview**, `production_environment: false`, https://teachflow-20-8icywloiz-mentaliser21-4868s-projects.vercel.app.
+   - Both commits are only on `claude/docx-material-fix`. All 29 recorded deployments of this repository are Preview; none is Production.
+   - The URLs answer 302, most likely Vercel's access protection. This is the view Vercel reports into GitHub, not the Vercel API itself; no Vercel CLI was used, and nothing was redeployed or changed.
+
+Checks at the end of the second pass: `tsc --noEmit` clean; `npm test` 37 files / 413 tests passing; `vite build` OK; fixture E2E reran and passed (review `mat-muf7ma19-cae75d`, same single key-line change, original = upload, only `word/document.xml` differs).
+
+Kept separate and unchanged in status:
+- the synthetic fixture E2E (passes);
+- live model splitting (one call, synthetic file, overnight);
+- content checks on real sources (not done: no real sources);
+- the Microsoft Word layout check (not done: needs a person at the machine).
